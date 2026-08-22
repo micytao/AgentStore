@@ -1,0 +1,11 @@
+id: data-dashboard-summary
+name: Weekly dashboard summary
+department: data
+category: Reporting
+description: Turn the week's pipeline health and north-star metrics into a stakeholder-ready summary. You review the draft before it goes anywhere.
+icon: chart
+engineType: hosted-agent-api
+supportedModes:
+  - do-this-for-me
+riskTier: low
+reviewStatus: published

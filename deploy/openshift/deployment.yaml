@@ -1,0 +1,57 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: agent-store
+  labels:
+    app: agent-store
+spec:
+  # Do not scale beyond 1: the local secrets vault (apps/web/src/server/secrets.ts)
+  # is a single-writer file store on the PVC below, not a shared/HA store.
+  replicas: 1
+  selector:
+    matchLabels:
+      app: agent-store
+  template:
+    metadata:
+      labels:
+        app: agent-store
+    spec:
+      containers:
+        - name: web
+          image: agent-store:dev
+          ports:
+            - containerPort: 3000
+          env:
+            - name: CATALOG_DIR
+              value: /app/catalog/listings
+            # Persist the encrypted secrets/provider/MCP vault across restarts
+            # (see deploy/openshift/pvc.yaml) instead of the container's
+            # ephemeral writable layer.
+            - name: SECRETS_DATA_DIR
+              value: /data
+            # Pin the vault's encryption key so it survives redeploys instead
+            # of being re-generated (and the old vault contents orphaned)
+            # every time the pod restarts. Create the Secret first:
+            #   oc create secret generic agent-store-secrets \
+            #     --from-literal=secrets-encryption-key="$(openssl rand -hex 32)"
+            - name: SECRETS_ENCRYPTION_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: agent-store-secrets
+                  key: secrets-encryption-key
+            # Uncomment after P0 succeeds:
+            # - name: OPENSHELL_GATEWAY_URL
+            #   value: http://openshell.openshell.svc.cluster.local:8080
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 3000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: agent-store-data

@@ -1,0 +1,11 @@
+id: support-ticket-draft
+name: Draft a ticket reply
+department: support
+category: Customer communications
+description: Describe the ticket and desired outcome. The agent drafts a customer reply and holds it for your approval — nothing is sent until you say so.
+icon: comments
+engineType: hosted-agent-api
+supportedModes:
+  - do-this-for-me
+riskTier: low
+reviewStatus: published

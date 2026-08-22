@@ -1,0 +1,12 @@
+id: opencode
+name: OpenCode
+department: engineering
+category: Software development
+description: Open-source coding agent for refactors, tests, and pull request drafts. Launch an interactive session against a repo you choose.
+icon: code
+engineType: self-hosted-sandbox
+supportedModes:
+  - work-with-me
+riskTier: medium
+reviewStatus: published
+openshellAgent: opencode

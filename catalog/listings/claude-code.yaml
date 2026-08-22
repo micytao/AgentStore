@@ -1,0 +1,12 @@
+id: claude-code
+name: Claude Code
+department: engineering
+category: Software development
+description: Interactive coding agent for your repository. Pair with an AI programmer in an isolated session — you drive, it writes and runs.
+icon: code
+engineType: self-hosted-sandbox
+supportedModes:
+  - work-with-me
+riskTier: medium
+reviewStatus: published
+openshellAgent: claude

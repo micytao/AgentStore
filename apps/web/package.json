@@ -1,0 +1,33 @@
+{
+  "name": "@agentstore/web",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --port 3000",
+    "build": "next build",
+    "start": "next start --port 3000"
+  },
+  "dependencies": {
+    "@agentstore/engine-fake": "*",
+    "@agentstore/engine-openshell": "*",
+    "@agentstore/shared": "*",
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "@patternfly/react-core": "^6.3.1",
+    "@patternfly/react-icons": "^6.3.1",
+    "@patternfly/react-styles": "^6.3.1",
+    "@patternfly/react-table": "^6.3.1",
+    "@xterm/addon-fit": "^0.10.0",
+    "@xterm/xterm": "^5.5.0",
+    "js-yaml": "^4.1.0",
+    "next": "^15.5.2",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1"
+  },
+  "devDependencies": {
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^22.15.18",
+    "@types/react": "^19.1.8",
+    "@types/react-dom": "^19.1.6",
+    "typescript": "^5.8.3"
+  }
+}

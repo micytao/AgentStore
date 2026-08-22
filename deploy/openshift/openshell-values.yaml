@@ -1,0 +1,7 @@
+# Eval-only overrides. Do not use as a production baseline.
+server:
+  disableTls: true
+podSecurityContext:
+  fsGroup: null
+securityContext:
+  runAsUser: null

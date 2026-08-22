@@ -1,0 +1,14 @@
+{
+  "name": "agent-store",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "apps/web",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace=@agentstore/web",
+    "build": "npm run build --workspace=@agentstore/web",
+    "start": "npm run start --workspace=@agentstore/web"
+  }
+}

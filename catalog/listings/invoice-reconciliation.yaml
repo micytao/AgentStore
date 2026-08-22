@@ -1,0 +1,12 @@
+id: invoice-reconciliation
+name: Invoice reconciliation
+department: finance
+category: Accounts payable
+description: Match invoices against purchase orders and flag exceptions for a finance lead. Guardrails and connectors for this listing are still under review.
+icon: money
+engineType: hosted-agent-api
+supportedModes:
+  - do-this-for-me
+riskTier: medium
+reviewStatus: draft
+comingSoon: true
