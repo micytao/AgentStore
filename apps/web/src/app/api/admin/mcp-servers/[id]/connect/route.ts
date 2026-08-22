@@ -1,10 +1,13 @@
 import { NextResponse } from "next/server";
+import { requireAdmin } from "@/server/auth";
 import { connectServer, disconnectMcpServer } from "@/server/mcp";
 
 export async function POST(
-  _request: Request,
+  request: Request,
   context: { params: Promise<{ id: string }> }
 ) {
+  const denied = requireAdmin(request);
+  if (denied) return denied;
   const { id } = await context.params;
   try {
     return NextResponse.json(await connectServer(id));
@@ -17,9 +20,11 @@ export async function POST(
 }
 
 export async function DELETE(
-  _request: Request,
+  request: Request,
   context: { params: Promise<{ id: string }> }
 ) {
+  const denied = requireAdmin(request);
+  if (denied) return denied;
   const { id } = await context.params;
   try {
     return NextResponse.json(await disconnectMcpServer(id));

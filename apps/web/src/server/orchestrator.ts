@@ -1,3 +1,5 @@
+import fs from "node:fs";
+import path from "node:path";
 import { randomUUID } from "node:crypto";
 import {
   DEMO_USER,
@@ -26,10 +28,44 @@ type Store = {
   tasks: Map<string, Task>;
 };
 
+// File-backed durability (same pattern as providers.ts/mcp.ts/secrets.ts):
+// task history now survives an app restart instead of vanishing with the
+// in-memory globalThis Map.
+function dataDir(): string {
+  if (process.env.SECRETS_DATA_DIR) return process.env.SECRETS_DATA_DIR;
+  const candidates = [
+    path.resolve(process.cwd(), ".data"),
+    path.resolve(process.cwd(), "../../.data"),
+    path.resolve(__dirname, "../../../../.data"),
+  ];
+  return candidates.find((dir) => fs.existsSync(dir)) ?? candidates[0];
+}
+
+function tasksFilePath(): string {
+  return path.join(dataDir(), "tasks.json");
+}
+
+function loadTasksFromDisk(): Map<string, Task> {
+  const file = tasksFilePath();
+  if (!fs.existsSync(file)) return new Map();
+  try {
+    const raw = JSON.parse(fs.readFileSync(file, "utf8")) as Task[];
+    return new Map(raw.map((task) => [task.id, task]));
+  } catch {
+    return new Map();
+  }
+}
+
+function persistTasks(): void {
+  const dir = dataDir();
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(tasksFilePath(), JSON.stringify([...store().tasks.values()], null, 2));
+}
+
 function store(): Store {
   const g = globalThis as typeof globalThis & { __agentStore?: Store };
   if (!g.__agentStore) {
-    g.__agentStore = { tasks: new Map() };
+    g.__agentStore = { tasks: loadTasksFromDisk() };
   }
   return g.__agentStore;
 }
@@ -86,6 +122,7 @@ async function refresh(task: Task): Promise<Task> {
 
   task.updatedAt = now();
   store().tasks.set(task.id, task);
+  persistTasks();
   return task;
 }
 
@@ -139,6 +176,7 @@ export async function createTask(input: {
     updatedAt: createdAt,
   };
   store().tasks.set(id, task);
+  persistTasks();
 
   try {
     const handle = await adapterFor(listing).provision(specFrom(task));
@@ -152,6 +190,7 @@ export async function createTask(input: {
     task.updatedAt = now();
     store().tasks.set(id, task);
   }
+  persistTasks();
 
   return task;
 }
@@ -166,6 +205,7 @@ export async function cancelTask(id: string): Promise<Task> {
   task.status.phase = "Cancelled";
   task.updatedAt = now();
   store().tasks.set(id, task);
+  persistTasks();
   return task;
 }
 
@@ -182,6 +222,7 @@ export async function decideTask(
   task.status.phase = decision === "approved" ? "Completed" : "Cancelled";
   task.updatedAt = now();
   store().tasks.set(id, task);
+  persistTasks();
   return task;
 }
 

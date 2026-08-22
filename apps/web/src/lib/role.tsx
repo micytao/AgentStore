@@ -10,38 +10,56 @@ import {
 } from "react";
 import type { Role } from "@agentstore/shared";
 
-const STORAGE_KEY = "agentstore.role";
-
 interface RoleContextValue {
   role: Role;
   isAdmin: boolean;
-  setRole: (role: Role) => void;
-  toggleRole: () => void;
+  /** True until the initial GET /api/session check resolves. */
+  loading: boolean;
+  /** Switches directly to the given role. No passcode in this prototype —
+   * see apps/web/src/server/auth.ts. */
+  setRole: (role: Role) => Promise<void>;
 }
 
 const RoleContext = createContext<RoleContextValue | null>(null);
 
+/**
+ * Role reflects a server-side session (see apps/web/src/server/auth.ts)
+ * instead of a client-only localStorage flag, so /api/admin/** routes have
+ * something authoritative to check — this provider just mirrors it so the
+ * UI can react without a full page reload.
+ */
 export function RoleProvider({ children }: { children: ReactNode }) {
   const [role, setRoleState] = useState<Role>("user");
+  const [loading, setLoading] = useState(true);
+
+  const refresh = useCallback(async () => {
+    try {
+      const res = await fetch("/api/session");
+      const body = (await res.json()) as { role?: Role };
+      setRoleState(body.role === "admin" ? "admin" : "user");
+    } catch {
+      setRoleState("user");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    const saved = window.localStorage.getItem(STORAGE_KEY);
-    if (saved === "admin" || saved === "user") setRoleState(saved);
-  }, []);
+    void refresh();
+  }, [refresh]);
 
-  const setRole = useCallback((next: Role) => {
-    setRoleState(next);
-    window.localStorage.setItem(STORAGE_KEY, next);
-  }, []);
-
-  const toggleRole = useCallback(() => {
-    setRole(role === "admin" ? "user" : "admin");
-  }, [role, setRole]);
+  const setRole = useCallback(
+    async (target: Role) => {
+      if (target === role) return;
+      const endpoint = target === "admin" ? "/api/session/elevate" : "/api/session/downgrade";
+      await fetch(endpoint, { method: "POST" });
+      await refresh();
+    },
+    [role, refresh]
+  );
 
   return (
-    <RoleContext.Provider
-      value={{ role, isAdmin: role === "admin", setRole, toggleRole }}
-    >
+    <RoleContext.Provider value={{ role, isAdmin: role === "admin", loading, setRole }}>
       {children}
     </RoleContext.Provider>
   );

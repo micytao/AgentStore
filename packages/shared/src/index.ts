@@ -36,6 +36,55 @@ export interface Listing {
   comingSoon?: boolean;
   /** Adapter-private. Only set on Engine 1 listings. */
   openshellAgent?: string;
+  /** Per-agent bindings configured by the admin (provider, tools, skills, engine override). */
+  agentConfig?: AgentConfig;
+  /**
+   * Set by catalog.ts at load time based on which directory the listing was
+   * loaded from; not present in the YAML source itself. "custom" listings
+   * were created through the Admin onboarding wizard and can be edited or
+   * retired freely; "built-in" listings ship in catalog/listings and can
+   * only have the fields in ListingUpdate overridden.
+   */
+  source?: "built-in" | "custom";
+}
+
+/** Per-agent configuration an admin binds to a listing: which model provider
+ * drafts for it, which MCP tools it may call, which skills are attached, and
+ * whether it should force simulated/live execution regardless of the global
+ * engine setting. */
+export interface AgentConfig {
+  providerId?: string;
+  mcpToolBindings?: { serverId: string; tool: string }[];
+  skillIds?: string[];
+  engineOverride?: "auto" | "simulated" | "live";
+}
+
+/** A reusable instruction bundle an admin can author once and attach to any
+ * number of agents; its `instructions` are merged into the agent's system
+ * prompt when drafting. */
+export interface Skill {
+  id: string;
+  name: string;
+  description: string;
+  instructions: string;
+}
+
+/** Full input for the Admin onboarding wizard (creating a brand-new agent),
+ * as opposed to ListingUpdate which only patches a few fields on an
+ * existing one. */
+export interface ListingCreateInput {
+  name: string;
+  department: DepartmentId;
+  category: string;
+  description: string;
+  icon: string;
+  engineType: EngineType;
+  supportedModes: AgentMode[];
+  riskTier: RiskTier;
+  openshellAgent?: string;
+  agentConfig?: AgentConfig;
+  /** If true, the new listing starts published; otherwise it starts as a draft. */
+  publish?: boolean;
 }
 
 export interface TaskTarget {
@@ -107,7 +156,15 @@ export interface UsageSnapshot {
 }
 
 export type ListingUpdate = Partial<
-  Pick<Listing, "name" | "description" | "riskTier" | "reviewStatus" | "comingSoon">
+  Pick<
+    Listing,
+    | "name"
+    | "description"
+    | "riskTier"
+    | "reviewStatus"
+    | "comingSoon"
+    | "agentConfig"
+  >
 >;
 
 export interface EngineSettings {
@@ -241,7 +298,7 @@ export const DEPARTMENTS: { id: DepartmentId | "all"; name: string }[] = [
   { id: "finance", name: "Finance & HR" },
 ];
 
-export const DEMO_USER = "demo-user";
+export const DEMO_USER = "Demo";
 
 export function departmentLabel(id: DepartmentId | "all"): string {
   return DEPARTMENTS.find((d) => d.id === id)?.name ?? id;

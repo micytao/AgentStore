@@ -3,12 +3,14 @@ import type {
   DepartmentId,
   EngineSettings,
   Listing,
+  ListingCreateInput,
   ListingUpdate,
   McpServerConfig,
   McpServerStatus,
   ProviderConfig,
   ProviderStatus,
   SecretSummary,
+  Skill,
   Task,
   UsageSnapshot,
 } from "@agentstore/shared";
@@ -83,6 +85,20 @@ export function updateListingAdmin(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(patch),
   }).then((r) => parse<Listing>(r));
+}
+
+export function createListingAdmin(input: ListingCreateInput): Promise<Listing> {
+  return fetch("/api/admin/listings", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  }).then((r) => parse<Listing>(r));
+}
+
+export function deleteListingAdmin(id: string): Promise<void> {
+  return fetch(`/api/admin/listings/${id}`, { method: "DELETE" })
+    .then((r) => parse<{ ok: boolean }>(r))
+    .then(() => undefined);
 }
 
 export function fetchEngineSettings(): Promise<EngineSettings> {
@@ -216,16 +232,38 @@ export function setMcpToolEnabledValue(
   ).then((r) => parse<McpServerStatus>(r));
 }
 
+// --- Skills ---
+
+export function fetchSkills(): Promise<Skill[]> {
+  return fetch("/api/admin/skills").then((r) => parse<Skill[]>(r));
+}
+
+export function upsertSkillConfig(skill: Skill): Promise<Skill> {
+  return fetch("/api/admin/skills", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(skill),
+  }).then((r) => parse<Skill>(r));
+}
+
+export function deleteSkillConfig(id: string): Promise<void> {
+  return fetch(`/api/admin/skills/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  }).then((r) => parse<{ ok: boolean }>(r)).then(() => undefined);
+}
+
 export type {
   DepartmentId,
   EngineSettings,
   Listing,
+  ListingCreateInput,
   ListingUpdate,
   McpServerConfig,
   McpServerStatus,
   ProviderConfig,
   ProviderStatus,
   SecretSummary,
+  Skill,
   Task,
   UsageSnapshot,
 };

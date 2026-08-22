@@ -34,6 +34,12 @@ export function adapterFor(listing: Listing): EngineAdapter {
 }
 
 export function isLiveEngine(listing: Listing): boolean {
+  const override = listing.agentConfig?.engineOverride;
+  if (override === "simulated") return false;
+  if (override === "live") {
+    return Boolean(listing.openshellAgent && process.env.OPENSHELL_GATEWAY_URL);
+  }
+  // "auto" (or unset): fall back to the global setting, as before.
   if (settingsStore().forceSimulated) return false;
   return Boolean(listing.openshellAgent && process.env.OPENSHELL_GATEWAY_URL);
 }

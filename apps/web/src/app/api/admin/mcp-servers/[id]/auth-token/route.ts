@@ -1,10 +1,13 @@
 import { NextResponse } from "next/server";
+import { requireAdmin } from "@/server/auth";
 import { setMcpAuthToken } from "@/server/mcp";
 
 export async function PATCH(
   request: Request,
   context: { params: Promise<{ id: string }> }
 ) {
+  const denied = requireAdmin(request);
+  if (denied) return denied;
   const { id } = await context.params;
   const { value } = (await request.json()) as { value?: string };
   if (!value) {

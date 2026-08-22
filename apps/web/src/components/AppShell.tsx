@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   AngleDoubleLeftIcon,
   AngleDoubleRightIcon,
@@ -10,6 +10,7 @@ import {
   ThIcon,
   UserCogIcon,
 } from "@patternfly/react-icons";
+import type { Role } from "@agentstore/shared";
 import { useRole } from "@/lib/role";
 import { UsageChip } from "./UsageChip";
 
@@ -23,7 +24,6 @@ const NAV_ITEMS = [
 
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  const { role, toggleRole } = useRole();
   const [collapsed, setCollapsed] = useState(false);
 
   useEffect(() => {
@@ -109,32 +109,75 @@ export function AppShell({ children }: { children: ReactNode }) {
         </nav>
 
         <div className="store-sidebar-footer">
-          <UsageChip compact={collapsed} />
-          <button
-            type="button"
-            className="store-role-toggle"
-            onClick={toggleRole}
-            title={collapsed ? `Admin mode: ${role === "admin" ? "on" : "off"}` : undefined}
-          >
-            <span
-              className={`store-switch${role === "admin" ? " is-on" : ""}`}
-              aria-hidden="true"
-            >
-              <span className="store-switch-knob" />
-            </span>
-            <span className="store-sidebar-label">
-              Admin mode: {role === "admin" ? "On" : "Off"}
-            </span>
-          </button>
-          <div className="store-sidebar-user">
-            <span className="store-avatar">{role === "admin" ? "a" : "d"}</span>
-            <span className="store-sidebar-label store-sidebar-username">
-              {role === "admin" ? "admin" : "demo-user"}
-            </span>
-          </div>
+          <RoleToggle collapsed={collapsed} />
         </div>
       </aside>
-      <main className="store-main">{children}</main>
+      <main className="store-main">
+        <div className="store-topbar">
+          <UsageChip />
+        </div>
+        {children}
+      </main>
+    </div>
+  );
+}
+
+const ROLE_OPTIONS: { id: Role; label: string; initial: string }[] = [
+  { id: "user", label: "Demo", initial: "D" },
+  { id: "admin", label: "Admin", initial: "A" },
+];
+
+function RoleToggle({ collapsed }: { collapsed: boolean }) {
+  const { role, isAdmin, setRole } = useRole();
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function onOutsideClick(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", onOutsideClick);
+    return () => document.removeEventListener("mousedown", onOutsideClick);
+  }, [open]);
+
+  async function choose(target: Role) {
+    setOpen(false);
+    if (target !== role) await setRole(target);
+  }
+
+  return (
+    <div className="store-role-switcher" ref={containerRef}>
+      {open && (
+        <div className="store-role-menu" role="menu">
+          {ROLE_OPTIONS.map((option) => (
+            <button
+              key={option.id}
+              type="button"
+              role="menuitem"
+              className={`store-role-menu-item${option.id === role ? " is-current" : ""}`}
+              onClick={() => void choose(option.id)}
+            >
+              <span className="store-avatar is-mini">{option.initial}</span>
+              {option.label}
+            </button>
+          ))}
+        </div>
+      )}
+      <button
+        type="button"
+        className="store-sidebar-user store-role-click"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        title={collapsed ? "Switch between Demo and Admin" : undefined}
+      >
+        <span className="store-avatar">{isAdmin ? "A" : "D"}</span>
+        <span className="store-sidebar-label store-sidebar-username">
+          {isAdmin ? "Admin" : "Demo"}
+        </span>
+      </button>
     </div>
   );
 }

@@ -2,8 +2,12 @@
 
 import { useEffect, useState } from "react";
 import {
+  DEPARTMENTS,
   departmentLabel,
   PROVIDER_KINDS,
+  type AgentMode,
+  type DepartmentId,
+  type EngineType,
   type Listing,
   type ListingUpdate,
   type McpServerStatus,
@@ -14,20 +18,26 @@ import {
   type ReviewStatus,
   type RiskTier,
   type SecretSummary,
+  type Skill,
 } from "@agentstore/shared";
+import { ListingCard } from "@/components/ListingCard";
 import { PhaseLabel } from "@/components/PhaseLabel";
 import {
   activateProviderConfig,
   clearSecretValue,
   connectMcpServerConfig,
+  createListingAdmin,
+  deleteListingAdmin,
   deleteMcpServerConfig,
   deleteProviderConfig,
+  deleteSkillConfig,
   disconnectMcpServerConfig,
   fetchEngineSettings,
   fetchListings,
   fetchMcpServers,
   fetchProviders,
   fetchSecrets,
+  fetchSkills,
   fetchTasks,
   setMcpAuthTokenValue,
   setMcpToolEnabledValue,
@@ -38,18 +48,20 @@ import {
   updateListingAdmin,
   upsertMcpServerConfig,
   upsertProviderConfig,
+  upsertSkillConfig,
   type EngineSettings,
   type Task,
 } from "@/lib/api";
 import { formatUsd, modeLabel } from "@/lib/format";
 import { useRole } from "@/lib/role";
 
-type Tab = "catalog" | "providers" | "mcp" | "secrets" | "engine" | "audit";
+type Tab = "catalog" | "providers" | "mcp" | "skills" | "secrets" | "engine" | "audit";
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "catalog", label: "Catalog" },
   { id: "providers", label: "Providers" },
   { id: "mcp", label: "MCP" },
+  { id: "skills", label: "Skills" },
   { id: "secrets", label: "Secrets" },
   { id: "engine", label: "Engine" },
   { id: "audit", label: "Tasks & usage" },
@@ -64,7 +76,15 @@ const REVIEW_STATUSES: ReviewStatus[] = [
 ];
 
 export function AdminPage() {
-  const { isAdmin, toggleRole } = useRole();
+  const { isAdmin, loading, setRole } = useRole();
+
+  if (loading) {
+    return (
+      <div className="store-page store-page-narrow">
+        <div className="store-loading">Checking session…</div>
+      </div>
+    );
+  }
 
   if (!isAdmin) {
     return (
@@ -75,16 +95,12 @@ export function AdminPage() {
         </section>
         <div className="store-admin-gate">
           <p>
-            Admin mode is off. Flip the switch to manage the catalog, choose
-            which engine tasks run on, and audit everything launched across
-            departments.
+            Admin mode is off. Switch to Admin to manage the catalog, onboard
+            new agents, choose which engine tasks run on, and audit
+            everything launched across departments.
           </p>
-          <button
-            type="button"
-            className="store-btn-primary"
-            onClick={toggleRole}
-          >
-            Turn on Admin mode
+          <button type="button" className="store-btn-primary" onClick={() => void setRole("admin")}>
+            Switch to Admin
           </button>
         </div>
       </div>
@@ -126,6 +142,7 @@ function AdminConsole() {
       {tab === "catalog" && <CatalogManager />}
       {tab === "providers" && <ProvidersPanel />}
       {tab === "mcp" && <McpPanel />}
+      {tab === "skills" && <SkillsPanel />}
       {tab === "secrets" && <SecretsPanel />}
       {tab === "engine" && <EngineSettingsPanel />}
       {tab === "audit" && <AuditLog />}
@@ -135,13 +152,24 @@ function AdminConsole() {
 
 function CatalogManager() {
   const [listings, setListings] = useState<Listing[] | null>(null);
+  const [providers, setProviders] = useState<ProviderStatus[]>([]);
+  const [mcpServers, setMcpServers] = useState<McpServerStatus[]>([]);
+  const [skills, setSkills] = useState<Skill[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [showWizard, setShowWizard] = useState(false);
 
-  useEffect(() => {
-    fetchListings()
-      .then(setListings)
+  function loadAll() {
+    Promise.all([fetchListings(), fetchProviders(), fetchMcpServers(), fetchSkills()])
+      .then(([l, p, m, s]) => {
+        setListings(l);
+        setProviders(p);
+        setMcpServers(m);
+        setSkills(s);
+      })
       .catch((err: Error) => setError(err.message));
-  }, []);
+  }
+
+  useEffect(loadAll, []);
 
   if (error) return <p className="store-empty">{error}</p>;
   if (!listings) return <div className="store-loading">Loading catalog…</div>;
@@ -157,15 +185,51 @@ function CatalogManager() {
           <span />
         </div>
         {listings.map((listing) => (
-          <ListingRow key={listing.id} listing={listing} />
+          <ListingRow
+            key={listing.id}
+            listing={listing}
+            providers={providers}
+            mcpServers={mcpServers}
+            skills={skills}
+            onChange={loadAll}
+          />
         ))}
       </div>
+
+      {showWizard ? (
+        <OnboardAgentWizard
+          providers={providers}
+          mcpServers={mcpServers}
+          skills={skills}
+          onDone={() => {
+            setShowWizard(false);
+            loadAll();
+          }}
+          onCancel={() => setShowWizard(false)}
+        />
+      ) : (
+        <button type="button" className="store-btn-primary" onClick={() => setShowWizard(true)}>
+          + Onboard new agent
+        </button>
+      )}
     </div>
   );
 }
 
-function ListingRow({ listing }: { listing: Listing }) {
-  const [draft, setDraft] = useState<Required<ListingUpdate>>({
+function ListingRow({
+  listing,
+  providers,
+  mcpServers,
+  skills,
+  onChange,
+}: {
+  listing: Listing;
+  providers: ProviderStatus[];
+  mcpServers: McpServerStatus[];
+  skills: Skill[];
+  onChange: () => void;
+}) {
+  const [draft, setDraft] = useState<Required<Pick<ListingUpdate, "name" | "description" | "riskTier" | "reviewStatus" | "comingSoon">>>({
     name: listing.name,
     description: listing.description,
     riskTier: listing.riskTier,
@@ -174,6 +238,8 @@ function ListingRow({ listing }: { listing: Listing }) {
   });
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [showConfig, setShowConfig] = useState(false);
+  const [retiring, setRetiring] = useState(false);
 
   function update(patch: ListingUpdate) {
     setDraft((prev) => ({ ...prev, ...patch }));
@@ -185,57 +251,598 @@ function ListingRow({ listing }: { listing: Listing }) {
     try {
       await updateListingAdmin(listing.id, draft);
       setSaved(true);
+      onChange();
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function retire() {
+    if (!window.confirm(`Retire "${listing.name}"? This deletes it permanently.`)) return;
+    setRetiring(true);
+    try {
+      await deleteListingAdmin(listing.id);
+      onChange();
+    } finally {
+      setRetiring(false);
+    }
+  }
+
+  return (
+    <div className="store-admin-row-group">
+      <div className="store-admin-row">
+        <div>
+          <strong>{listing.name}</strong>
+          <span>
+            {departmentLabel(listing.department)} · {listing.category}
+            {listing.source === "custom" ? " · Custom" : ""}
+          </span>
+        </div>
+        <select
+          value={draft.riskTier}
+          onChange={(e) => update({ riskTier: e.target.value as RiskTier })}
+        >
+          {RISK_TIERS.map((tier) => (
+            <option key={tier} value={tier}>
+              {tier}
+            </option>
+          ))}
+        </select>
+        <select
+          value={draft.reviewStatus}
+          onChange={(e) =>
+            update({ reviewStatus: e.target.value as ReviewStatus })
+          }
+        >
+          {REVIEW_STATUSES.map((status) => (
+            <option key={status} value={status}>
+              {status}
+            </option>
+          ))}
+        </select>
+        <label className="store-admin-checkbox">
+          <input
+            type="checkbox"
+            checked={draft.comingSoon}
+            onChange={(e) => update({ comingSoon: e.target.checked })}
+          />
+          Coming soon
+        </label>
+        <div className="store-admin-row-actions">
+          <button
+            type="button"
+            className={`store-btn-ghost store-admin-save${saved ? " is-saved" : ""}`}
+            onClick={() => void save()}
+            disabled={saving}
+          >
+            {saving ? "Saving…" : saved ? "Saved" : "Save"}
+          </button>
+          <button type="button" className="store-btn-ghost" onClick={() => setShowConfig((v) => !v)}>
+            {showConfig ? "Hide config" : "Agent config"}
+          </button>
+          {listing.source === "custom" && (
+            <button type="button" className="store-btn-ghost" onClick={() => void retire()} disabled={retiring}>
+              {retiring ? "Retiring…" : "Retire"}
+            </button>
+          )}
+        </div>
+      </div>
+
+      {showConfig && (
+        <AgentConfigPanel
+          listing={listing}
+          providers={providers}
+          mcpServers={mcpServers}
+          skills={skills}
+          onChange={onChange}
+        />
+      )}
+    </div>
+  );
+}
+
+function AgentConfigPanel({
+  listing,
+  providers,
+  mcpServers,
+  skills,
+  onChange,
+}: {
+  listing: Listing;
+  providers: ProviderStatus[];
+  mcpServers: McpServerStatus[];
+  skills: Skill[];
+  onChange: () => void;
+}) {
+  const [providerId, setProviderId] = useState(listing.agentConfig?.providerId ?? "");
+  const [engineOverride, setEngineOverride] = useState<"auto" | "simulated" | "live">(
+    listing.agentConfig?.engineOverride ?? "auto"
+  );
+  const [skillIds, setSkillIds] = useState<string[]>(listing.agentConfig?.skillIds ?? []);
+  const [toolBindings, setToolBindings] = useState<{ serverId: string; tool: string }[]>(
+    listing.agentConfig?.mcpToolBindings ?? []
+  );
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  const connectedServers = mcpServers.filter((s) => s.connectionState === "connected");
+
+  function toggleTool(serverId: string, tool: string) {
+    setSaved(false);
+    setToolBindings((prev) =>
+      prev.some((b) => b.serverId === serverId && b.tool === tool)
+        ? prev.filter((b) => !(b.serverId === serverId && b.tool === tool))
+        : [...prev, { serverId, tool }]
+    );
+  }
+
+  function toggleSkill(id: string) {
+    setSaved(false);
+    setSkillIds((prev) => (prev.includes(id) ? prev.filter((s) => s !== id) : [...prev, id]));
+  }
+
+  async function save() {
+    setSaving(true);
+    try {
+      await updateListingAdmin(listing.id, {
+        agentConfig: {
+          providerId: providerId || undefined,
+          engineOverride,
+          skillIds,
+          mcpToolBindings: toolBindings,
+        },
+      });
+      setSaved(true);
+      onChange();
     } finally {
       setSaving(false);
     }
   }
 
   return (
-    <div className="store-admin-row">
-      <div>
-        <strong>{listing.name}</strong>
-        <span>
-          {departmentLabel(listing.department)} · {listing.category}
-        </span>
+    <div className="store-panel store-agent-config">
+      <h4 className="store-panel-title">Agent config — {listing.name}</h4>
+      <p className="store-lede tight">
+        Bind a specific model provider, tool subset, skills, and engine
+        override to this agent. Leave provider unset to keep using the
+        global active provider.
+      </p>
+
+      <div className="store-resource-input-row">
+        <div className="store-field-mini">
+          <span>Model provider</span>
+          <select
+            value={providerId}
+            onChange={(e) => {
+              setProviderId(e.target.value);
+              setSaved(false);
+            }}
+          >
+            <option value="">Use global active provider</option>
+            {providers.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.label}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="store-field-mini">
+          <span>Engine</span>
+          <select
+            value={engineOverride}
+            onChange={(e) => {
+              setEngineOverride(e.target.value as "auto" | "simulated" | "live");
+              setSaved(false);
+            }}
+          >
+            <option value="auto">Auto (use global engine setting)</option>
+            <option value="simulated">Force simulated</option>
+            <option value="live">Force live (OpenShell)</option>
+          </select>
+        </div>
       </div>
-      <select
-        value={draft.riskTier}
-        onChange={(e) => update({ riskTier: e.target.value as RiskTier })}
-      >
-        {RISK_TIERS.map((tier) => (
-          <option key={tier} value={tier}>
-            {tier}
-          </option>
+
+      <div>
+        <p className="store-lede tight">Tools</p>
+        {connectedServers.length === 0 ? (
+          <p className="store-resource-empty">
+            No connected MCP servers. Connect one in the MCP tab first.
+          </p>
+        ) : (
+          connectedServers.map((server) => (
+            <div key={server.id} className="store-resource-tools">
+              <strong>{server.name}</strong>
+              {server.tools.length === 0 ? (
+                <p className="store-resource-empty">No tools advertised.</p>
+              ) : (
+                server.tools.map((tool) => (
+                  <label key={tool.name} className="store-resource-tool">
+                    <span>{tool.name}</span>
+                    <input
+                      type="checkbox"
+                      checked={toolBindings.some((b) => b.serverId === server.id && b.tool === tool.name)}
+                      onChange={() => toggleTool(server.id, tool.name)}
+                    />
+                  </label>
+                ))
+              )}
+            </div>
+          ))
+        )}
+      </div>
+
+      <div>
+        <p className="store-lede tight">Skills</p>
+        {skills.length === 0 ? (
+          <p className="store-resource-empty">No skills authored yet. Add one in the Skills tab.</p>
+        ) : (
+          skills.map((skill) => (
+            <label key={skill.id} className="store-resource-tool">
+              <span>{skill.name}</span>
+              <input
+                type="checkbox"
+                checked={skillIds.includes(skill.id)}
+                onChange={() => toggleSkill(skill.id)}
+              />
+            </label>
+          ))
+        )}
+      </div>
+
+      <div className="store-resource-actions">
+        <button
+          type="button"
+          className={`store-btn-primary store-admin-save${saved ? " is-saved" : ""}`}
+          onClick={() => void save()}
+          disabled={saving}
+        >
+          {saving ? "Saving…" : saved ? "Saved" : "Save agent config"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+const ICON_OPTIONS: { id: string; label: string }[] = [
+  { id: "code", label: "Code" },
+  { id: "comments", label: "Comments" },
+  { id: "shield", label: "Shield" },
+  { id: "chart", label: "Chart" },
+  { id: "money", label: "Money" },
+];
+
+const WIZARD_STEPS = ["Basics", "Modes & engine", "Model & tools", "Skills", "Review & publish"];
+
+function OnboardAgentWizard({
+  providers,
+  mcpServers,
+  skills,
+  onDone,
+  onCancel,
+}: {
+  providers: ProviderStatus[];
+  mcpServers: McpServerStatus[];
+  skills: Skill[];
+  onDone: () => void;
+  onCancel: () => void;
+}) {
+  const [step, setStep] = useState(0);
+  const [name, setName] = useState("");
+  const [department, setDepartment] = useState<DepartmentId>("engineering");
+  const [category, setCategory] = useState("");
+  const [description, setDescription] = useState("");
+  const [icon, setIcon] = useState("code");
+  const [riskTier, setRiskTier] = useState<RiskTier>("medium");
+  const [supportedModes, setSupportedModes] = useState<AgentMode[]>(["do-this-for-me"]);
+  const [engineType, setEngineType] = useState<EngineType>("hosted-agent-api");
+  const [openshellAgent, setOpenshellAgent] = useState("");
+  const [engineOverride, setEngineOverride] = useState<"auto" | "simulated" | "live">("auto");
+  const [providerId, setProviderId] = useState("");
+  const [toolBindings, setToolBindings] = useState<{ serverId: string; tool: string }[]>([]);
+  const [skillIds, setSkillIds] = useState<string[]>([]);
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const connectedServers = mcpServers.filter((s) => s.connectionState === "connected");
+
+  function toggleMode(mode: AgentMode) {
+    setSupportedModes((prev) => (prev.includes(mode) ? prev.filter((m) => m !== mode) : [...prev, mode]));
+  }
+  function toggleTool(serverId: string, tool: string) {
+    setToolBindings((prev) =>
+      prev.some((b) => b.serverId === serverId && b.tool === tool)
+        ? prev.filter((b) => !(b.serverId === serverId && b.tool === tool))
+        : [...prev, { serverId, tool }]
+    );
+  }
+  function toggleSkill(id: string) {
+    setSkillIds((prev) => (prev.includes(id) ? prev.filter((s) => s !== id) : [...prev, id]));
+  }
+
+  function validateStep(): string | null {
+    if (step === 0) {
+      if (!name.trim()) return "Name is required";
+      if (!category.trim()) return "Category is required";
+      if (!description.trim()) return "Description is required";
+    }
+    if (step === 1) {
+      if (supportedModes.length === 0) return "Pick at least one mode";
+      if (engineType === "self-hosted-sandbox" && !openshellAgent.trim()) {
+        return "OpenShell agent identifier is required for self-hosted sandbox agents";
+      }
+    }
+    return null;
+  }
+
+  function next() {
+    const validationError = validateStep();
+    if (validationError) {
+      setErr(validationError);
+      return;
+    }
+    setErr(null);
+    setStep((s) => Math.min(s + 1, WIZARD_STEPS.length - 1));
+  }
+
+  function back() {
+    setErr(null);
+    setStep((s) => Math.max(s - 1, 0));
+  }
+
+  async function submit(publish: boolean) {
+    setSaving(true);
+    setErr(null);
+    try {
+      await createListingAdmin({
+        name: name.trim(),
+        department,
+        category: category.trim(),
+        description: description.trim(),
+        icon,
+        engineType,
+        supportedModes,
+        riskTier,
+        openshellAgent: engineType === "self-hosted-sandbox" ? openshellAgent.trim() : undefined,
+        agentConfig: {
+          providerId: providerId || undefined,
+          engineOverride,
+          skillIds,
+          mcpToolBindings: toolBindings,
+        },
+        publish,
+      });
+      onDone();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const previewListing: Listing = {
+    id: "preview",
+    name: name || "Untitled agent",
+    department,
+    category: category || "Uncategorized",
+    description: description || "No description yet.",
+    icon,
+    engineType,
+    supportedModes: supportedModes.length > 0 ? supportedModes : ["do-this-for-me"],
+    riskTier,
+    reviewStatus: "draft",
+  };
+
+  return (
+    <div className="store-panel store-wizard">
+      <div className="store-wizard-steps">
+        {WIZARD_STEPS.map((label, idx) => (
+          <span
+            key={label}
+            className={`store-wizard-step${idx === step ? " is-active" : idx < step ? " is-done" : ""}`}
+          >
+            {idx + 1}. {label}
+          </span>
         ))}
-      </select>
-      <select
-        value={draft.reviewStatus}
-        onChange={(e) =>
-          update({ reviewStatus: e.target.value as ReviewStatus })
-        }
-      >
-        {REVIEW_STATUSES.map((status) => (
-          <option key={status} value={status}>
-            {status}
-          </option>
-        ))}
-      </select>
-      <label className="store-admin-checkbox">
-        <input
-          type="checkbox"
-          checked={draft.comingSoon}
-          onChange={(e) => update({ comingSoon: e.target.checked })}
-        />
-        Coming soon
-      </label>
-      <button
-        type="button"
-        className={`store-btn-ghost store-admin-save${saved ? " is-saved" : ""}`}
-        onClick={save}
-        disabled={saving}
-      >
-        {saving ? "Saving…" : saved ? "Saved" : "Save"}
-      </button>
+      </div>
+
+      {err && <p className="store-banner is-error">{err}</p>}
+
+      {step === 0 && (
+        <div className="store-wizard-body">
+          <div className="store-resource-input-row">
+            <input
+              placeholder="Agent name, e.g. Contract summarizer"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
+            <select value={department} onChange={(e) => setDepartment(e.target.value as DepartmentId)}>
+              {DEPARTMENTS.filter((d) => d.id !== "all").map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="store-resource-input-row">
+            <input
+              placeholder="Category, e.g. Contract review"
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+            />
+            <select value={icon} onChange={(e) => setIcon(e.target.value)}>
+              {ICON_OPTIONS.map((i) => (
+                <option key={i.id} value={i.id}>
+                  {i.label}
+                </option>
+              ))}
+            </select>
+            <select value={riskTier} onChange={(e) => setRiskTier(e.target.value as RiskTier)}>
+              {RISK_TIERS.map((tier) => (
+                <option key={tier} value={tier}>
+                  {tier} risk
+                </option>
+              ))}
+            </select>
+          </div>
+          <textarea
+            rows={3}
+            className="store-textarea"
+            placeholder="What does this agent do?"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+          />
+        </div>
+      )}
+
+      {step === 1 && (
+        <div className="store-wizard-body">
+          <div className="store-resource-input-row">
+            <label className="store-admin-checkbox">
+              <input
+                type="checkbox"
+                checked={supportedModes.includes("do-this-for-me")}
+                onChange={() => toggleMode("do-this-for-me")}
+              />
+              Autonomous (do this for me)
+            </label>
+            <label className="store-admin-checkbox">
+              <input
+                type="checkbox"
+                checked={supportedModes.includes("work-with-me")}
+                onChange={() => toggleMode("work-with-me")}
+              />
+              Collaborative (work with me)
+            </label>
+          </div>
+          <div className="store-resource-input-row">
+            <select value={engineType} onChange={(e) => setEngineType(e.target.value as EngineType)}>
+              <option value="hosted-agent-api">Hosted agent API</option>
+              <option value="self-hosted-sandbox">Self-hosted sandbox (OpenShell)</option>
+            </select>
+            {engineType === "self-hosted-sandbox" && (
+              <input
+                placeholder="OpenShell agent identifier, e.g. claude"
+                value={openshellAgent}
+                onChange={(e) => setOpenshellAgent(e.target.value)}
+              />
+            )}
+            <select
+              value={engineOverride}
+              onChange={(e) => setEngineOverride(e.target.value as "auto" | "simulated" | "live")}
+            >
+              <option value="auto">Auto (use global engine setting)</option>
+              <option value="simulated">Force simulated</option>
+              <option value="live">Force live</option>
+            </select>
+          </div>
+        </div>
+      )}
+
+      {step === 2 && (
+        <div className="store-wizard-body">
+          <div className="store-resource-input-row">
+            <select value={providerId} onChange={(e) => setProviderId(e.target.value)}>
+              <option value="">Use global active provider</option>
+              {providers.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          {connectedServers.length === 0 ? (
+            <p className="store-resource-empty">
+              No connected MCP servers yet — connect one in the MCP tab to bind
+              tools now, or skip and bind later.
+            </p>
+          ) : (
+            connectedServers.map((server) => (
+              <div key={server.id} className="store-resource-tools">
+                <strong>{server.name}</strong>
+                {server.tools.map((tool) => (
+                  <label key={tool.name} className="store-resource-tool">
+                    <span>{tool.name}</span>
+                    <input
+                      type="checkbox"
+                      checked={toolBindings.some((b) => b.serverId === server.id && b.tool === tool.name)}
+                      onChange={() => toggleTool(server.id, tool.name)}
+                    />
+                  </label>
+                ))}
+              </div>
+            ))
+          )}
+        </div>
+      )}
+
+      {step === 3 && (
+        <div className="store-wizard-body">
+          {skills.length === 0 ? (
+            <p className="store-resource-empty">
+              No skills authored yet — add one in the Skills tab, or skip and
+              attach later.
+            </p>
+          ) : (
+            skills.map((skill) => (
+              <label key={skill.id} className="store-resource-tool">
+                <span>
+                  {skill.name}
+                  {skill.description ? ` — ${skill.description}` : ""}
+                </span>
+                <input
+                  type="checkbox"
+                  checked={skillIds.includes(skill.id)}
+                  onChange={() => toggleSkill(skill.id)}
+                />
+              </label>
+            ))
+          )}
+        </div>
+      )}
+
+      {step === 4 && (
+        <div className="store-wizard-body">
+          <p className="store-lede tight">This is what users will see in the catalog:</p>
+          <div className="store-wizard-preview">
+            <ListingCard listing={previewListing} />
+          </div>
+        </div>
+      )}
+
+      <div className="store-resource-actions store-wizard-actions">
+        {step > 0 && (
+          <button type="button" className="store-btn-ghost" onClick={back} disabled={saving}>
+            Back
+          </button>
+        )}
+        <button type="button" className="store-btn-ghost" onClick={onCancel} disabled={saving}>
+          Cancel
+        </button>
+        {step < WIZARD_STEPS.length - 1 ? (
+          <button type="button" className="store-btn-primary" onClick={next}>
+            Next
+          </button>
+        ) : (
+          <>
+            <button
+              type="button"
+              className="store-btn-ghost"
+              onClick={() => void submit(false)}
+              disabled={saving}
+            >
+              {saving ? "Saving…" : "Save as draft"}
+            </button>
+            <button
+              type="button"
+              className="store-btn-primary"
+              onClick={() => void submit(true)}
+              disabled={saving}
+            >
+              {saving ? "Publishing…" : "Publish now"}
+            </button>
+          </>
+        )}
+      </div>
     </div>
   );
 }
@@ -404,6 +1011,12 @@ function AddProviderForm({
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
+  function applyVllmPreset() {
+    setKind("openai-compatible");
+    setLabel((prev) => prev || "vLLM (local MaaS)");
+    setBaseUrl((prev) => prev || "http://localhost:8000/v1");
+  }
+
   async function save() {
     if (!label.trim()) {
       setErr("Label is required");
@@ -430,6 +1043,14 @@ function AddProviderForm({
   return (
     <div className="store-resource-add">
       {err && <p className="store-banner is-error">{err}</p>}
+      <p className="store-lede tight">
+        Quick preset:{" "}
+        <button type="button" className="store-btn-ghost" onClick={applyVllmPreset}>
+          Self-hosted / vLLM (MaaS)
+        </button>{" "}
+        — points an OpenAI-compatible provider at a local vLLM server; no API
+        key required.
+      </p>
       <div className="store-resource-input-row">
         <select value={kind} onChange={(e) => setKind(e.target.value as ProviderKind)}>
           {PROVIDER_KINDS.map((k) => (
@@ -445,17 +1066,24 @@ function AddProviderForm({
         />
         {kind === "openai-compatible" && (
           <input
-            placeholder="Base URL, e.g. https://my-host/v1"
+            placeholder="Base URL, e.g. http://localhost:8000/v1"
             value={baseUrl}
             onChange={(e) => setBaseUrl(e.target.value)}
           />
         )}
       </div>
+      {kind === "openai-compatible" && (
+        <p className="store-resource-empty">
+          No API key needed for a self-hosted server with no auth configured
+          — leave the key blank after adding and just hit &quot;Test
+          connection&quot;.
+        </p>
+      )}
       <div className="store-resource-actions">
         <button
           type="button"
           className="store-btn-primary"
-          onClick={save}
+          onClick={() => void save()}
           disabled={saving}
         >
           {saving ? "Adding…" : "Add provider"}
@@ -540,8 +1168,16 @@ function ProviderRow({
           <span className={`store-phase is-${provider.active ? "ok" : "muted"}`}>
             {provider.active ? "Active" : "Inactive"}
           </span>
-          <span className={`store-phase is-${provider.hasKey ? "ok" : "warn"}`}>
-            {provider.hasKey ? `Key set (${provider.keyPreview})` : "No key"}
+          <span
+            className={`store-phase is-${
+              provider.hasKey ? "ok" : provider.kind === "openai-compatible" ? "muted" : "warn"
+            }`}
+          >
+            {provider.hasKey
+              ? `Key set (${provider.keyPreview})`
+              : provider.kind === "openai-compatible"
+                ? "No key (optional for self-hosted servers)"
+                : "No key"}
           </span>
           {provider.lastError && <span className="store-phase is-bad">Test failed</span>}
           {provider.lastChecked && !provider.lastError && (
@@ -569,7 +1205,7 @@ function ProviderRow({
           type="button"
           className="store-btn-ghost"
           onClick={test}
-          disabled={testing || !provider.hasKey}
+          disabled={testing || (!provider.hasKey && provider.kind !== "openai-compatible")}
         >
           {testing ? "Testing…" : "Test connection"}
         </button>
@@ -889,6 +1525,196 @@ function McpServerRow({
             ))
           )}
         </div>
+      )}
+    </div>
+  );
+}
+
+function SkillsPanel() {
+  const [skills, setSkills] = useState<Skill[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [showAdd, setShowAdd] = useState(false);
+
+  function load() {
+    fetchSkills()
+      .then(setSkills)
+      .catch((err: Error) => setError(err.message));
+  }
+
+  useEffect(load, []);
+
+  if (error) return <p className="store-empty">{error}</p>;
+  if (!skills) return <div className="store-loading">Loading skills…</div>;
+
+  return (
+    <div className="store-admin-section">
+      <div className="store-panel">
+        <h3 className="store-panel-title">Skills library</h3>
+        <p className="store-lede tight">
+          Author reusable instruction bundles once, then attach one or more
+          to any agent (from the Catalog tab or the onboarding wizard). A
+          skill&apos;s instructions are merged into that agent&apos;s system
+          prompt when it drafts.
+        </p>
+
+        {skills.length === 0 && (
+          <p className="store-resource-empty">No skills authored yet.</p>
+        )}
+
+        <div className="store-resource-list">
+          {skills.map((skill) => (
+            <SkillRow key={skill.id} skill={skill} onChange={load} />
+          ))}
+        </div>
+
+        {showAdd ? (
+          <AddSkillForm
+            onDone={() => {
+              setShowAdd(false);
+              load();
+            }}
+            onCancel={() => setShowAdd(false)}
+          />
+        ) : (
+          <button type="button" className="store-btn-ghost" onClick={() => setShowAdd(true)}>
+            + Add skill
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function AddSkillForm({
+  onDone,
+  onCancel,
+}: {
+  onDone: () => void;
+  onCancel: () => void;
+}) {
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+  const [instructions, setInstructions] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  async function save() {
+    if (!name.trim() || !instructions.trim()) {
+      setErr("Name and instructions are required");
+      return;
+    }
+    setSaving(true);
+    setErr(null);
+    try {
+      await upsertSkillConfig({
+        id: `${slugify(name)}-${Math.random().toString(36).slice(2, 6)}`,
+        name: name.trim(),
+        description: description.trim(),
+        instructions: instructions.trim(),
+      });
+      onDone();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="store-resource-add">
+      {err && <p className="store-banner is-error">{err}</p>}
+      <div className="store-resource-input-row">
+        <input placeholder="Name, e.g. Billing tone guide" value={name} onChange={(e) => setName(e.target.value)} />
+        <input
+          placeholder="Short description (optional)"
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+        />
+      </div>
+      <textarea
+        rows={4}
+        placeholder="Instructions to merge into the agent's system prompt…"
+        value={instructions}
+        onChange={(e) => setInstructions(e.target.value)}
+        className="store-textarea"
+      />
+      <div className="store-resource-actions">
+        <button type="button" className="store-btn-primary" onClick={save} disabled={saving}>
+          {saving ? "Adding…" : "Add skill"}
+        </button>
+        <button type="button" className="store-btn-ghost" onClick={onCancel}>
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function SkillRow({ skill, onChange }: { skill: Skill; onChange: () => void }) {
+  const [editing, setEditing] = useState(false);
+  const [name, setName] = useState(skill.name);
+  const [description, setDescription] = useState(skill.description);
+  const [instructions, setInstructions] = useState(skill.instructions);
+  const [busy, setBusy] = useState(false);
+
+  async function save() {
+    setBusy(true);
+    try {
+      await upsertSkillConfig({ id: skill.id, name, description, instructions });
+      setEditing(false);
+      onChange();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function remove() {
+    setBusy(true);
+    try {
+      await deleteSkillConfig(skill.id);
+      onChange();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="store-resource-card">
+      <div className="store-resource-head">
+        <div className="store-resource-title">
+          <strong>{skill.name}</strong>
+          {skill.description && <span>{skill.description}</span>}
+        </div>
+        <div className="store-resource-actions">
+          <button type="button" className="store-btn-ghost" onClick={() => setEditing((v) => !v)}>
+            {editing ? "Close" : "Edit"}
+          </button>
+          <button type="button" className="store-btn-ghost" onClick={remove} disabled={busy}>
+            Remove
+          </button>
+        </div>
+      </div>
+
+      {editing ? (
+        <>
+          <div className="store-resource-input-row">
+            <input value={name} onChange={(e) => setName(e.target.value)} />
+            <input value={description} onChange={(e) => setDescription(e.target.value)} />
+          </div>
+          <textarea
+            rows={4}
+            value={instructions}
+            onChange={(e) => setInstructions(e.target.value)}
+            className="store-textarea"
+          />
+          <div className="store-resource-actions">
+            <button type="button" className="store-btn-primary" onClick={save} disabled={busy}>
+              {busy ? "Saving…" : "Save"}
+            </button>
+          </div>
+        </>
+      ) : (
+        <p className="store-resource-tool-desc">{skill.instructions}</p>
       )}
     </div>
   );

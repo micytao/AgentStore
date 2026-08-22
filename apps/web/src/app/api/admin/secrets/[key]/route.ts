@@ -1,10 +1,13 @@
 import { NextResponse } from "next/server";
+import { requireAdmin } from "@/server/auth";
 import { clearSecret, setSecret } from "@/server/secrets";
 
 export async function PATCH(
   request: Request,
   context: { params: Promise<{ key: string }> }
 ) {
+  const denied = requireAdmin(request);
+  if (denied) return denied;
   const { key } = await context.params;
   const { value } = (await request.json()) as { value?: string };
   if (!value) {
@@ -21,9 +24,11 @@ export async function PATCH(
 }
 
 export async function DELETE(
-  _request: Request,
+  request: Request,
   context: { params: Promise<{ key: string }> }
 ) {
+  const denied = requireAdmin(request);
+  if (denied) return denied;
   const { key } = await context.params;
   try {
     return NextResponse.json(clearSecret(key));

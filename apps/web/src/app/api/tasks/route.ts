@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import type { AgentMode, TaskTarget } from "@agentstore/shared";
+import { currentRole } from "@/server/auth";
+import { getListing } from "@/server/catalog";
 import { createTask, listTasks } from "@/server/orchestrator";
 
 export async function GET() {
@@ -18,6 +20,16 @@ export async function POST(request: Request) {
       return NextResponse.json(
         { error: "listingId and mode are required" },
         { status: 400 }
+      );
+    }
+    const listing = getListing(body.listingId);
+    if (!listing) {
+      return NextResponse.json({ error: "Unknown listing" }, { status: 404 });
+    }
+    if (listing.reviewStatus !== "published" && currentRole(request) !== "admin") {
+      return NextResponse.json(
+        { error: "This agent is not published yet" },
+        { status: 403 }
       );
     }
     const task = await createTask({

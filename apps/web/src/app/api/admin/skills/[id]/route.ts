@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireAdmin } from "@/server/auth";
-import { deleteProvider } from "@/server/providers";
+import { deleteSkill } from "@/server/skills";
 
 export async function DELETE(
   request: Request,
@@ -9,6 +9,6 @@ export async function DELETE(
   const denied = requireAdmin(request);
   if (denied) return denied;
   const { id } = await context.params;
-  deleteProvider(id);
+  deleteSkill(id);
   return NextResponse.json({ ok: true });
 }

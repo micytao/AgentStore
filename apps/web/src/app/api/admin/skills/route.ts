@@ -1,23 +1,23 @@
 import { NextResponse } from "next/server";
-import type { McpServerConfig } from "@agentstore/shared";
+import type { Skill } from "@agentstore/shared";
 import { requireAdmin } from "@/server/auth";
-import { listMcpServers, upsertMcpServer } from "@/server/mcp";
+import { listSkills, upsertSkill } from "@/server/skills";
 
 export async function GET(request: Request) {
   const denied = requireAdmin(request);
   if (denied) return denied;
-  return NextResponse.json(listMcpServers());
+  return NextResponse.json(listSkills());
 }
 
 export async function POST(request: Request) {
   const denied = requireAdmin(request);
   if (denied) return denied;
-  const body = (await request.json()) as McpServerConfig;
-  if (!body.id || !body.name || !body.transport) {
+  const body = (await request.json()) as Skill;
+  if (!body.id || !body.name || !body.instructions) {
     return NextResponse.json(
-      { error: "id, name, and transport are required" },
+      { error: "id, name, and instructions are required" },
       { status: 400 }
     );
   }
-  return NextResponse.json(upsertMcpServer(body));
+  return NextResponse.json(upsertSkill(body));
 }

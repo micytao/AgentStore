@@ -6,6 +6,7 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import type {
+  AgentConfig,
   McpServerConfig,
   McpServerStatus,
   McpToolInfo,
@@ -226,7 +227,8 @@ export function setToolEnabled(id: string, toolName: string, enabled: boolean): 
   return statusFor(config);
 }
 
-/** Flattened, connected + enabled tools, used internally by drafting.ts. */
+/** Flattened, connected + enabled tools, used internally by drafting.ts as
+ * the fallback for agents with no explicit per-agent tool binding. */
 export function listEnabledTools(): ModelTool[] {
   const out: ModelTool[] = [];
   for (const config of store().configs) {
@@ -237,6 +239,29 @@ export function listEnabledTools(): ModelTool[] {
       if (config.toolEnabled[tool.name]) {
         out.push({ serverId: config.id, name: tool.name, description: tool.description });
       }
+    }
+  }
+  return out;
+}
+
+/**
+ * Per-agent tool resolution: if the listing's AgentConfig names an explicit
+ * `mcpToolBindings` subset, only those (server, tool) pairs are exposed to
+ * drafting for that agent — regardless of what else is globally enabled.
+ * Falls back to the global enabled-tool list when no per-agent binding is
+ * configured, so existing (unconfigured) listings keep working.
+ */
+export function listEnabledToolsFor(agentConfig: AgentConfig | undefined): ModelTool[] {
+  if (!agentConfig?.mcpToolBindings || agentConfig.mcpToolBindings.length === 0) {
+    return listEnabledTools();
+  }
+  const out: ModelTool[] = [];
+  for (const binding of agentConfig.mcpToolBindings) {
+    const live = store().live.get(binding.serverId);
+    if (!live || live.connectionState !== "connected") continue;
+    const tool = live.tools.find((t) => t.name === binding.tool);
+    if (tool) {
+      out.push({ serverId: binding.serverId, name: tool.name, description: tool.description });
     }
   }
   return out;

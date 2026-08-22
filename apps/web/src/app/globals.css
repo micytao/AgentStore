@@ -266,27 +266,6 @@ a {
   flex: none;
 }
 
-.store-role-toggle {
-  display: flex;
-  align-items: center;
-  gap: 0.65rem;
-  padding: 0.4rem 0.75rem;
-  border: none;
-  border-radius: 0.7rem;
-  background: transparent;
-  color: #d7dbed;
-  font-size: 0.82rem;
-  font-family: inherit;
-  cursor: pointer;
-  white-space: nowrap;
-  text-align: left;
-}
-
-.store-role-toggle:hover {
-  background: rgba(255, 255, 255, 0.06);
-  color: #fff;
-}
-
 .store-switch {
   flex: none;
   position: relative;
@@ -325,6 +304,21 @@ a {
   padding: 0.3rem 0.75rem;
 }
 
+.store-role-click {
+  width: 100%;
+  border: none;
+  background: transparent;
+  border-radius: 0.7rem;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.store-role-click:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
 .store-sidebar-username {
   color: #c9cde0;
   font-size: 0.85rem;
@@ -344,10 +338,71 @@ a {
   font-size: 0.8rem;
 }
 
+.store-avatar.is-mini {
+  width: 1.5rem;
+  height: 1.5rem;
+  font-size: 0.72rem;
+}
+
+.store-role-switcher {
+  position: relative;
+}
+
+.store-role-menu {
+  position: absolute;
+  bottom: calc(100% + 0.5rem);
+  left: 0;
+  right: 0;
+  display: grid;
+  gap: 0.2rem;
+  padding: 0.4rem;
+  border-radius: 0.85rem;
+  border: 1px solid var(--line-strong);
+  background: rgba(12, 14, 24, 0.96);
+  backdrop-filter: blur(18px) saturate(1.3);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.45);
+  z-index: 30;
+}
+
+.store-role-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  width: 100%;
+  padding: 0.4rem 0.5rem;
+  border: none;
+  border-radius: 0.6rem;
+  background: transparent;
+  color: #d7dbed;
+  font: inherit;
+  font-size: 0.85rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.store-role-menu-item:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+}
+
+.store-role-menu-item.is-current {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.05);
+  font-weight: 600;
+}
+
 .store-main {
   flex: 1;
   min-width: 0;
   padding-bottom: 4rem;
+  position: relative;
+}
+
+.store-topbar {
+  position: fixed;
+  top: 1.1rem;
+  right: 1.5rem;
+  z-index: 25;
 }
 
 .store-page {
@@ -1100,6 +1155,93 @@ a {
   color: var(--ok);
 }
 
+.store-admin-row-group {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.store-admin-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: flex-end;
+}
+
+.store-agent-config {
+  margin: 0 0.2rem;
+}
+
+.store-field-mini {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  flex: 1 1 12rem;
+}
+
+.store-field-mini > span {
+  font-size: 0.72rem;
+  color: #9ea3bd;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.store-field-mini select {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid var(--line-strong);
+  background: rgba(8, 10, 20, 0.72);
+  color: #fff;
+  border-radius: 0.65rem;
+  padding: 0.45rem 0.6rem;
+  font: inherit;
+  font-size: 0.85rem;
+}
+
+.store-wizard {
+  gap: 1rem;
+}
+
+.store-wizard-steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px dashed var(--line);
+}
+
+.store-wizard-step {
+  font-size: 0.78rem;
+  color: #82869c;
+}
+
+.store-wizard-step.is-active {
+  color: #fff;
+  font-weight: 600;
+}
+
+.store-wizard-step.is-done {
+  color: var(--ok);
+}
+
+.store-wizard-body {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.store-wizard-preview {
+  max-width: 22rem;
+}
+
+.store-wizard-preview a {
+  pointer-events: none;
+}
+
+.store-wizard-actions {
+  justify-content: flex-end;
+  padding-top: 0.5rem;
+  border-top: 1px dashed var(--line);
+}
+
 .store-switch-row {
   display: flex;
   align-items: center;
@@ -1220,6 +1362,19 @@ a {
   padding: 0.5rem 0.7rem;
   font: inherit;
   font-size: 0.85rem;
+}
+
+.store-textarea {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid var(--line-strong);
+  background: rgba(8, 10, 20, 0.72);
+  color: #fff;
+  border-radius: 0.65rem;
+  padding: 0.6rem 0.7rem;
+  font: inherit;
+  font-size: 0.85rem;
+  resize: vertical;
 }
 
 .store-resource-tools {

@@ -148,13 +148,31 @@ export function setActiveProvider(id: string): ProviderStatus {
   return statusFor(target);
 }
 
+/** Self-hosted OpenAI-compatible servers (e.g. a local vLLM MaaS) typically
+ * run with no auth at all, so an "active" openai-compatible provider
+ * doesn't require a key the way a hosted vendor (Anthropic/OpenAI/Gemini)
+ * does. */
 export function getActiveProvider(): ProviderConfig | undefined {
-  return store().configs.find((p) => p.active && hasSecret(keyFor(p.id)));
+  return store().configs.find(
+    (p) => p.active && (p.kind === "openai-compatible" || hasSecret(keyFor(p.id)))
+  );
 }
 
-function apiKeyFor(id: string): string {
-  const key = getSecret(keyFor(id));
-  if (!key) throw new Error(`No API key set for provider ${id}`);
+/** Returns the stored key, if any, without requiring one — callers decide
+ * whether a missing key is fatal based on the provider kind (see
+ * requireApiKey). */
+function apiKeyFor(id: string): string | undefined {
+  return getSecret(keyFor(id));
+}
+
+/** Anthropic/OpenAI/Gemini always require a key; openai-compatible (which
+ * covers self-hosted MaaS servers like vLLM, usually run without auth)
+ * does not. */
+function requireApiKey(id: string, kind: ProviderKind): string | undefined {
+  const key = apiKeyFor(id);
+  if (!key && kind !== "openai-compatible") {
+    throw new Error(`No API key set for provider ${id}`);
+  }
   return key;
 }
 
@@ -190,11 +208,11 @@ export async function testProvider(id: string): Promise<ProviderStatus> {
 }
 
 async function listModels(config: ProviderConfig, base: string): Promise<string[]> {
-  const apiKey = apiKeyFor(config.id);
+  const apiKey = requireApiKey(config.id, config.kind);
   switch (config.kind) {
     case "anthropic": {
       const res = await fetch(`${base}/models`, {
-        headers: { "x-api-key": apiKey, "anthropic-version": "2023-06-01" },
+        headers: { "x-api-key": apiKey ?? "", "anthropic-version": "2023-06-01" },
       });
       if (!res.ok) throw new Error(`Anthropic /models failed: ${res.status} ${await res.text()}`);
       const body = (await res.json()) as { data?: { id: string }[] };
@@ -203,14 +221,14 @@ async function listModels(config: ProviderConfig, base: string): Promise<string[
     case "openai":
     case "openai-compatible": {
       const res = await fetch(`${base}/models`, {
-        headers: { Authorization: `Bearer ${apiKey}` },
+        headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : {},
       });
       if (!res.ok) throw new Error(`/models failed: ${res.status} ${await res.text()}`);
       const body = (await res.json()) as { data?: { id: string }[] };
       return (body.data ?? []).map((m) => m.id);
     }
     case "gemini": {
-      const res = await fetch(`${base}/models?key=${encodeURIComponent(apiKey)}`);
+      const res = await fetch(`${base}/models?key=${encodeURIComponent(apiKey ?? "")}`);
       if (!res.ok) throw new Error(`Gemini models failed: ${res.status} ${await res.text()}`);
       const body = (await res.json()) as { models?: { name: string }[] };
       return (body.models ?? []).map((m) => m.name.replace(/^models\//, ""));
@@ -260,7 +278,7 @@ async function callAnthropic(
   model: string,
   opts: CallOptions
 ): Promise<ModelResponse> {
-  const apiKey = apiKeyFor(config.id);
+  const apiKey = requireApiKey(config.id, config.kind) ?? "";
   const body: Record<string, unknown> = {
     model,
     max_tokens: 1024,
@@ -310,7 +328,7 @@ async function callOpenAiCompatible(
   model: string,
   opts: CallOptions
 ): Promise<ModelResponse> {
-  const apiKey = apiKeyFor(config.id);
+  const apiKey = requireApiKey(config.id, config.kind);
   const body: Record<string, unknown> = {
     model,
     messages: [
@@ -336,7 +354,7 @@ async function callOpenAiCompatible(
     method: "POST",
     headers: {
       "content-type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
+      ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
     },
     body: JSON.stringify(body),
   });
@@ -372,7 +390,7 @@ async function callGemini(
   model: string,
   opts: CallOptions
 ): Promise<ModelResponse> {
-  const apiKey = apiKeyFor(config.id);
+  const apiKey = requireApiKey(config.id, config.kind) ?? "";
   const body: Record<string, unknown> = {
     systemInstruction: { parts: [{ text: opts.system }] },
     contents: opts.messages.map((m) => ({
