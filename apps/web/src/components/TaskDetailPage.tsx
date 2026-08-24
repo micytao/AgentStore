@@ -89,7 +89,13 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
         <div className="store-task-badges">
           <PhaseLabel phase={task.status.phase} />
           <span className={`store-pill ${task.status.live ? "is-live" : ""}`}>
-            {task.status.live ? "Live sandbox" : "Simulated"}
+            {task.status.backend === "aap"
+              ? "Live AAP"
+              : task.status.backend === "simulated"
+                ? "Simulated AAP"
+                : task.status.live
+                  ? "Live sandbox"
+                  : "Simulated"}
           </span>
         </div>
       </header>
@@ -130,6 +136,60 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
           </div>
         ) : null}
       </dl>
+
+      {task.status.backend === "aap" || task.status.backend === "simulated" || task.status.aapJobId ? (
+        <ol className="store-timeline">
+          <li className="store-timeline-step is-done">
+            <strong>
+              {task.status.backend === "aap" ? "AAP job" : "Simulated AAP job"}
+            </strong>
+            <span>
+              {task.status.aapJobId ?? "pending"}
+              {task.status.provisioningStep ? ` · ${task.status.provisioningStep}` : ""}
+            </span>
+            {task.status.aapJobUrl ? (
+              <a href={task.status.aapJobUrl} target="_blank" rel="noreferrer">
+                Open in AAP
+              </a>
+            ) : null}
+          </li>
+          <li
+            className={`store-timeline-step${
+              task.status.phase === "Running" ||
+              task.status.phase === "AwaitingApproval" ||
+              task.status.phase === "Completed"
+                ? " is-done"
+                : ""
+            }`}
+          >
+            <strong>OpenShift Job</strong>
+            <span>
+              {task.status.openshiftJobName
+                ? `${task.status.openshiftJobName} (${task.status.namespace ?? "agent-workloads"})`
+                : "waiting"}
+            </span>
+            {task.status.openshiftConsoleUrl ? (
+              <a href={task.status.openshiftConsoleUrl} target="_blank" rel="noreferrer">
+                Open in OpenShift
+              </a>
+            ) : null}
+          </li>
+          <li
+            className={`store-timeline-step${
+              task.status.phase === "AwaitingApproval" || task.status.phase === "Completed"
+                ? " is-done"
+                : ""
+            }`}
+          >
+            <strong>Draft</strong>
+            <span>
+              {task.status.phase === "AwaitingApproval" || task.status.phase === "Completed"
+                ? "Ready for review"
+                : "Not yet"}
+            </span>
+          </li>
+        </ol>
+      ) : null}
 
       {interactive && (running || provisioning) ? (
         <section className="store-panel is-terminal">

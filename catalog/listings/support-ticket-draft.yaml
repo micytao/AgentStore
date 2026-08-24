@@ -9,3 +9,6 @@ supportedModes:
   - do-this-for-me
 riskTier: low
 reviewStatus: published
+pricing:
+  unit: per-task
+  amount: 0.8

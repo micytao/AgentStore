@@ -13,6 +13,16 @@ export type RiskTier = "low" | "medium" | "high";
 
 export type ReviewStatus = "draft" | "in-review" | "published" | "deprecated";
 
+/** How an agent's price is metered: a flat fee per task run (Autonomous
+ * listings) or an hourly rate for a live session (Collaborative listings). */
+export type PricingUnit = "per-task" | "per-hour";
+
+export interface Pricing {
+  unit: PricingUnit;
+  /** USD. */
+  amount: number;
+}
+
 export type TaskPhase =
   | "Pending"
   | "Provisioning"
@@ -33,7 +43,9 @@ export interface Listing {
   supportedModes: AgentMode[];
   riskTier: RiskTier;
   reviewStatus: ReviewStatus;
-  comingSoon?: boolean;
+  /** What this agent costs to run. Falls back to a mode-based default
+   * estimate (see orchestrator.ts COST_BY_MODE) when unset. */
+  pricing?: Pricing;
   /** Adapter-private. Only set on Engine 1 listings. */
   openshellAgent?: string;
   /** Per-agent bindings configured by the admin (provider, tools, skills, engine override). */
@@ -57,6 +69,8 @@ export interface AgentConfig {
   mcpToolBindings?: { serverId: string; tool: string }[];
   skillIds?: string[];
   engineOverride?: "auto" | "simulated" | "live";
+  /** AAP job template to launch for this listing. Falls back to the Platform default. */
+  aapJobTemplateId?: number;
 }
 
 /** A reusable instruction bundle an admin can author once and attach to any
@@ -81,6 +95,7 @@ export interface ListingCreateInput {
   engineType: EngineType;
   supportedModes: AgentMode[];
   riskTier: RiskTier;
+  pricing?: Pricing;
   openshellAgent?: string;
   agentConfig?: AgentConfig;
   /** If true, the new listing starts published; otherwise it starts as a draft. */
@@ -92,9 +107,15 @@ export interface TaskTarget {
   successCriteria?: string;
 }
 
+export type EngineBackend = "aap" | "simulated" | "openshell" | "fake";
+
 export interface EngineHandle {
-  engineType: EngineType | "fake";
+  engineType: EngineType | "fake" | "ansible";
   sandboxId: string;
+  backend?: EngineBackend;
+  aapJobId?: string;
+  openshiftJobName?: string;
+  namespace?: string;
 }
 
 export interface EngineStatus {
@@ -104,6 +125,13 @@ export interface EngineStatus {
     kind: "simulated" | "openshell";
     attachHint?: string;
   };
+  backend?: EngineBackend;
+  aapJobId?: string;
+  aapJobUrl?: string;
+  openshiftJobName?: string;
+  openshiftConsoleUrl?: string;
+  namespace?: string;
+  provisioningStep?: string;
 }
 
 export interface TaskSpec {
@@ -114,6 +142,7 @@ export interface TaskSpec {
   target?: TaskTarget;
   gitUrl?: string;
   openshellAgent?: string;
+  aapJobTemplateId?: number;
 }
 
 export interface EngineAdapter {
@@ -141,6 +170,13 @@ export interface Task {
     costEstimate?: number;
     error?: string;
     live?: boolean;
+    backend?: EngineBackend;
+    aapJobId?: string;
+    aapJobUrl?: string;
+    openshiftJobName?: string;
+    openshiftConsoleUrl?: string;
+    namespace?: string;
+    provisioningStep?: string;
   };
   approvalDecision?: "approved" | "rejected";
   createdAt: string;
@@ -162,16 +198,71 @@ export type ListingUpdate = Partial<
     | "description"
     | "riskTier"
     | "reviewStatus"
-    | "comingSoon"
+    | "pricing"
     | "agentConfig"
   >
 >;
 
 export interface EngineSettings {
-  /** When true, all tasks run on the FakeEngine even if an OpenShell gateway is configured. */
+  /** When true, all tasks run simulated even if AAP or OpenShell is configured. */
   forceSimulated: boolean;
   /** Whether OPENSHELL_GATEWAY_URL is set in this environment. Read-only. */
   gatewayConfigured: boolean;
+  /** Whether an AAP controller URL and token are configured. Read-only. */
+  aapConfigured: boolean;
+  /** Whether an OpenShift API URL and token are configured. Read-only. */
+  openshiftConfigured: boolean;
+}
+
+export interface PlatformSettings {
+  aapControllerUrl: string;
+  aapJobTemplateId: number | "";
+  aapConsoleUrl: string;
+  openshiftApiUrl: string;
+  openshiftNamespace: string;
+  openshiftConsoleUrl: string;
+}
+
+export interface AapJobTemplate {
+  id: number;
+  name: string;
+}
+
+export interface AapJobSummary {
+  id: number;
+  name: string;
+  status: string;
+  started?: string;
+  finished?: string;
+  url?: string;
+}
+
+export interface OpenshiftJobSummary {
+  name: string;
+  namespace: string;
+  active?: number;
+  succeeded?: number;
+  failed?: number;
+  completionTime?: string;
+  creationTimestamp?: string;
+  taskId?: string;
+}
+
+export interface PlatformConnectionStatus {
+  configured: boolean;
+  connected: boolean;
+  error?: string;
+}
+
+export interface PlatformStatus {
+  settings: PlatformSettings;
+  aap: PlatformConnectionStatus & {
+    jobTemplates: AapJobTemplate[];
+    recentJobs: AapJobSummary[];
+  };
+  openshift: PlatformConnectionStatus & {
+    jobs: OpenshiftJobSummary[];
+  };
 }
 
 export type Role = "user" | "admin";
@@ -183,6 +274,8 @@ export interface SecretSlot {
   label: string;
   description: string;
   usedBy: string;
+  /** Which admin tab surfaces this slot: Platform (AAP/OpenShift) or LLMs (OpenShell/Git tooling). */
+  group: "platform" | "tooling";
 }
 
 export interface SecretSummary extends SecretSlot {
@@ -199,6 +292,7 @@ export const SECRET_SLOTS: SecretSlot[] = [
     description:
       "Auth token forwarded to the openshell CLI when provisioning sandboxes.",
     usedBy: "engine-openshell adapter",
+    group: "tooling",
   },
   {
     key: "GIT_PAT",
@@ -206,6 +300,23 @@ export const SECRET_SLOTS: SecretSlot[] = [
     description:
       "Used to clone the repo when a Collaborative task provides a git URL.",
     usedBy: "engine-openshell adapter (git clone)",
+    group: "tooling",
+  },
+  {
+    key: "AAP_TOKEN",
+    label: "AAP controller token",
+    description:
+      "OAuth2 or personal access token for the Ansible Automation Platform controller API.",
+    usedBy: "engine-ansible adapter / Platform portal",
+    group: "platform",
+  },
+  {
+    key: "OPENSHIFT_TOKEN",
+    label: "OpenShift API token",
+    description:
+      "Bearer token used to watch and stop agent Jobs on the prod OpenShift cluster.",
+    usedBy: "engine-ansible adapter / Platform portal",
+    group: "platform",
   },
 ];
 
@@ -291,11 +402,11 @@ export interface McpServerStatus extends McpServerConfig {
 
 export const DEPARTMENTS: { id: DepartmentId | "all"; name: string }[] = [
   { id: "all", name: "All departments" },
-  { id: "engineering", name: "Engineering" },
-  { id: "security", name: "Security & Compliance" },
   { id: "support", name: "Customer Support" },
-  { id: "data", name: "Data & Analytics" },
   { id: "finance", name: "Finance & HR" },
+  { id: "data", name: "Data & Analytics" },
+  { id: "security", name: "Security & Compliance" },
+  { id: "engineering", name: "Engineering" },
 ];
 
 export const DEMO_USER = "Demo";

@@ -1,0 +1,76 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: agent-workloads
+  labels:
+    app.kubernetes.io/managed-by: agentstore
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: aap-agent-provisioner
+  namespace: agent-workloads
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: aap-agent-provisioner
+  namespace: agent-workloads
+rules:
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["pods", "pods/log", "configmaps"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: aap-agent-provisioner
+  namespace: agent-workloads
+subjects:
+  - kind: ServiceAccount
+    name: aap-agent-provisioner
+    namespace: agent-workloads
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: aap-agent-provisioner
+---
+# Optional: let the AgentStore console (running off-cluster) watch Jobs with a
+# dedicated token. Create a token Secret in your cluster, then paste it into
+# Admin → Secrets as OPENSHIFT_TOKEN. This Role is namespaced — it cannot
+# administer the rest of the cluster.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: agentstore-console-reader
+  namespace: agent-workloads
+rules:
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["get", "list", "watch", "delete"]
+  - apiGroups: [""]
+    resources: ["pods", "pods/log", "configmaps", "namespaces"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: agentstore-console-reader
+  namespace: agent-workloads
+subjects:
+  - kind: ServiceAccount
+    name: agentstore-console
+    namespace: agent-workloads
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: agentstore-console-reader
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: agentstore-console
+  namespace: agent-workloads

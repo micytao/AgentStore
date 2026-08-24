@@ -9,4 +9,7 @@ supportedModes:
   - work-with-me
 riskTier: medium
 reviewStatus: published
+pricing:
+  unit: per-hour
+  amount: 2.4
 openshellAgent: opencode

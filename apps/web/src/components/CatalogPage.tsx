@@ -21,16 +21,16 @@ export function CatalogPage() {
   return (
     <div className="store-page">
       <section className="store-hero">
-        <p className="store-kicker">Internal · governed · self-service</p>
+        <p className="store-kicker">Self-service · governed · auditable</p>
         <h1 className="store-display">
-          Agents that do the work,
+          Pick a job.
           <br />
-          <em>not another chatbot.</em>
+          <em>We stand the agent up.</em>
         </h1>
-        <p className="store-lede">
-          Browse the company catalog. Point an agent at your task. Autonomous
-          listings draft and wait for approval. Collaborative listings are live
-          sessions you drive.
+        <p className="store-lede store-lede-wide">
+          Browse business agents by department. Launch one, and Ansible
+          Automation Platform provisions it onto the company OpenShift cluster.
+          The platform handles the infrastructure — you just review the draft.
         </p>
         <div className="store-path-grid">
           <div className="store-path">
@@ -38,8 +38,8 @@ export function CatalogPage() {
             <div>
               <strong>Autonomous Mode</strong>
               <p>
-                Do this for me. Unattended. The agent drafts; you approve before
-                anything ships.
+                Do this for me. AAP stands up an OpenShift Job. The agent
+                drafts; you approve before anything ships.
               </p>
             </div>
           </div>
@@ -48,8 +48,8 @@ export function CatalogPage() {
             <div>
               <strong>Collaborative Mode</strong>
               <p>
-                Work with me. Interactive. You drive a coding agent in an
-                isolated session.
+                Work with me. Engineering specialist agents (optional OpenShell
+                sandbox) for live pairing — listed last in the catalog.
               </p>
             </div>
           </div>
@@ -77,8 +77,8 @@ export function CatalogPage() {
         <p className="store-empty">{error}</p>
       ) : listings && listings.length === 0 ? (
         <p className="store-empty">
-          Nothing published here yet. Finance &amp; HR listings are still in
-          review.
+          Nothing published here yet. Ask an admin to publish an agent, or pick
+          another department.
         </p>
       ) : (
         <div className="store-gallery">

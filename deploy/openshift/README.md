@@ -1,55 +1,49 @@
-# OpenShift (eval)
+# OpenShift artifacts for AgentStore
 
-Prototype only. OpenShell on OpenShift is experimental and currently wants the `privileged` SCC with TLS disabled. Private network, not production.
+AgentStore itself is a **laptop/VM console**. It does not need to run on
+OpenShift. What *does* run on OpenShift is the production agent Job that AAP
+creates when a user launches a business listing.
 
-## P0 — OpenShell Gateway
-
-Prerequisites: `oc`, Helm 3, Agent Sandbox controller/CRDs as documented by NVIDIA.
-
-```bash
-oc create ns openshell
-oc adm policy add-scc-to-user privileged -z openshell-sandbox -n openshell
-
-helm install openshell oci://ghcr.io/nvidia/openshell/helm-chart \
-  --namespace openshell \
-  --values deploy/openshift/openshell-values.yaml
-
-oc -n openshell rollout status statefulset/openshell
-oc -n openshell port-forward svc/openshell 8080:8080
-```
-
-Register the CLI against the forwarded gateway, then prove a sandbox:
+## 1. Workload namespace (required for the live demo)
 
 ```bash
-openshell gateway add http://127.0.0.1:8080 --local --name openshift
-openshell status
-openshell sandbox create -- claude
+oc apply -f deploy/openshift/agent-workloads.yaml
 ```
 
-If that fails, stop. Do not pretend Path A is live.
+That creates `agent-workloads`, a ServiceAccount AAP can use as a Kubernetes
+credential, and a read/delete Role the console uses via `OPENSHIFT_TOKEN`.
 
-## Storefront
-
-The Admin console's Providers/MCP/Secrets tabs persist to a local encrypted
-vault under `SECRETS_DATA_DIR` (`apps/web/src/server/secrets.ts`) — it needs
-a real volume and a stable encryption key to survive pod restarts, so create
-those before the Deployment:
+Mint a token for the console (optional — only if you want the task page to
+watch the Job directly):
 
 ```bash
-oc create secret generic agent-store-secrets \
-  --from-literal=secrets-encryption-key="$(openssl rand -hex 32)"
-oc apply -f deploy/openshift/pvc.yaml
+oc create token agentstore-console -n agent-workloads --duration=24h
 ```
 
-Then build and push `apps/web`, and apply:
+Paste it into **Admin → Secrets → OpenShift API token**. Set the API and
+console URLs on **Admin → Platform**.
 
-- `deploy/openshift/deployment.yaml`
-- `deploy/openshift/service.yaml`
-- `deploy/openshift/route.yaml`
+## 2. AAP credential and job template
 
-Set `OPENSHELL_GATEWAY_URL` on the Deployment to the in-cluster gateway Service (plaintext eval: `http://openshell.openshell.svc.cluster.local:8080`) and ensure the `openshell` CLI is in the app image if you want live Path A.
+See [ansible/README.md](../../ansible/README.md). The Kubernetes credential
+in AAP should use `aap-agent-provisioner` (or an equivalent token with Job
+create in `agent-workloads`).
 
-Without that env var, Engineering listings stay on the simulated engine. Path B never needs OpenShell.
+## 3. Agent runner image
 
-Do not scale `agent-store` beyond `replicas: 1` — the vault is a single-writer
-file store on the PVC, not a shared/HA store (see `docs/DEFERRED.md`).
+```bash
+podman build -t agent-runner:dev \
+  -f ansible/agent-runner/Containerfile \
+  ansible/agent-runner
+# push somewhere the cluster can pull, then set agent_runner_image on the template
+```
+
+## 4. Optional: host the console on OpenShift
+
+The storefront Deployment/Route/PVC in this directory is **optional**. Use it
+only if you want the console on-cluster later. It is not required for the
+AAP → OpenShift demo. Do not scale it past `replicas: 1` — the secrets vault
+is a single-writer file on the PVC.
+
+OpenShell Helm values remain **optional Engineering** (privileged SCC, TLS
+off, eval only).

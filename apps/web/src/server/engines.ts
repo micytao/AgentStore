@@ -1,6 +1,8 @@
+import { createAnsibleEngine, isAapConfigured, isOpenshiftConfigured } from "@agentstore/engine-ansible";
 import { fakeEngine } from "@agentstore/engine-fake";
 import { openShellEngine } from "@agentstore/engine-openshell";
 import type { EngineAdapter, EngineSettings, Listing } from "@agentstore/shared";
+import { ensurePlatformEnv } from "./platform";
 
 type SettingsStore = { forceSimulated: boolean };
 
@@ -13,9 +15,12 @@ function settingsStore(): SettingsStore {
 }
 
 export function getEngineSettings(): EngineSettings {
+  ensurePlatformEnv();
   return {
     forceSimulated: settingsStore().forceSimulated,
     gatewayConfigured: Boolean(process.env.OPENSHELL_GATEWAY_URL),
+    aapConfigured: isAapConfigured(),
+    openshiftConfigured: isOpenshiftConfigured(),
   };
 }
 
@@ -26,20 +31,40 @@ export function setEngineSettings(patch: Partial<EngineSettings>): EngineSetting
   return getEngineSettings();
 }
 
-export function adapterFor(listing: Listing): EngineAdapter {
-  if (isLiveEngine(listing)) {
-    return openShellEngine;
-  }
-  return fakeEngine;
-}
-
-export function isLiveEngine(listing: Listing): boolean {
+function isOpenShellLive(listing: Listing): boolean {
   const override = listing.agentConfig?.engineOverride;
   if (override === "simulated") return false;
   if (override === "live") {
     return Boolean(listing.openshellAgent && process.env.OPENSHELL_GATEWAY_URL);
   }
-  // "auto" (or unset): fall back to the global setting, as before.
   if (settingsStore().forceSimulated) return false;
   return Boolean(listing.openshellAgent && process.env.OPENSHELL_GATEWAY_URL);
+}
+
+function isAapLive(listing: Listing): boolean {
+  const override = listing.agentConfig?.engineOverride;
+  if (override === "simulated") return false;
+  if (override === "live") return isAapConfigured();
+  if (settingsStore().forceSimulated) return false;
+  return isAapConfigured();
+}
+
+export function adapterFor(listing: Listing): EngineAdapter {
+  ensurePlatformEnv();
+  if (isOpenShellLive(listing)) {
+    return openShellEngine;
+  }
+  if (listing.openshellAgent) {
+    return fakeEngine;
+  }
+  return createAnsibleEngine({
+    forceSimulated: () => !isAapLive(listing),
+  });
+}
+
+/** True when this listing will hit a real AAP job or a real OpenShell sandbox. */
+export function isLiveEngine(listing: Listing): boolean {
+  ensurePlatformEnv();
+  if (listing.openshellAgent) return isOpenShellLive(listing);
+  return isAapLive(listing);
 }

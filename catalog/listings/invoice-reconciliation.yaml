@@ -2,11 +2,13 @@ id: invoice-reconciliation
 name: Invoice reconciliation
 department: finance
 category: Accounts payable
-description: Match invoices against purchase orders and flag exceptions for a finance lead. Guardrails and connectors for this listing are still under review.
+description: Match this week's invoices against purchase orders and flag exceptions for a finance lead. You review the draft before anything is posted.
 icon: money
 engineType: hosted-agent-api
 supportedModes:
   - do-this-for-me
 riskTier: medium
-reviewStatus: draft
-comingSoon: true
+reviewStatus: published
+pricing:
+  unit: per-task
+  amount: 0.8

@@ -1,0 +1,7 @@
+FROM registry.access.redhat.com/ubi9/python-312:latest
+USER 0
+WORKDIR /app
+COPY runner.py /app/runner.py
+RUN chmod 0755 /app/runner.py
+USER 1001
+CMD ["python3", "/app/runner.py"]

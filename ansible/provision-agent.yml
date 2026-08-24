@@ -1,0 +1,81 @@
+---
+# AAP Project playbook. Extra vars come from AgentStore:
+#   listing_id, listing_name, task_id, goal, success_criteria,
+#   namespace, job_name, mode, agent_runner_image (optional)
+- name: Provision an AgentStore agent Job on OpenShift
+  hosts: localhost
+  gather_facts: false
+  vars:
+    namespace: "{{ namespace | default('agent-workloads') }}"
+    job_name: "{{ job_name }}"
+    listing_id: "{{ listing_id }}"
+    listing_name: "{{ listing_name }}"
+    task_id: "{{ task_id }}"
+    goal: "{{ goal | default('') }}"
+    success_criteria: "{{ success_criteria | default('') }}"
+    agent_runner_image: "{{ agent_runner_image | default('agent-runner:dev') }}"
+    maas_base_url: "{{ maas_base_url | default('') }}"
+    maas_model: "{{ maas_model | default('default') }}"
+  tasks:
+    - name: Ensure agent-workloads namespace exists
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Namespace
+          metadata:
+            name: "{{ namespace }}"
+            labels:
+              app.kubernetes.io/managed-by: agentstore
+
+    - name: Create agent Job
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: batch/v1
+          kind: Job
+          metadata:
+            name: "{{ job_name }}"
+            namespace: "{{ namespace }}"
+            labels:
+              app.kubernetes.io/managed-by: agentstore
+              app.kubernetes.io/name: agent-runner
+              agentstore/task-id: "{{ task_id }}"
+              agentstore/listing-id: "{{ listing_id }}"
+          spec:
+            backoffLimit: 1
+            ttlSecondsAfterFinished: 3600
+            template:
+              metadata:
+                labels:
+                  app.kubernetes.io/managed-by: agentstore
+                  agentstore/task-id: "{{ task_id }}"
+              spec:
+                restartPolicy: Never
+                containers:
+                  - name: agent
+                    image: "{{ agent_runner_image }}"
+                    imagePullPolicy: IfNotPresent
+                    env:
+                      - name: LISTING_ID
+                        value: "{{ listing_id }}"
+                      - name: LISTING_NAME
+                        value: "{{ listing_name }}"
+                      - name: TASK_ID
+                        value: "{{ task_id }}"
+                      - name: GOAL
+                        value: "{{ goal }}"
+                      - name: SUCCESS_CRITERIA
+                        value: "{{ success_criteria }}"
+                      - name: MAAS_BASE_URL
+                        value: "{{ maas_base_url }}"
+                      - name: MAAS_MODEL
+                        value: "{{ maas_model }}"
+                      - name: RESULT_FILE
+                        value: /output/draft.txt
+                    volumeMounts:
+                      - name: output
+                        mountPath: /output
+                volumes:
+                  - name: output
+                    emptyDir: {}

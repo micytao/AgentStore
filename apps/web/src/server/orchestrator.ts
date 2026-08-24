@@ -94,6 +94,7 @@ function specFrom(task: Task) {
     target: task.target,
     gitUrl: task.gitUrl,
     openshellAgent: listing?.openshellAgent,
+    aapJobTemplateId: listing?.agentConfig?.aapJobTemplateId,
   };
 }
 
@@ -108,6 +109,13 @@ async function refresh(task: Task): Promise<Task> {
   const status = await adapter.getStatus(task.status.engineRef, specFrom(task));
   task.status.phase = status.phase;
   if (status.outputSummary) task.status.outputSummary = status.outputSummary;
+  task.status.backend = status.backend;
+  task.status.aapJobId = status.aapJobId;
+  task.status.aapJobUrl = status.aapJobUrl;
+  task.status.openshiftJobName = status.openshiftJobName;
+  task.status.openshiftConsoleUrl = status.openshiftConsoleUrl;
+  task.status.namespace = status.namespace;
+  task.status.provisioningStep = status.provisioningStep;
 
   const justAwaitingApproval =
     status.phase === "AwaitingApproval" && previousPhase !== "AwaitingApproval";
@@ -117,7 +125,9 @@ async function refresh(task: Task): Promise<Task> {
     !enrichedTaskIds().has(task.id)
   ) {
     enrichedTaskIds().add(task.id);
-    task.status.outputSummary = await generateDraft(specFrom(task), listing);
+    if (!task.status.outputSummary) {
+      task.status.outputSummary = await generateDraft(specFrom(task), listing);
+    }
   }
 
   task.updatedAt = now();
@@ -149,9 +159,6 @@ export async function createTask(input: {
   if (!listing) {
     throw new Error(`Unknown listing: ${input.listingId}`);
   }
-  if (listing.comingSoon) {
-    throw new Error("This listing is not available yet");
-  }
   if (!listing.supportedModes.includes(input.mode)) {
     throw new Error(`Listing does not support ${input.mode}`);
   }
@@ -169,7 +176,7 @@ export async function createTask(input: {
     gitUrl: input.gitUrl,
     status: {
       phase: "Pending",
-      costEstimate: COST_BY_MODE[input.mode],
+      costEstimate: listing.pricing?.amount ?? COST_BY_MODE[input.mode],
       live: isLiveEngine(listing),
     },
     createdAt,
@@ -182,6 +189,11 @@ export async function createTask(input: {
     const handle = await adapterFor(listing).provision(specFrom(task));
     task.status.engineRef = handle;
     task.status.phase = "Provisioning";
+    task.status.backend = handle.backend;
+    task.status.aapJobId = handle.aapJobId;
+    task.status.openshiftJobName = handle.openshiftJobName;
+    task.status.namespace = handle.namespace;
+    task.status.live = handle.backend === "aap" || isLiveEngine(listing);
     task.updatedAt = now();
     store().tasks.set(id, task);
   } catch (err) {

@@ -55,6 +55,20 @@ export function draftFor(spec: TaskSpec): string {
     ].join("\n");
   }
 
+  if (spec.listingId === "invoice-reconciliation") {
+    return [
+      `Invoice reconciliation — ${goal}`,
+      "",
+      "Matched 18 of 21 invoices to purchase orders this window.",
+      "Exceptions:",
+      "1. INV-8841 — amount $1,240 over PO-3301 (freight not on PO).",
+      "2. INV-8902 — vendor ACME-EU, no matching PO in the last 90 days.",
+      "3. INV-8910 — duplicate of INV-8877 (same hash, different invoice date).",
+      "",
+      "Draft exception pack for the finance lead. Approve to accept, or reject to discard.",
+    ].join("\n");
+  }
+
   if (spec.listingId === "data-dashboard-summary") {
     return [
       `Dashboard summary — ${goal}`,

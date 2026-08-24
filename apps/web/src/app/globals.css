@@ -338,6 +338,16 @@ a {
   font-size: 0.8rem;
 }
 
+.store-avatar.is-demo {
+  background: linear-gradient(135deg, var(--cyan), #2ec9a8);
+  color: #06120f;
+}
+
+.store-avatar.is-admin {
+  background: linear-gradient(135deg, var(--amber), #e07a2f);
+  color: #1a0e04;
+}
+
 .store-avatar.is-mini {
   width: 1.5rem;
   height: 1.5rem;
@@ -389,6 +399,22 @@ a {
   color: #fff;
   background: rgba(255, 255, 255, 0.05);
   font-weight: 600;
+}
+
+.store-shell.is-collapsed .store-role-menu {
+  padding: 0.3rem;
+}
+
+.store-shell.is-collapsed .store-role-menu-item {
+  justify-content: center;
+  gap: 0;
+  padding: 0.3rem;
+}
+
+.store-shell.is-collapsed .store-role-menu-item .store-avatar.is-mini {
+  width: 1.85rem;
+  height: 1.85rem;
+  font-size: 0.8rem;
 }
 
 .store-main {
@@ -471,6 +497,10 @@ a {
   margin: 0.55rem 0 1.1rem;
   font-size: 0.98rem;
   color: #e4e7f4;
+}
+
+.store-lede.store-lede-wide {
+  max-width: none;
 }
 
 .store-path-grid {
@@ -607,21 +637,6 @@ a {
   box-shadow: 0 24px 60px rgba(80, 60, 180, 0.22);
 }
 
-.store-card.is-disabled {
-  opacity: 1;
-  border-style: dashed;
-}
-
-.store-card.is-disabled .store-card-title {
-  color: #e8ebf7;
-}
-
-.store-card.is-disabled .store-card-copy,
-.store-card.is-disabled .store-card-dept,
-.store-card.is-disabled .store-card-cta {
-  color: #c5cadc;
-}
-
 .store-card-top {
   display: flex;
   align-items: center;
@@ -718,6 +733,12 @@ a {
 .store-pill.is-live {
   color: #b6ffd4;
   box-shadow: 0 0 12px rgba(125, 255, 179, 0.25);
+}
+
+.store-pill.is-price {
+  color: #ffe0a6;
+  background: rgba(255, 191, 107, 0.12);
+  border-color: rgba(255, 191, 107, 0.35);
 }
 
 .store-card-cta {
@@ -850,6 +871,15 @@ a {
   color: #f6f7fc;
   background: transparent;
   border: 1px solid var(--line-strong);
+}
+
+.store-btn-ghost.is-danger {
+  color: #ffb4c4;
+  border-color: rgba(255, 120, 150, 0.35);
+}
+
+.store-btn-ghost.is-danger:hover {
+  background: rgba(255, 120, 150, 0.12);
 }
 
 .store-task-head {
@@ -1000,6 +1030,43 @@ a {
   }
 }
 
+.store-timeline {
+  list-style: none;
+  margin: 0 0 1.5rem;
+  padding: 0;
+  display: grid;
+  gap: 0.75rem;
+}
+
+.store-timeline-step {
+  display: grid;
+  gap: 0.15rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: 0.9rem;
+  background: rgba(255, 255, 255, 0.03);
+  opacity: 0.55;
+}
+
+.store-timeline-step.is-done {
+  opacity: 1;
+  border-color: rgba(154, 246, 222, 0.35);
+}
+
+.store-timeline-step strong {
+  font-size: 0.85rem;
+}
+
+.store-timeline-step span,
+.store-timeline-step a {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.store-timeline-step a {
+  color: var(--cyan);
+}
+
 .store-banner {
   padding: 0.8rem 1rem;
   border-radius: 0.9rem;
@@ -1057,28 +1124,95 @@ a {
 .store-tabs {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
+  gap: 0.35rem;
   margin-bottom: 1.5rem;
+  padding: 0.4rem;
+  border: 1px solid var(--line);
+  border-radius: 1.4rem;
+  background: rgba(255, 255, 255, 0.035);
+  backdrop-filter: blur(18px) saturate(1.2);
 }
 
 .store-tab {
   appearance: none;
-  border: 1px solid var(--line);
-  background: rgba(255, 255, 255, 0.04);
-  color: #d7dbed;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  border: 1px solid transparent;
+  background: transparent;
+  color: #aeb3cc;
   border-radius: 999px;
-  padding: 0.5rem 1.05rem;
+  padding: 0.45rem 1.05rem 0.45rem 0.5rem;
   font: inherit;
   font-size: 0.86rem;
   font-weight: 550;
   cursor: pointer;
+  transition: background 0.18s ease, color 0.18s ease, transform 0.18s ease,
+    box-shadow 0.18s ease, border-color 0.18s ease;
+}
+
+.store-tab:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.store-tab-icon {
+  display: inline-flex;
+  flex: none;
+  width: 1.55rem;
+  height: 1.55rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.6rem;
+  background: rgba(255, 255, 255, 0.07);
+  color: #c9cde0;
+  transition: background 0.18s ease, color 0.18s ease, transform 0.18s ease;
+}
+
+.store-tab-icon svg {
+  width: 0.85rem;
+  height: 0.85rem;
 }
 
 .store-tab.is-active {
-  color: var(--ink);
-  border-color: transparent;
-  background: linear-gradient(135deg, var(--violet), #c6b9ff);
+  color: #fff;
+  background: linear-gradient(
+    135deg,
+    rgba(155, 140, 255, 0.22),
+    rgba(154, 246, 222, 0.14)
+  );
+  border-color: rgba(198, 185, 255, 0.5);
+  box-shadow: 0 10px 24px -10px rgba(124, 108, 255, 0.6),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+  transform: translateY(-1px);
   font-weight: 650;
+}
+
+.store-tab.is-active .store-tab-icon {
+  background: linear-gradient(135deg, var(--violet), var(--cyan));
+  color: #0b0d16;
+  transform: scale(1.05);
+}
+
+.store-tabs.is-compact {
+  margin-bottom: 1.1rem;
+  padding: 0.3rem;
+  border-radius: 1.1rem;
+}
+
+.store-tab.is-compact {
+  padding: 0.35rem 0.85rem 0.35rem 0.4rem;
+  font-size: 0.8rem;
+}
+
+.store-tab.is-compact .store-tab-icon {
+  width: 1.3rem;
+  height: 1.3rem;
+}
+
+.store-tab.is-compact .store-tab-icon svg {
+  width: 0.72rem;
+  height: 0.72rem;
 }
 
 .store-admin-section {
@@ -1102,12 +1236,27 @@ a {
   background: var(--glass);
 }
 
-.store-admin-row-head {
-  padding: 0 1.1rem;
-  color: #c9cde0;
-  font-size: 0.74rem;
+.store-admin-table-head {
+  margin-bottom: 0.2rem;
+}
+
+.store-admin-table-head .store-panel-title {
+  margin-bottom: 0.3rem;
+}
+
+.store-admin-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  min-width: 0;
+}
+
+.store-admin-field-label {
+  color: #8b90ac;
+  font-size: 0.68rem;
+  font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.07em;
 }
 
 .store-admin-row strong {
@@ -1131,6 +1280,29 @@ a {
   padding: 0.45rem 0.6rem;
   font: inherit;
   font-size: 0.85rem;
+}
+
+.store-admin-price {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.store-admin-price input {
+  width: 4.5rem;
+  flex: none;
+  box-sizing: border-box;
+  border: 1px solid var(--line-strong);
+  background: rgba(8, 10, 20, 0.72);
+  color: #fff;
+  border-radius: 0.65rem;
+  padding: 0.45rem 0.5rem;
+  font: inherit;
+  font-size: 0.85rem;
+}
+
+.store-admin-price select {
+  flex: 1;
+  min-width: 0;
 }
 
 .store-admin-checkbox {
@@ -1364,6 +1536,15 @@ a {
   font-size: 0.85rem;
 }
 
+/* .store-field-mini stacks its label above the control in a column flex
+ * layout, so the 12rem flex-basis above (meant for a control's width in a
+ * horizontal row) would otherwise be read as a height basis and inflate it. */
+.store-resource-input-row .store-field-mini input,
+.store-resource-input-row .store-field-mini select {
+  flex: 0 1 auto;
+  width: 100%;
+}
+
 .store-textarea {
   width: 100%;
   box-sizing: border-box;
@@ -1421,7 +1602,6 @@ a {
     gap: 0.4rem;
   }
 
-  .store-admin-row-head,
   .store-audit-row-head {
     display: none;
   }
@@ -1444,6 +1624,22 @@ a {
 
   .store-shell .store-brand {
     justify-content: center;
+  }
+
+  .store-shell .store-role-menu {
+    padding: 0.3rem;
+  }
+
+  .store-shell .store-role-menu-item {
+    justify-content: center;
+    gap: 0;
+    padding: 0.3rem;
+  }
+
+  .store-shell .store-role-menu-item .store-avatar.is-mini {
+    width: 1.85rem;
+    height: 1.85rem;
+    font-size: 0.8rem;
   }
 
   .store-sidebar-top {

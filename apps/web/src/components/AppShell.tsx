@@ -158,10 +158,14 @@ function RoleToggle({ collapsed }: { collapsed: boolean }) {
               type="button"
               role="menuitem"
               className={`store-role-menu-item${option.id === role ? " is-current" : ""}`}
+              aria-label={option.label}
+              title={option.label}
               onClick={() => void choose(option.id)}
             >
-              <span className="store-avatar is-mini">{option.initial}</span>
-              {option.label}
+              <span className={`store-avatar is-mini is-${option.id === "admin" ? "admin" : "demo"}`}>
+                {option.initial}
+              </span>
+              <span className="store-sidebar-label">{option.label}</span>
             </button>
           ))}
         </div>
@@ -173,7 +177,9 @@ function RoleToggle({ collapsed }: { collapsed: boolean }) {
         aria-expanded={open}
         title={collapsed ? "Switch between Demo and Admin" : undefined}
       >
-        <span className="store-avatar">{isAdmin ? "A" : "D"}</span>
+        <span className={`store-avatar ${isAdmin ? "is-admin" : "is-demo"}`}>
+          {isAdmin ? "A" : "D"}
+        </span>
         <span className="store-sidebar-label store-sidebar-username">
           {isAdmin ? "Admin" : "Demo"}
         </span>

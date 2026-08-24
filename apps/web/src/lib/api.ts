@@ -7,6 +7,8 @@ import type {
   ListingUpdate,
   McpServerConfig,
   McpServerStatus,
+  PlatformSettings,
+  PlatformStatus,
   ProviderConfig,
   ProviderStatus,
   SecretSummary,
@@ -105,6 +107,20 @@ export function fetchEngineSettings(): Promise<EngineSettings> {
   return fetch("/api/admin/engine-settings").then((r) =>
     parse<EngineSettings>(r)
   );
+}
+
+export function fetchPlatformStatus(): Promise<PlatformStatus> {
+  return fetch("/api/admin/platform").then((r) => parse<PlatformStatus>(r));
+}
+
+export function updatePlatformSettings(
+  patch: Partial<PlatformSettings>
+): Promise<PlatformStatus> {
+  return fetch("/api/admin/platform", {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(patch),
+  }).then((r) => parse<PlatformStatus>(r));
 }
 
 export function updateEngineSettings(
@@ -266,4 +282,6 @@ export type {
   Skill,
   Task,
   UsageSnapshot,
+  PlatformSettings,
+  PlatformStatus,
 };

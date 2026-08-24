@@ -1,6 +1,17 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import type { ComponentType } from "react";
+import {
+  BookIcon,
+  BrainIcon,
+  CloudIcon,
+  NetworkIcon,
+  PlugIcon,
+  TasksIcon,
+  TerminalIcon,
+  ThLargeIcon,
+} from "@patternfly/react-icons";
 import {
   DEPARTMENTS,
   departmentLabel,
@@ -12,6 +23,8 @@ import {
   type ListingUpdate,
   type McpServerStatus,
   type McpTransport,
+  type Pricing,
+  type PricingUnit,
   type ProviderConfig,
   type ProviderKind,
   type ProviderStatus,
@@ -22,9 +35,10 @@ import {
 } from "@agentstore/shared";
 import { ListingCard } from "@/components/ListingCard";
 import { PhaseLabel } from "@/components/PhaseLabel";
+import { PlatformPanel } from "@/components/PlatformPanel";
+import { SecretField } from "@/components/SecretField";
 import {
   activateProviderConfig,
-  clearSecretValue,
   connectMcpServerConfig,
   createListingAdmin,
   deleteListingAdmin,
@@ -42,9 +56,7 @@ import {
   setMcpAuthTokenValue,
   setMcpToolEnabledValue,
   setProviderKeyValue,
-  setSecretValue,
   testProviderConnection,
-  updateEngineSettings,
   updateListingAdmin,
   upsertMcpServerConfig,
   upsertProviderConfig,
@@ -55,17 +67,21 @@ import {
 import { formatUsd, modeLabel } from "@/lib/format";
 import { useRole } from "@/lib/role";
 
-type Tab = "catalog" | "providers" | "mcp" | "skills" | "secrets" | "engine" | "audit";
+type Tab = "catalog" | "platform" | "llms" | "audit";
 
-const TABS: { id: Tab; label: string }[] = [
-  { id: "catalog", label: "Catalog" },
-  { id: "providers", label: "Providers" },
-  { id: "mcp", label: "MCP" },
-  { id: "skills", label: "Skills" },
-  { id: "secrets", label: "Secrets" },
-  { id: "engine", label: "Engine" },
-  { id: "audit", label: "Tasks & usage" },
+const TABS: { id: Tab; label: string; icon: ComponentType }[] = [
+  { id: "catalog", label: "Catalog", icon: ThLargeIcon },
+  { id: "platform", label: "Platform", icon: CloudIcon },
+  { id: "llms", label: "LLMs", icon: BrainIcon },
+  { id: "audit", label: "Tasks & usage", icon: TasksIcon },
 ];
+
+const PRICING_UNITS: { id: PricingUnit; label: string }[] = [
+  { id: "per-task", label: "/ task" },
+  { id: "per-hour", label: "/ hour" },
+];
+
+const DEFAULT_PRICING: Pricing = { unit: "per-task", amount: 0.8 };
 
 const RISK_TIERS: RiskTier[] = ["low", "medium", "high"];
 const REVIEW_STATUSES: ReviewStatus[] = [
@@ -125,26 +141,29 @@ function AdminConsole() {
       </section>
 
       <div className="store-tabs" role="tablist" aria-label="Admin sections">
-        {TABS.map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            role="tab"
-            aria-selected={tab === item.id}
-            className={`store-tab${tab === item.id ? " is-active" : ""}`}
-            onClick={() => setTab(item.id)}
-          >
-            {item.label}
-          </button>
-        ))}
+        {TABS.map((item) => {
+          const Icon = item.icon;
+          return (
+            <button
+              key={item.id}
+              type="button"
+              role="tab"
+              aria-selected={tab === item.id}
+              className={`store-tab${tab === item.id ? " is-active" : ""}`}
+              onClick={() => setTab(item.id)}
+            >
+              <span className="store-tab-icon" aria-hidden="true">
+                <Icon />
+              </span>
+              {item.label}
+            </button>
+          );
+        })}
       </div>
 
       {tab === "catalog" && <CatalogManager />}
-      {tab === "providers" && <ProvidersPanel />}
-      {tab === "mcp" && <McpPanel />}
-      {tab === "skills" && <SkillsPanel />}
-      {tab === "secrets" && <SecretsPanel />}
-      {tab === "engine" && <EngineSettingsPanel />}
+      {tab === "platform" && <PlatformPanel />}
+      {tab === "llms" && <LLMsPanel />}
       {tab === "audit" && <AuditLog />}
     </div>
   );
@@ -176,14 +195,15 @@ function CatalogManager() {
 
   return (
     <div className="store-admin-section">
+      <div className="store-admin-table-head">
+        <h3 className="store-panel-title">Catalog listings</h3>
+        <p className="store-lede tight">
+          Adjust risk tier, review status, and price per listing — changes
+          save immediately. Expand a row to bind a provider, tools, skills,
+          and the AAP job template, or delete the agent entirely.
+        </p>
+      </div>
       <div className="store-admin-table">
-        <div className="store-admin-row store-admin-row-head">
-          <span>Listing</span>
-          <span>Risk tier</span>
-          <span>Review status</span>
-          <span>Coming soon</span>
-          <span />
-        </div>
         {listings.map((listing) => (
           <ListingRow
             key={listing.id}
@@ -229,17 +249,17 @@ function ListingRow({
   skills: Skill[];
   onChange: () => void;
 }) {
-  const [draft, setDraft] = useState<Required<Pick<ListingUpdate, "name" | "description" | "riskTier" | "reviewStatus" | "comingSoon">>>({
+  const [draft, setDraft] = useState<Required<Pick<ListingUpdate, "name" | "description" | "riskTier" | "reviewStatus" | "pricing">>>({
     name: listing.name,
     description: listing.description,
     riskTier: listing.riskTier,
     reviewStatus: listing.reviewStatus,
-    comingSoon: listing.comingSoon ?? false,
+    pricing: listing.pricing ?? DEFAULT_PRICING,
   });
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [showConfig, setShowConfig] = useState(false);
-  const [retiring, setRetiring] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   function update(patch: ListingUpdate) {
     setDraft((prev) => ({ ...prev, ...patch }));
@@ -257,14 +277,14 @@ function ListingRow({
     }
   }
 
-  async function retire() {
-    if (!window.confirm(`Retire "${listing.name}"? This deletes it permanently.`)) return;
-    setRetiring(true);
+  async function remove() {
+    if (!window.confirm(`Delete "${listing.name}"? It disappears from the catalog immediately.`)) return;
+    setDeleting(true);
     try {
       await deleteListingAdmin(listing.id);
       onChange();
     } finally {
-      setRetiring(false);
+      setDeleting(false);
     }
   }
 
@@ -278,36 +298,58 @@ function ListingRow({
             {listing.source === "custom" ? " · Custom" : ""}
           </span>
         </div>
-        <select
-          value={draft.riskTier}
-          onChange={(e) => update({ riskTier: e.target.value as RiskTier })}
-        >
-          {RISK_TIERS.map((tier) => (
-            <option key={tier} value={tier}>
-              {tier}
-            </option>
-          ))}
-        </select>
-        <select
-          value={draft.reviewStatus}
-          onChange={(e) =>
-            update({ reviewStatus: e.target.value as ReviewStatus })
-          }
-        >
-          {REVIEW_STATUSES.map((status) => (
-            <option key={status} value={status}>
-              {status}
-            </option>
-          ))}
-        </select>
-        <label className="store-admin-checkbox">
-          <input
-            type="checkbox"
-            checked={draft.comingSoon}
-            onChange={(e) => update({ comingSoon: e.target.checked })}
-          />
-          Coming soon
-        </label>
+        <div className="store-admin-field">
+          <span className="store-admin-field-label">Risk tier</span>
+          <select
+            value={draft.riskTier}
+            onChange={(e) => update({ riskTier: e.target.value as RiskTier })}
+          >
+            {RISK_TIERS.map((tier) => (
+              <option key={tier} value={tier}>
+                {tier}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="store-admin-field">
+          <span className="store-admin-field-label">Review status</span>
+          <select
+            value={draft.reviewStatus}
+            onChange={(e) =>
+              update({ reviewStatus: e.target.value as ReviewStatus })
+            }
+          >
+            {REVIEW_STATUSES.map((status) => (
+              <option key={status} value={status}>
+                {status}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="store-admin-field">
+          <span className="store-admin-field-label">Price</span>
+          <div className="store-admin-price">
+            <input
+              inputMode="decimal"
+              value={draft.pricing.amount}
+              onChange={(e) =>
+                update({ pricing: { ...draft.pricing, amount: Number(e.target.value) || 0 } })
+              }
+            />
+            <select
+              value={draft.pricing.unit}
+              onChange={(e) =>
+                update({ pricing: { ...draft.pricing, unit: e.target.value as PricingUnit } })
+              }
+            >
+              {PRICING_UNITS.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.label}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
         <div className="store-admin-row-actions">
           <button
             type="button"
@@ -320,11 +362,14 @@ function ListingRow({
           <button type="button" className="store-btn-ghost" onClick={() => setShowConfig((v) => !v)}>
             {showConfig ? "Hide config" : "Agent config"}
           </button>
-          {listing.source === "custom" && (
-            <button type="button" className="store-btn-ghost" onClick={() => void retire()} disabled={retiring}>
-              {retiring ? "Retiring…" : "Retire"}
-            </button>
-          )}
+          <button
+            type="button"
+            className="store-btn-ghost is-danger"
+            onClick={() => void remove()}
+            disabled={deleting}
+          >
+            {deleting ? "Deleting…" : "Delete"}
+          </button>
         </div>
       </div>
 
@@ -362,6 +407,9 @@ function AgentConfigPanel({
   const [toolBindings, setToolBindings] = useState<{ serverId: string; tool: string }[]>(
     listing.agentConfig?.mcpToolBindings ?? []
   );
+  const [aapJobTemplateId, setAapJobTemplateId] = useState(
+    listing.agentConfig?.aapJobTemplateId ? String(listing.agentConfig.aapJobTemplateId) : ""
+  );
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
@@ -390,6 +438,9 @@ function AgentConfigPanel({
           engineOverride,
           skillIds,
           mcpToolBindings: toolBindings,
+          aapJobTemplateId: aapJobTemplateId.trim()
+            ? Number(aapJobTemplateId)
+            : undefined,
         },
       });
       setSaved(true);
@@ -403,9 +454,10 @@ function AgentConfigPanel({
     <div className="store-panel store-agent-config">
       <h4 className="store-panel-title">Agent config — {listing.name}</h4>
       <p className="store-lede tight">
-        Bind a specific model provider, tool subset, skills, and engine
-        override to this agent. Leave provider unset to keep using the
-        global active provider.
+        Bind a specific model provider, tool subset, skills, AAP job template,
+        and engine override to this agent. Leave provider unset to keep using
+        the global active provider. Leave the AAP template unset to use the
+        Platform default.
       </p>
 
       <div className="store-resource-input-row">
@@ -437,8 +489,20 @@ function AgentConfigPanel({
           >
             <option value="auto">Auto (use global engine setting)</option>
             <option value="simulated">Force simulated</option>
-            <option value="live">Force live (OpenShell)</option>
+            <option value="live">Force live (AAP or OpenShell)</option>
           </select>
+        </div>
+        <div className="store-field-mini">
+          <span>AAP job template id</span>
+          <input
+            inputMode="numeric"
+            placeholder="Platform default"
+            value={aapJobTemplateId}
+            onChange={(e) => {
+              setAapJobTemplateId(e.target.value);
+              setSaved(false);
+            }}
+          />
         </div>
       </div>
 
@@ -533,6 +597,8 @@ function OnboardAgentWizard({
   const [description, setDescription] = useState("");
   const [icon, setIcon] = useState("code");
   const [riskTier, setRiskTier] = useState<RiskTier>("medium");
+  const [pricingUnit, setPricingUnit] = useState<PricingUnit>("per-task");
+  const [pricingAmount, setPricingAmount] = useState("0.80");
   const [supportedModes, setSupportedModes] = useState<AgentMode[]>(["do-this-for-me"]);
   const [engineType, setEngineType] = useState<EngineType>("hosted-agent-api");
   const [openshellAgent, setOpenshellAgent] = useState("");
@@ -602,6 +668,7 @@ function OnboardAgentWizard({
         engineType,
         supportedModes,
         riskTier,
+        pricing: { unit: pricingUnit, amount: Number(pricingAmount) || 0 },
         openshellAgent: engineType === "self-hosted-sandbox" ? openshellAgent.trim() : undefined,
         agentConfig: {
           providerId: providerId || undefined,
@@ -630,6 +697,7 @@ function OnboardAgentWizard({
     supportedModes: supportedModes.length > 0 ? supportedModes : ["do-this-for-me"],
     riskTier,
     reviewStatus: "draft",
+    pricing: { unit: pricingUnit, amount: Number(pricingAmount) || 0 },
   };
 
   return (
@@ -684,6 +752,26 @@ function OnboardAgentWizard({
               ))}
             </select>
           </div>
+          <div className="store-resource-input-row">
+            <label className="store-field-mini">
+              <span>Price (USD)</span>
+              <input
+                inputMode="decimal"
+                value={pricingAmount}
+                onChange={(e) => setPricingAmount(e.target.value)}
+              />
+            </label>
+            <label className="store-field-mini">
+              <span>Billed</span>
+              <select value={pricingUnit} onChange={(e) => setPricingUnit(e.target.value as PricingUnit)}>
+                {PRICING_UNITS.map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
           <textarea
             rows={3}
             className="store-textarea"
@@ -716,7 +804,7 @@ function OnboardAgentWizard({
           </div>
           <div className="store-resource-input-row">
             <select value={engineType} onChange={(e) => setEngineType(e.target.value as EngineType)}>
-              <option value="hosted-agent-api">Hosted agent API</option>
+              <option value="hosted-agent-api">Hosted agent API (AAP → OpenShift)</option>
               <option value="self-hosted-sandbox">Self-hosted sandbox (OpenShell)</option>
             </select>
             {engineType === "self-hosted-sandbox" && (
@@ -732,7 +820,7 @@ function OnboardAgentWizard({
             >
               <option value="auto">Auto (use global engine setting)</option>
               <option value="simulated">Force simulated</option>
-              <option value="live">Force live</option>
+              <option value="live">Force live (AAP + OpenShift)</option>
             </select>
           </div>
         </div>
@@ -847,10 +935,60 @@ function OnboardAgentWizard({
   );
 }
 
-function EngineSettingsPanel() {
+type LLMsSubTab = "providers" | "mcp" | "skills" | "openshell";
+
+const LLMS_SUBTABS: { id: LLMsSubTab; label: string; icon: ComponentType }[] = [
+  { id: "providers", label: "Providers", icon: PlugIcon },
+  { id: "mcp", label: "MCP", icon: NetworkIcon },
+  { id: "skills", label: "Skills", icon: BookIcon },
+  { id: "openshell", label: "OpenShell", icon: TerminalIcon },
+];
+
+function LLMsPanel() {
+  const [subTab, setSubTab] = useState<LLMsSubTab>("providers");
+
+  return (
+    <div className="store-admin-section">
+      <div className="store-tabs is-compact" role="tablist" aria-label="LLM sections">
+        {LLMS_SUBTABS.map((item) => {
+          const Icon = item.icon;
+          return (
+            <button
+              key={item.id}
+              type="button"
+              role="tab"
+              aria-selected={subTab === item.id}
+              className={`store-tab is-compact${subTab === item.id ? " is-active" : ""}`}
+              onClick={() => setSubTab(item.id)}
+            >
+              <span className="store-tab-icon" aria-hidden="true">
+                <Icon />
+              </span>
+              {item.label}
+            </button>
+          );
+        })}
+      </div>
+
+      {subTab === "providers" && <ProvidersPanel />}
+      {subTab === "mcp" && <McpPanel />}
+      {subTab === "skills" && <SkillsPanel />}
+      {subTab === "openshell" && <OpenShellPanel />}
+    </div>
+  );
+}
+
+function OpenShellPanel() {
   const [settings, setSettings] = useState<EngineSettings | null>(null);
   const [listings, setListings] = useState<Listing[] | null>(null);
+  const [secrets, setSecrets] = useState<SecretSummary[]>([]);
   const [error, setError] = useState<string | null>(null);
+
+  function loadSecrets() {
+    fetchSecrets()
+      .then(setSecrets)
+      .catch((err: Error) => setError(err.message));
+  }
 
   useEffect(() => {
     Promise.all([fetchEngineSettings(), fetchListings()])
@@ -859,52 +997,32 @@ function EngineSettingsPanel() {
         setListings(nextListings);
       })
       .catch((err: Error) => setError(err.message));
+    loadSecrets();
   }, []);
-
-  async function toggleForceSimulated() {
-    if (!settings) return;
-    const next = await updateEngineSettings({
-      forceSimulated: !settings.forceSimulated,
-    });
-    setSettings(next);
-  }
 
   if (error) return <p className="store-empty">{error}</p>;
   if (!settings || !listings) {
-    return <div className="store-loading">Loading engine settings…</div>;
+    return <div className="store-loading">Loading OpenShell settings…</div>;
   }
 
   const wired = listings.filter((listing) => listing.openshellAgent);
+  const gatewayToken = secrets.find((s) => s.key === "OPENSHELL_GATEWAY_TOKEN");
+  const gitPat = secrets.find((s) => s.key === "GIT_PAT");
 
   return (
     <div className="store-admin-section">
       <div className="store-panel">
-        <h3 className="store-panel-title">Execution engine</h3>
+        <h3 className="store-panel-title">OpenShell sandbox</h3>
         <p className="store-lede tight">
-          Collaborative-mode listings with an OpenShell agent run on a real
-          sandbox once an OpenShell gateway is configured. Everything else
-          always runs on the simulated engine.
+          Engineering listings with an OpenShell agent run interactively in a
+          self-hosted sandbox reached through the OpenShell gateway, instead
+          of AAP/OpenShift.
         </p>
-        <div className="store-switch-row">
-          <button
-            type="button"
-            className="store-switch-row-btn"
-            onClick={toggleForceSimulated}
-            aria-pressed={settings.forceSimulated}
-            aria-label="Force simulated engine for every task"
-          >
-            <span
-              className={`store-switch${settings.forceSimulated ? " is-on" : ""}`}
-              aria-hidden="true"
-            >
-              <span className="store-switch-knob" />
-            </span>
-          </button>
-          <span>Force simulated engine for every task</span>
-        </div>
         <p className="store-lede tight">
           Gateway configured: <strong>{settings.gatewayConfigured ? "Yes" : "No"}</strong>
         </p>
+        {gatewayToken && <SecretField secret={gatewayToken} onChange={loadSecrets} />}
+        {gitPat && <SecretField secret={gitPat} onChange={loadSecrets} />}
       </div>
 
       <div className="store-panel">
@@ -1716,112 +1834,6 @@ function SkillRow({ skill, onChange }: { skill: Skill; onChange: () => void }) {
       ) : (
         <p className="store-resource-tool-desc">{skill.instructions}</p>
       )}
-    </div>
-  );
-}
-
-function SecretsPanel() {
-  const [secrets, setSecrets] = useState<SecretSummary[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  function load() {
-    fetchSecrets()
-      .then(setSecrets)
-      .catch((err: Error) => setError(err.message));
-  }
-
-  useEffect(load, []);
-
-  if (error) return <p className="store-empty">{error}</p>;
-  if (!secrets) return <div className="store-loading">Loading secrets…</div>;
-
-  return (
-    <div className="store-admin-section">
-      <div className="store-panel">
-        <h3 className="store-panel-title">Secrets vault</h3>
-        <p className="store-lede tight">
-          Values are encrypted at rest in a local vault file. A value saved
-          here always takes effect immediately and overrides the matching
-          environment variable for the life of this server process. This is
-          a prototype-grade vault — not a substitute for a real secrets
-          manager.
-        </p>
-
-        <div className="store-resource-list">
-          {secrets.map((secret) => (
-            <SecretRow key={secret.key} secret={secret} onChange={load} />
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function SecretRow({
-  secret,
-  onChange,
-}: {
-  secret: SecretSummary;
-  onChange: () => void;
-}) {
-  const [value, setValue] = useState("");
-  const [busy, setBusy] = useState(false);
-
-  async function save() {
-    if (!value.trim()) return;
-    setBusy(true);
-    try {
-      await setSecretValue(secret.key, value.trim());
-      setValue("");
-      onChange();
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function clear() {
-    setBusy(true);
-    try {
-      await clearSecretValue(secret.key);
-      onChange();
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <div className="store-resource-card">
-      <div className="store-resource-head">
-        <div className="store-resource-title">
-          <strong>{secret.label}</strong>
-          <span>{secret.description} · Used by: {secret.usedBy}</span>
-        </div>
-        <div className="store-resource-badges">
-          <span
-            className={`store-phase is-${secret.source === "vault" ? "ok" : secret.source === "env" ? "info" : "muted"}`}
-          >
-            {secret.source === "vault" ? "Vault" : secret.source === "env" ? "Env" : "Not set"}
-          </span>
-          {secret.preview && <span className="store-phase is-muted">{secret.preview}</span>}
-        </div>
-      </div>
-
-      <div className="store-resource-input-row">
-        <input
-          type="password"
-          placeholder="Set a new value"
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-        />
-        <button type="button" className="store-btn-ghost" onClick={save} disabled={busy || !value.trim()}>
-          Save
-        </button>
-        {secret.hasValue && (
-          <button type="button" className="store-btn-ghost" onClick={clear} disabled={busy}>
-            Clear
-          </button>
-        )}
-      </div>
     </div>
   );
 }

@@ -44,6 +44,45 @@ function overridesFilePath(): string {
   return path.join(dataDir(), "catalog-overrides.json");
 }
 
+function deletedIdsFilePath(): string {
+  return path.join(dataDir(), "deleted-listings.json");
+}
+
+function loadDeletedIdsFromDisk(): Set<string> {
+  const file = deletedIdsFilePath();
+  if (!fs.existsSync(file)) return new Set();
+  try {
+    const raw = JSON.parse(fs.readFileSync(file, "utf8")) as string[];
+    return new Set(raw);
+  } catch {
+    return new Set();
+  }
+}
+
+function persistDeletedIds(): void {
+  const dir = dataDir();
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(
+    deletedIdsFilePath(),
+    JSON.stringify([...deletedIdsStore().ids], null, 2)
+  );
+}
+
+// --- Built-in listing deletions (soft delete; the shipped YAML stays on
+// disk untouched, the id is just hidden from loadListings()/getListing()) ---
+
+type DeletedIdsStore = { ids: Set<string> };
+
+function deletedIdsStore(): DeletedIdsStore {
+  const g = globalThis as typeof globalThis & {
+    __agentStoreDeletedListings?: DeletedIdsStore;
+  };
+  if (!g.__agentStoreDeletedListings) {
+    g.__agentStoreDeletedListings = { ids: loadDeletedIdsFromDisk() };
+  }
+  return g.__agentStoreDeletedListings;
+}
+
 function loadOverridesFromDisk(): Map<string, ListingUpdate> {
   const file = overridesFilePath();
   if (!fs.existsSync(file)) return new Map();
@@ -98,9 +137,21 @@ function loadCatalog(): LoadedCatalog {
     customFilePaths.set(listing.id, file);
   }
 
+  const departmentOrder: Record<string, number> = {
+    support: 0,
+    finance: 1,
+    data: 2,
+    security: 3,
+    engineering: 4,
+  };
   const listings = [...builtinLoaded, ...customLoaded]
     .map((entry) => entry.listing)
-    .sort((a, b) => a.name.localeCompare(b.name));
+    .sort((a, b) => {
+      const da = departmentOrder[a.department] ?? 99;
+      const db = departmentOrder[b.department] ?? 99;
+      if (da !== db) return da - db;
+      return a.name.localeCompare(b.name);
+    });
 
   cache = { listings, customFilePaths };
   return cache;
@@ -132,10 +183,14 @@ function applyOverride(listing: Listing): Listing {
 }
 
 export function loadListings(): Listing[] {
-  return loadCatalog().listings.map(applyOverride);
+  const deleted = deletedIdsStore().ids;
+  return loadCatalog()
+    .listings.filter((listing) => !deleted.has(listing.id))
+    .map(applyOverride);
 }
 
 export function getListing(id: string): Listing | undefined {
+  if (deletedIdsStore().ids.has(id)) return undefined;
   const listing = loadCatalog().listings.find((item) => item.id === id);
   return listing ? applyOverride(listing) : undefined;
 }
@@ -214,6 +269,7 @@ export function createListing(input: ListingCreateInput): Listing {
     supportedModes: input.supportedModes,
     riskTier: input.riskTier,
     reviewStatus,
+    pricing: input.pricing,
     openshellAgent: input.openshellAgent,
     agentConfig: input.agentConfig,
   };
@@ -224,18 +280,25 @@ export function createListing(input: ListingCreateInput): Listing {
   return getListing(id)!;
 }
 
-/** Retires (deletes) a custom listing. Built-in listings cannot be
- * deleted — only edited via updateListing — since they ship in the repo. */
+/** Deletes a listing. Custom (wizard-created) listings have their YAML
+ * file removed outright. Built-in listings ship in the repo, so they're
+ * soft-deleted instead — the shipped file is left untouched and the id is
+ * just added to a tombstone list that hides it from loadListings()/
+ * getListing() going forward. */
 export function deleteListing(id: string): void {
   const base = loadCatalog().listings.find((item) => item.id === id);
   if (!base) throw new Error(`Unknown listing: ${id}`);
-  if (base.source !== "custom") {
-    throw new Error("Built-in listings cannot be deleted, only edited.");
+
+  if (base.source === "custom") {
+    const filePath = loadCatalog().customFilePaths.get(id);
+    if (filePath && fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+    }
+  } else {
+    deletedIdsStore().ids.add(id);
+    persistDeletedIds();
   }
-  const filePath = loadCatalog().customFilePaths.get(id);
-  if (filePath && fs.existsSync(filePath)) {
-    fs.unlinkSync(filePath);
-  }
+
   overrideStore().overrides.delete(id);
   persistOverrides();
   invalidateCache();
