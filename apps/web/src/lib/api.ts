@@ -74,6 +74,17 @@ export function rejectTask(id: string): Promise<Task> {
   );
 }
 
+export interface InteractiveEndpoint {
+  kind: "simulated" | "openshell";
+  url?: string;
+}
+
+export function fetchTerminalEndpoint(id: string): Promise<InteractiveEndpoint> {
+  return fetch(`/api/tasks/${id}/terminal-endpoint`).then((r) =>
+    parse<InteractiveEndpoint>(r)
+  );
+}
+
 export function fetchUsage(): Promise<UsageSnapshot> {
   return fetch("/api/usage").then((r) => parse<UsageSnapshot>(r));
 }
@@ -121,6 +132,27 @@ export function updatePlatformSettings(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(patch),
   }).then((r) => parse<PlatformStatus>(r));
+}
+
+export function testPlatformConnection(
+  target: "aap" | "openshift",
+  settings: Partial<PlatformSettings>
+): Promise<{
+  settings: PlatformSettings;
+  aap?: PlatformStatus["aap"];
+  openshift?: PlatformStatus["openshift"];
+}> {
+  return fetch("/api/admin/platform/test", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ target, settings }),
+  }).then((r) =>
+    parse<{
+      settings: PlatformSettings;
+      aap?: PlatformStatus["aap"];
+      openshift?: PlatformStatus["openshift"];
+    }>(r)
+  );
 }
 
 export function updateEngineSettings(

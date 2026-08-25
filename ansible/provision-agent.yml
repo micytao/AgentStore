@@ -2,6 +2,11 @@
 # AAP Project playbook. Extra vars come from AgentStore:
 #   listing_id, listing_name, task_id, goal, success_criteria,
 #   namespace, job_name, mode, agent_runner_image (optional)
+#
+# Creates the agent Job, waits for it to finish, then publishes a
+# `<job_name>-result` ConfigMap with the pod's output so AgentStore's
+# readResultConfigMap() picks up the real draft instead of falling back to
+# a client-side placeholder.
 - name: Provision an AgentStore agent Job on OpenShift
   hosts: localhost
   gather_facts: false
@@ -79,3 +84,55 @@
                 volumes:
                   - name: output
                     emptyDir: {}
+
+    # Without this, the agent's real output never leaves the Job's pod: the
+    # console only knows how to read a `<job_name>-result` ConfigMap
+    # (packages/engine-ansible/src/openshift.ts readResultConfigMap()), and
+    # up to this point nothing has ever created one. RBAC for configmaps is
+    # already granted to this playbook's ServiceAccount in
+    # deploy/openshift/agent-workloads.yaml (aap-agent-provisioner Role).
+    - name: Wait for agent Job to finish
+      kubernetes.core.k8s_info:
+        kind: Job
+        api_version: batch/v1
+        name: "{{ job_name }}"
+        namespace: "{{ namespace }}"
+      register: job_info
+      until: >
+        (job_info.resources[0].status.succeeded | default(0)) > 0 or
+        (job_info.resources[0].status.failed | default(0)) > 0
+      retries: 60
+      delay: 5
+
+    - name: Find the agent pod for this task
+      kubernetes.core.k8s_info:
+        kind: Pod
+        namespace: "{{ namespace }}"
+        label_selectors:
+          - "agentstore/task-id={{ task_id }}"
+      register: pod_info
+
+    - name: Read agent pod logs
+      kubernetes.core.k8s_log:
+        namespace: "{{ namespace }}"
+        name: "{{ pod_info.resources[0].metadata.name }}"
+      register: pod_log
+      when: pod_info.resources | length > 0
+
+    - name: Publish agent result ConfigMap
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: ConfigMap
+          metadata:
+            name: "{{ job_name }}-result"
+            namespace: "{{ namespace }}"
+            labels:
+              app.kubernetes.io/managed-by: agentstore
+              agentstore/task-id: "{{ task_id }}"
+          data:
+            draft: "{{ pod_log.log | default('') }}"
+            status: >-
+              {{ 'succeeded' if (job_info.resources[0].status.succeeded | default(0)) > 0 else 'failed' }}
+      when: pod_info.resources | length > 0

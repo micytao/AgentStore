@@ -42,7 +42,7 @@ export function SimulatedTerminal({
         );
       } else {
         term.writeln(
-          "Simulated session — set OPENSHELL_GATEWAY_URL to attach a real sandbox."
+          "Simulated session — configure the Agent Sandbox Service (Admin → LLMs → OpenShell) to attach a real sandbox."
         );
         term.writeln("Workspace: /workspace");
       }

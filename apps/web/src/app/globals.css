@@ -735,6 +735,16 @@ a {
   box-shadow: 0 0 12px rgba(125, 255, 179, 0.25);
 }
 
+.store-pill.is-offline {
+  color: #ffb4c4;
+  background: rgba(255, 157, 180, 0.1);
+  border-color: rgba(255, 157, 180, 0.32);
+}
+
+.store-pill.is-muted {
+  color: #d0d5e8;
+}
+
 .store-pill.is-price {
   color: #ffe0a6;
   background: rgba(255, 191, 107, 0.12);
@@ -788,6 +798,23 @@ a {
   margin: 0 0 0.8rem;
   font-size: 1rem;
   color: #fff;
+}
+
+.store-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+  margin-bottom: 0.8rem;
+}
+
+.store-panel-head .store-panel-title {
+  margin: 0;
+}
+
+.store-btn-compact {
+  padding: 0.38rem 0.95rem;
+  font-size: 0.82rem;
 }
 
 .store-field {
@@ -1084,6 +1111,13 @@ a {
   border-color: rgba(125, 255, 179, 0.3);
 }
 
+.store-banner.tight {
+  margin: 0 0 0.9rem;
+  padding: 0.55rem 0.85rem;
+  font-size: 0.82rem;
+  line-height: 1.4;
+}
+
 .store-banner.is-muted {
   color: #d7dbed;
 }
@@ -1218,6 +1252,83 @@ a {
 .store-admin-section {
   display: grid;
   gap: 1rem;
+}
+
+.store-conn-list {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.store-conn-card {
+  display: grid;
+  gap: 0.85rem;
+  padding: 1rem 1.15rem 1.05rem;
+  border-radius: 1.05rem;
+  border: 1px solid var(--line);
+  background: var(--glass);
+}
+
+.store-conn-card-title {
+  margin: 0;
+  color: #fff;
+  font-size: 0.95rem;
+  font-weight: 650;
+}
+
+.store-conn-dl {
+  display: grid;
+  gap: 0.55rem;
+  margin: 0;
+}
+
+.store-conn-row {
+  display: grid;
+  grid-template-columns: 6.25rem minmax(0, 1fr);
+  gap: 0.75rem 1rem;
+  align-items: start;
+  min-width: 0;
+}
+
+.store-conn-row dt {
+  color: #8b90ac;
+  font-size: 0.68rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  padding-top: 0.28rem;
+}
+
+.store-conn-row dd {
+  margin: 0;
+  min-width: 0;
+  color: #c9cde0;
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.store-conn-url {
+  display: block;
+  color: #e8ebf7;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.78rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.store-conn-empty {
+  color: #8b90ac;
+}
+
+.store-conn-row.is-error dd {
+  color: #ffb4c4;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.store-conn-row.is-ok dd {
+  color: var(--ok);
+  white-space: normal;
 }
 
 .store-admin-table {
@@ -1596,6 +1707,15 @@ a {
 }
 
 @media (max-width: 900px) {
+  .store-conn-row {
+    grid-template-columns: 1fr;
+    gap: 0.2rem;
+  }
+
+  .store-conn-row dt {
+    padding-top: 0;
+  }
+
   .store-admin-row,
   .store-audit-row {
     grid-template-columns: 1fr;

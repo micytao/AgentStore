@@ -1,0 +1,99 @@
+# Agent Sandbox Service — in-cluster, next to the OpenShell gateway.
+# See apps/agent-sandbox-service/README.md and the plan's Stage B1.
+#
+# Prereqs before applying:
+#   1. Build/push apps/agent-sandbox-service's image; set it below.
+#   2. Create the agent-sandbox-service-token Secret (kubectl create secret
+#      generic agent-sandbox-service-token -n agent-workloads
+#      --from-literal=OPENSHELL_SERVICE_TOKEN=<random value>), and paste the
+#      same value into Admin -> Secrets -> Agent Sandbox Service token.
+#   3. Provide this pod's own openshell CLI identity — either a mounted
+#      Secret with a pre-authenticated ~/.config/openshell/ (referenced
+#      below as openshell-cli-identity), or swap the initContainer for a
+#      non-interactive `openshell gateway add` call. Both are placeholders
+#      until your gateway's real auth mode (Stage B1) is finalized.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: agent-sandbox-service
+  namespace: agent-workloads
+  labels:
+    app.kubernetes.io/managed-by: agentstore
+    app.kubernetes.io/name: agent-sandbox-service
+spec:
+  replicas: 1 # single-replica v1 — see the plan's open risks (pty state is per-pod)
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: agent-sandbox-service
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: agent-sandbox-service
+    spec:
+      serviceAccountName: agentstore-console
+      containers:
+        - name: agent-sandbox-service
+          image: agent-sandbox-service:dev # replace with your pushed image
+          ports:
+            - containerPort: 8090
+          env:
+            - name: PORT
+              value: "8090"
+            - name: OPENSHELL_SERVICE_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: agent-sandbox-service-token
+                  key: OPENSHELL_SERVICE_TOKEN
+          volumeMounts:
+            - name: openshell-cli-config
+              mountPath: /opt/app-root/src/.config/openshell
+              readOnly: true
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8090
+            initialDelaySeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8090
+            initialDelaySeconds: 10
+      volumes:
+        - name: openshell-cli-config
+          secret:
+            secretName: openshell-cli-identity
+            optional: true # remove `optional` once you've created this Secret (Stage B1)
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: agent-sandbox-service
+  namespace: agent-workloads
+  labels:
+    app.kubernetes.io/managed-by: agentstore
+spec:
+  selector:
+    app.kubernetes.io/name: agent-sandbox-service
+  ports:
+    - name: http
+      port: 8090
+      targetPort: 8090
+---
+# TLS terminates here (edge). WebSocket upgrades ride over the same HTTPS
+# connection — OpenShift Routes support this with no extra config.
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: agent-sandbox-service
+  namespace: agent-workloads
+  labels:
+    app.kubernetes.io/managed-by: agentstore
+spec:
+  to:
+    kind: Service
+    name: agent-sandbox-service
+  port:
+    targetPort: http
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect

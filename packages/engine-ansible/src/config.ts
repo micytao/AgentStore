@@ -19,6 +19,10 @@ export function aapConsoleUrl(): string {
   return (process.env.AAP_CONSOLE_URL ?? aapControllerUrl()).replace(/\/$/, "");
 }
 
+export function aapInsecureTls(): boolean {
+  return process.env.AAP_INSECURE_TLS === "true";
+}
+
 export function openshiftApiUrl(): string {
   return (process.env.OPENSHIFT_API_URL ?? "").replace(/\/$/, "");
 }
@@ -33,6 +37,10 @@ export function openshiftNamespace(): string {
 
 export function openshiftConsoleUrl(): string {
   return (process.env.OPENSHIFT_CONSOLE_URL ?? "").replace(/\/$/, "");
+}
+
+export function openshiftInsecureTls(): boolean {
+  return process.env.OPENSHIFT_INSECURE_TLS === "true";
 }
 
 export function agentRunnerImage(): string {
@@ -63,15 +71,19 @@ export function applyPlatformEnv(settings: {
   aapControllerUrl: string;
   aapJobTemplateId: number | "";
   aapConsoleUrl: string;
+  aapInsecureTls?: boolean;
   openshiftApiUrl: string;
   openshiftNamespace: string;
   openshiftConsoleUrl: string;
+  openshiftInsecureTls?: boolean;
 }): void {
   process.env.AAP_CONTROLLER_URL = settings.aapControllerUrl;
   process.env.AAP_CONSOLE_URL = settings.aapConsoleUrl;
   process.env.AAP_JOB_TEMPLATE_ID =
     settings.aapJobTemplateId === "" ? "" : String(settings.aapJobTemplateId);
+  process.env.AAP_INSECURE_TLS = settings.aapInsecureTls ? "true" : "false";
   process.env.OPENSHIFT_API_URL = settings.openshiftApiUrl;
   process.env.OPENSHIFT_NAMESPACE = settings.openshiftNamespace || "agent-workloads";
   process.env.OPENSHIFT_CONSOLE_URL = settings.openshiftConsoleUrl;
+  process.env.OPENSHIFT_INSECURE_TLS = settings.openshiftInsecureTls ? "true" : "false";
 }

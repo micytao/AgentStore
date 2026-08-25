@@ -19,8 +19,8 @@ Engineering. Only **published** listings show (`GET /api/listings`).
 
 ## 2. Launch a business agent (A)
 
-1. Customer Support → **Draft a ticket reply** → Launch.
-2. Goal: `Draft a reply to INC-1042 about a billing outage`.
+1. Customer Support → **Ticket triage & routing** → Launch.
+2. Goal: `Triage this week's open ticket queue and flag anything urgent`.
 3. The task page shows an **AAP job** and an **OpenShift Job**
    (`agent-<id>` in `agent-workloads`).
 4. Wait for **AwaitingApproval**, read the draft, Approve or Reject.
@@ -51,8 +51,14 @@ key). Activate. Autonomous drafts call that endpoint instead of canned text.
 
 ## 6. Optional: Engineering / OpenShell
 
-Catalog → Engineering → **Claude Code**. Collaborative session. Requires
-`OPENSHELL_GATEWAY_URL` for a live sandbox; otherwise simulated.
+Catalog → Engineering → **OpenCode**. Collaborative session. Requires the
+Agent Sandbox Service (`apps/agent-sandbox-service`, deployed in-cluster
+next to the OpenShell gateway) for a live, actually-typeable sandbox;
+otherwise simulated. Set its Route URL in Admin → LLMs → OpenShell and its
+token in Admin → Secrets. See
+[apps/agent-sandbox-service/README.md](../apps/agent-sandbox-service/README.md)
+for the deployment steps and [deploy/openshift/README.md](../deploy/openshift/README.md#5-optional-engineering--the-agent-sandbox-service)
+for the manifests.
 
 ## 7. Onboard a new hosted-agent-api agent
 

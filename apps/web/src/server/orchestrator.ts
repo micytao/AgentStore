@@ -4,6 +4,10 @@ import { randomUUID } from "node:crypto";
 import {
   DEMO_USER,
   type AgentMode,
+  type Listing,
+  type OpenShellMcpServerConfig,
+  type OpenShellModelConfig,
+  type Role,
   type Task,
   type TaskPhase,
   type TaskTarget,
@@ -11,7 +15,10 @@ import {
 } from "@agentstore/shared";
 import { getListing } from "./catalog";
 import { adapterFor, isLiveEngine } from "./engines";
-import { generateDraft } from "./drafting";
+import { generateDraft, providerFor } from "./drafting";
+import { apiKeyFor } from "./providers";
+import { getMcpAuthToken, getMcpServer, listMcpServers } from "./mcp";
+import { getSecret } from "./secrets";
 
 const COST_BY_MODE: Record<AgentMode, number> = {
   "work-with-me": 2.4,
@@ -84,8 +91,55 @@ function now(): string {
   return new Date().toISOString();
 }
 
+/** Resolves the model credentials an OpenShell-hosted agent needs, as plain
+ * data to forward to the Agent Sandbox Service — the console resolves
+ * *which* provider (same logic drafting.ts uses for Autonomous drafts);
+ * the service is the only thing that knows how to turn this into an
+ * opencode.json / register an OpenShell provider. */
+function openshellModelFor(listing: Listing): OpenShellModelConfig | undefined {
+  const provider = providerFor(listing);
+  if (!provider) return undefined;
+  return {
+    kind: provider.kind,
+    defaultModel: provider.defaultModel,
+    baseUrl: provider.baseUrl,
+    apiKey: apiKeyFor(provider.id),
+  };
+}
+
+/** Resolves the listing's enabled MCP servers down to the subset a
+ * sandboxed agent can actually reach directly: remote transports only
+ * (streamable-http/sse) with a URL. stdio servers spawn a process on the
+ * console host and are not reachable from a cluster-hosted sandbox, so
+ * they're silently dropped here rather than forwarded. */
+function openshellMcpServersFor(listing: Listing): OpenShellMcpServerConfig[] {
+  const bindings = listing.agentConfig?.mcpToolBindings;
+  const serverIds = bindings && bindings.length > 0
+    ? [...new Set(bindings.map((b) => b.serverId))]
+    : listMcpServers()
+        .filter((s) => s.enabled && s.connectionState === "connected")
+        .map((s) => s.id);
+
+  const out: OpenShellMcpServerConfig[] = [];
+  for (const id of serverIds) {
+    const server = getMcpServer(id);
+    if (!server || !server.enabled) continue;
+    if (server.transport !== "streamable-http" && server.transport !== "sse") continue;
+    if (!server.url) continue;
+    out.push({
+      id: server.id,
+      name: server.name,
+      url: server.url,
+      transport: server.transport,
+      authToken: getMcpAuthToken(server.id),
+    });
+  }
+  return out;
+}
+
 function specFrom(task: Task) {
   const listing = getListing(task.listingRef);
+  const isOpenShell = Boolean(listing?.openshellAgent);
   return {
     taskId: task.id,
     listingId: task.listingRef,
@@ -93,7 +147,10 @@ function specFrom(task: Task) {
     mode: task.mode,
     target: task.target,
     gitUrl: task.gitUrl,
+    gitToken: isOpenShell && task.gitUrl ? getSecret("GIT_PAT") : undefined,
     openshellAgent: listing?.openshellAgent,
+    openshellModel: isOpenShell && listing ? openshellModelFor(listing) : undefined,
+    openshellMcpServers: isOpenShell && listing ? openshellMcpServersFor(listing) : undefined,
     aapJobTemplateId: listing?.agentConfig?.aapJobTemplateId,
   };
 }
@@ -116,6 +173,7 @@ async function refresh(task: Task): Promise<Task> {
   task.status.openshiftConsoleUrl = status.openshiftConsoleUrl;
   task.status.namespace = status.namespace;
   task.status.provisioningStep = status.provisioningStep;
+  task.status.interactive = status.interactive;
 
   const justAwaitingApproval =
     status.phase === "AwaitingApproval" && previousPhase !== "AwaitingApproval";
@@ -207,35 +265,75 @@ export async function createTask(input: {
   return task;
 }
 
-export async function cancelTask(id: string): Promise<Task> {
+export async function cancelTask(id: string, role: Role): Promise<Task> {
   const task = await getTask(id);
   if (!task) throw new Error("Task not found");
+  if (TERMINAL_PHASES.includes(task.status.phase)) {
+    throw new Error("Task has already finished");
+  }
   const listing = getListing(task.listingRef);
   if (listing && task.status.engineRef) {
     await adapterFor(listing).terminate(task.status.engineRef);
   }
   task.status.phase = "Cancelled";
+  task.cancelledBy = role;
   task.updatedAt = now();
   store().tasks.set(id, task);
   persistTasks();
   return task;
 }
 
+/** Task IDs currently mid-decision, so two concurrent approve/reject calls
+ * for the same task can't both pass the phase check before either write
+ * lands (the check-and-add below is synchronous, before any await). */
+function decidingTasks(): Set<string> {
+  const g = globalThis as typeof globalThis & { __agentStoreDeciding?: Set<string> };
+  if (!g.__agentStoreDeciding) {
+    g.__agentStoreDeciding = new Set();
+  }
+  return g.__agentStoreDeciding;
+}
+
 export async function decideTask(
   id: string,
-  decision: "approved" | "rejected"
+  decision: "approved" | "rejected",
+  role: Role
 ): Promise<Task> {
-  const task = await getTask(id);
-  if (!task) throw new Error("Task not found");
-  if (task.status.phase !== "AwaitingApproval") {
-    throw new Error("Task is not waiting for approval");
+  if (decidingTasks().has(id)) {
+    throw new Error("Task decision already in progress");
   }
-  task.approvalDecision = decision;
-  task.status.phase = decision === "approved" ? "Completed" : "Cancelled";
-  task.updatedAt = now();
-  store().tasks.set(id, task);
-  persistTasks();
-  return task;
+  decidingTasks().add(id);
+  try {
+    const task = await getTask(id);
+    if (!task) throw new Error("Task not found");
+    if (task.status.phase !== "AwaitingApproval") {
+      throw new Error("Task is not waiting for approval");
+    }
+    task.approvalDecision = decision;
+    task.decidedBy = role;
+    task.status.phase = decision === "approved" ? "Completed" : "Cancelled";
+    task.updatedAt = now();
+    store().tasks.set(id, task);
+    persistTasks();
+    return task;
+  } finally {
+    decidingTasks().delete(id);
+  }
+}
+
+/** Server-side only: mints a terminal URL/token for an interactive task.
+ * Called from the terminal-endpoint API route rather than exposed as a
+ * plain field on Task, so the Agent Sandbox Service's URL/token never sit
+ * in a client-visible payload until a short-lived token is actually
+ * minted for this specific request. */
+export async function getInteractiveEndpoint(
+  id: string
+): Promise<{ kind: "simulated" | "openshell"; url?: string } | null> {
+  const task = await getTask(id);
+  if (!task || !task.status.engineRef) return null;
+  const listing = getListing(task.listingRef);
+  if (!listing) return null;
+  return adapterFor(listing).exposeInteractiveEndpoint(task.status.engineRef);
 }
 
 export async function usage(): Promise<UsageSnapshot> {

@@ -49,6 +49,7 @@ import {
   fetchEngineSettings,
   fetchListings,
   fetchMcpServers,
+  fetchPlatformStatus,
   fetchProviders,
   fetchSecrets,
   fetchSkills,
@@ -58,10 +59,12 @@ import {
   setProviderKeyValue,
   testProviderConnection,
   updateListingAdmin,
+  updatePlatformSettings,
   upsertMcpServerConfig,
   upsertProviderConfig,
   upsertSkillConfig,
   type EngineSettings,
+  type PlatformStatus,
   type Task,
 } from "@/lib/api";
 import { formatUsd, modeLabel } from "@/lib/format";
@@ -982,6 +985,9 @@ function OpenShellPanel() {
   const [settings, setSettings] = useState<EngineSettings | null>(null);
   const [listings, setListings] = useState<Listing[] | null>(null);
   const [secrets, setSecrets] = useState<SecretSummary[]>([]);
+  const [platform, setPlatform] = useState<PlatformStatus | null>(null);
+  const [serviceUrlDraft, setServiceUrlDraft] = useState("");
+  const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   function loadSecrets() {
@@ -990,38 +996,81 @@ function OpenShellPanel() {
       .catch((err: Error) => setError(err.message));
   }
 
-  useEffect(() => {
-    Promise.all([fetchEngineSettings(), fetchListings()])
-      .then(([nextSettings, nextListings]) => {
+  function load() {
+    Promise.all([fetchEngineSettings(), fetchListings(), fetchPlatformStatus()])
+      .then(([nextSettings, nextListings, nextPlatform]) => {
         setSettings(nextSettings);
         setListings(nextListings);
+        setPlatform(nextPlatform);
+        setServiceUrlDraft(nextPlatform.settings.openshellServiceUrl);
       })
       .catch((err: Error) => setError(err.message));
     loadSecrets();
-  }, []);
+  }
+
+  useEffect(load, []);
+
+  async function saveServiceUrl() {
+    setSaving(true);
+    setError(null);
+    try {
+      const next = await updatePlatformSettings({ openshellServiceUrl: serviceUrlDraft });
+      setPlatform(next);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSaving(false);
+    }
+  }
 
   if (error) return <p className="store-empty">{error}</p>;
-  if (!settings || !listings) {
+  if (!settings || !listings || !platform) {
     return <div className="store-loading">Loading OpenShell settings…</div>;
   }
 
   const wired = listings.filter((listing) => listing.openshellAgent);
-  const gatewayToken = secrets.find((s) => s.key === "OPENSHELL_GATEWAY_TOKEN");
+  const serviceToken = secrets.find((s) => s.key === "OPENSHELL_SERVICE_TOKEN");
   const gitPat = secrets.find((s) => s.key === "GIT_PAT");
 
   return (
     <div className="store-admin-section">
       <div className="store-panel">
-        <h3 className="store-panel-title">OpenShell sandbox</h3>
+        <h3 className="store-panel-title">Agent Sandbox Service</h3>
         <p className="store-lede tight">
           Engineering listings with an OpenShell agent run interactively in a
-          self-hosted sandbox reached through the OpenShell gateway, instead
-          of AAP/OpenShift.
+          real sandbox provisioned by the in-cluster Agent Sandbox Service —
+          the console never runs the openshell CLI or a terminal bridge
+          itself, it only calls this service's REST + WebSocket API.
         </p>
+        <div className="store-admin-table">
+          <div className="store-admin-row">
+            <div>
+              <strong>Agent Sandbox Service</strong>
+              <span>{platform.openshellService.configured ? platform.settings.openshellServiceUrl : "Not configured"}</span>
+            </div>
+            <span className={`store-pill ${platform.openshellService.connected ? "is-live" : ""}`}>
+              {platform.openshellService.connected ? "Connected" : platform.openshellService.error ?? "Disconnected"}
+            </span>
+          </div>
+        </div>
+        <div className="store-resource-input-row">
+          <label className="store-field-mini">
+            <span>Service URL</span>
+            <input
+              value={serviceUrlDraft}
+              placeholder="https://agent-sandbox-service-agent-workloads.apps.example.com"
+              onChange={(e) => setServiceUrlDraft(e.target.value)}
+            />
+          </label>
+          <button type="button" className="store-btn-primary" disabled={saving} onClick={() => void saveServiceUrl()}>
+            {saving ? "Saving…" : "Save & test"}
+          </button>
+        </div>
         <p className="store-lede tight">
-          Gateway configured: <strong>{settings.gatewayConfigured ? "Yes" : "No"}</strong>
+          Service configured: <strong>{settings.openshellServiceConfigured ? "Yes" : "No"}</strong> (needs both this
+          URL and the token below)
         </p>
-        {gatewayToken && <SecretField secret={gatewayToken} onChange={loadSecrets} />}
+        {serviceToken && <SecretField secret={serviceToken} onChange={loadSecrets} />}
         {gitPat && <SecretField secret={gitPat} onChange={loadSecrets} />}
       </div>
 

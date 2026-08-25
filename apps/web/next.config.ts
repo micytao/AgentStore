@@ -9,6 +9,7 @@ const nextConfig: NextConfig = {
     "@agentstore/shared",
     "@agentstore/engine-fake",
     "@agentstore/engine-ansible",
+    "@agentstore/engine-openshell",
     "@patternfly/react-core",
     "@patternfly/react-icons",
     "@patternfly/react-styles",

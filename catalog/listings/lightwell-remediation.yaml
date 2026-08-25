@@ -1,0 +1,14 @@
+id: lightwell-remediation
+name: Red Hat Lightwell Deep Agent
+department: security
+category: Dependency remediation
+description: Cross-references your repository's open source dependencies against Red Hat's Lightwell catalog of remediated, backported packages, then drafts a patch to swap in the fixed versions. You review the diff before anything merges.
+icon: shield
+engineType: hosted-agent-api
+supportedModes:
+  - do-this-for-me
+riskTier: medium
+reviewStatus: published
+pricing:
+  unit: per-task
+  amount: 0.8

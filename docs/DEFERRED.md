@@ -29,7 +29,9 @@ What this repo is meant to keep:
 - Business listings provisioned by AAP, running as OpenShift Jobs
 - Both Autonomous and Collaborative modes, including an approval hold
 - Department-browsable catalog
-- Optional Interactive path through OpenShell when `OPENSHELL_GATEWAY_URL` is set
+- Optional Interactive path through OpenShell, via the in-cluster Agent
+  Sandbox Service, when `openshellServiceUrl` + `OPENSHELL_SERVICE_TOKEN`
+  are set
 
 What's real, beyond the facade:
 
@@ -38,5 +40,6 @@ What's real, beyond the facade:
 - Admin **Platform** tab: connect/test AAP and prod OpenShift, bind job templates, deep-link to both consoles.
 - Admin **Providers** tab: real vendor/MaaS calls for Autonomous drafts; canned fallback if unset.
 - Admin **MCP** tab: real MCP client (`@modelcontextprotocol/sdk`).
-- Admin **Secrets** tab: encrypted local vault (includes `AAP_TOKEN` and `OPENSHIFT_TOKEN`).
+- Admin **Secrets** tab: encrypted local vault (includes `AAP_TOKEN`, `OPENSHIFT_TOKEN`, `OPENSHELL_SERVICE_TOKEN`, `GIT_PAT`).
 - Server-tracked Admin role, per-agent `AgentConfig` (including `aapJobTemplateId`), skills library, onboarding publish gate, file-backed durability including `.data/platform.json`.
+- **Agent Sandbox Service** (`apps/agent-sandbox-service`). Real, in-cluster Node/TS service that generates a per-agent config file (`opencode.json`), registers OpenShell provider credentials, runs `sandbox create/get/delete` via the real `openshell` CLI, and relays a real interactive terminal to the browser over a signed-token WebSocket + `node-pty`. `packages/engine-openshell` is a thin REST client against it — no CLI, no `node-pty`, no custom HTTP server on the console itself.

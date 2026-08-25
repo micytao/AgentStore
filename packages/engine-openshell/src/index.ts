@@ -1,135 +1,85 @@
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
-import type {
-  EngineAdapter,
-  EngineHandle,
-  EngineStatus,
-  TaskSpec,
-} from "@agentstore/shared";
+import type { EngineAdapter, EngineHandle, EngineStatus, TaskSpec } from "@agentstore/shared";
+import * as client from "./client";
 
-const execFileAsync = promisify(execFile);
+/**
+ * Real OpenShell adapter — a thin REST client against the in-cluster Agent
+ * Sandbox Service (apps/agent-sandbox-service). No `execFile`, no CLI, no
+ * `node-pty`, no file uploads on the console side: the console only ever
+ * resolves *what* to run (model/MCP/repo, already put on TaskSpec by
+ * orchestrator.ts's specFrom()) and hands that off as plain JSON.
+ *
+ * engines.ts only routes here when isOpenShellServiceConfigured() is true
+ * (mirroring how ansibleEngine's simulated fallback lives in
+ * createAnsibleEngine, not here) — engine-fake covers the simulated path
+ * for OpenShell listings, so this adapter has no simulated branch of its
+ * own.
+ */
 
-function parseSandboxId(stdout: string, fallback: string): string {
-  const jsonMatch = stdout.match(/\{[\s\S]*\}/);
-  if (jsonMatch) {
-    try {
-      const parsed = JSON.parse(jsonMatch[0]) as {
-        id?: string;
-        sandboxId?: string;
-      };
-      if (parsed.id) return parsed.id;
-      if (parsed.sandboxId) return parsed.sandboxId;
-    } catch {
-      /* fall through */
-    }
-  }
-  const idLine = stdout.match(/(?:id|sandbox)[:\s]+([A-Za-z0-9_-]+)/i);
-  if (idLine?.[1]) return idLine[1];
-  return fallback;
-}
-
-async function runOpenshell(args: string[]): Promise<string> {
-  const gateway = process.env.OPENSHELL_GATEWAY_URL;
-  if (!gateway) {
-    throw new Error("OPENSHELL_GATEWAY_URL is not set");
-  }
-
-  try {
-    const { stdout, stderr } = await execFileAsync("openshell", args, {
-      env: {
-        ...process.env,
-        OPENSHELL_GATEWAY: gateway,
-        OPENSHELL_GATEWAY_URL: gateway,
-      },
-      timeout: 120_000,
-    });
-    return `${stdout}\n${stderr}`;
-  } catch (err) {
-    const error = err as NodeJS.ErrnoException & {
-      stdout?: string;
-      stderr?: string;
-    };
-    if (error.code === "ENOENT") {
-      throw new Error(
-        "openshell CLI not found on PATH. Install it and set OPENSHELL_GATEWAY_URL, or leave the gateway unset to use the simulated engine."
-      );
-    }
-    throw new Error(
-      error.stderr?.trim() ||
-        error.stdout?.trim() ||
-        error.message ||
-        "openshell command failed"
-    );
+function phaseFrom(remote: client.RemoteSession["phase"]): EngineStatus["phase"] {
+  switch (remote) {
+    case "Provisioning":
+      return "Provisioning";
+    case "Running":
+      return "Running";
+    case "Failed":
+      return "Failed";
+    case "Cancelled":
+      return "Cancelled";
   }
 }
 
 export class OpenShellEngineAdapter implements EngineAdapter {
   async provision(spec: TaskSpec): Promise<EngineHandle> {
-    const name = `as-${spec.taskId.replace(/-/g, "").slice(0, 12)}`;
-    const agent = spec.openshellAgent ?? "claude";
-    const extra =
-      process.env.OPENSHELL_CREATE_ARGS?.split(" ").filter(Boolean) ?? [];
-    const gitArgs = spec.gitUrl ? ["--git-url", spec.gitUrl] : [];
-    const output = await runOpenshell([
-      "sandbox",
-      "create",
-      "--name",
-      name,
-      ...extra,
-      ...gitArgs,
-      "--",
+    const agent = spec.openshellAgent ?? "opencode";
+    const session = await client.createSession({
+      taskId: spec.taskId,
       agent,
-    ]);
+      model: spec.openshellModel,
+      mcpServers: spec.openshellMcpServers,
+      gitUrl: spec.gitUrl,
+      gitToken: spec.gitToken,
+    });
+    if (session.phase === "Failed") {
+      throw new Error(session.message || "Agent Sandbox Service failed to create the session");
+    }
     return {
       engineType: "self-hosted-sandbox",
-      sandboxId: parseSandboxId(output, name),
+      sandboxId: session.id,
+      backend: "openshell",
     };
   }
 
-  async getStatus(
-    handle: EngineHandle,
-    _spec: TaskSpec
-  ): Promise<EngineStatus> {
+  async getStatus(handle: EngineHandle): Promise<EngineStatus> {
     try {
-      const output = await runOpenshell(["sandbox", "get", handle.sandboxId]);
-      const lower = output.toLowerCase();
-      if (lower.includes("fail") || lower.includes("error")) {
-        return { phase: "Failed", outputSummary: output.slice(0, 500) };
+      const session = await client.getSession(handle.sandboxId);
+      const phase = phaseFrom(session.phase);
+      if (phase === "Running") {
+        return { phase, backend: "openshell", interactive: { kind: "openshell" } };
       }
-      if (lower.includes("provision")) {
-        return { phase: "Provisioning" };
+      if (phase === "Failed") {
+        return { phase, backend: "openshell", outputSummary: session.message };
       }
-      return {
-        phase: "Running",
-        interactive: {
-          kind: "openshell",
-          attachHint: `openshell sandbox connect ${handle.sandboxId}`,
-        },
-      };
+      return { phase, backend: "openshell", provisioningStep: session.message };
     } catch (err) {
       return {
         phase: "Failed",
+        backend: "openshell",
         outputSummary: err instanceof Error ? err.message : String(err),
       };
     }
   }
 
   async exposeInteractiveEndpoint(handle: EngineHandle) {
-    return {
-      kind: "openshell" as const,
-      url: undefined,
-    };
+    const { url } = await client.mintTerminalToken(handle.sandboxId);
+    return { kind: "openshell" as const, url };
   }
 
   async terminate(handle: EngineHandle): Promise<void> {
-    try {
-      await runOpenshell(["sandbox", "delete", handle.sandboxId]);
-    } catch {
-      await runOpenshell(["sandbox", "rm", handle.sandboxId]).catch(
-        () => undefined
-      );
-    }
+    await client.deleteSession(handle.sandboxId);
   }
 }
 
 export const openShellEngine = new OpenShellEngineAdapter();
+
+export { isOpenShellServiceConfigured, applyOpenShellServiceEnv, openshellServiceUrl } from "./config";
+export { pingOpenShellService } from "./client";

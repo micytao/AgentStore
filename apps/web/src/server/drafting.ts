@@ -23,8 +23,10 @@ function systemPromptFor(listing: Listing): string {
 
 /** Resolves which configured provider this agent should draft with: its own
  * per-agent binding if set (and it still exists), otherwise the global
- * active provider — so listings with no explicit binding keep working. */
-function providerFor(listing: Listing) {
+ * active provider — so listings with no explicit binding keep working.
+ * Exported for orchestrator.ts's specFrom(), which resolves the same thing
+ * for OpenShell listings to forward to the Agent Sandbox Service. */
+export function providerFor(listing: Listing) {
   const boundId = listing.agentConfig?.providerId;
   if (boundId) {
     const bound = getProvider(boundId);

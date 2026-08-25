@@ -160,8 +160,11 @@ export function getActiveProvider(): ProviderConfig | undefined {
 
 /** Returns the stored key, if any, without requiring one — callers decide
  * whether a missing key is fatal based on the provider kind (see
- * requireApiKey). */
-function apiKeyFor(id: string): string | undefined {
+ * requireApiKey). Exported for orchestrator.ts's specFrom(), which forwards
+ * this to the Agent Sandbox Service so it can register an OpenShell
+ * provider / set the sandbox's native provider env var — the console
+ * itself never uses the key for anything beyond that single hand-off. */
+export function apiKeyFor(id: string): string | undefined {
   return getSecret(keyFor(id));
 }
 

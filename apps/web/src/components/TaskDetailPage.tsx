@@ -3,6 +3,7 @@
 import { departmentLabel } from "@agentstore/shared";
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { LiveTerminal } from "@/components/LiveTerminal";
 import { PhaseLabel } from "@/components/PhaseLabel";
 import { SimulatedTerminal } from "@/components/SimulatedTerminal";
 import {
@@ -198,6 +199,8 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
               <span className="store-pulse" />
               Provisioning an isolated session…
             </div>
+          ) : task.status.interactive?.kind === "openshell" ? (
+            <LiveTerminal taskId={task.id} listingName={task.listingName} />
           ) : (
             <SimulatedTerminal
               listingName={task.listingName}

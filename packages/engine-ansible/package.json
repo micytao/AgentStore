@@ -5,6 +5,7 @@
   "main": "./src/index.ts",
   "types": "./src/index.ts",
   "dependencies": {
-    "@agentstore/shared": "*"
+    "@agentstore/shared": "*",
+    "undici": "^7.9.0"
   }
 }

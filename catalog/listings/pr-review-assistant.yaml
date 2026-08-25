@@ -1,0 +1,14 @@
+id: pr-review-assistant
+name: PR review assistant
+department: engineering
+category: Code review
+description: Point the agent at an open pull request. It drafts inline review comments and a summary — nothing is posted until you approve.
+icon: code
+engineType: hosted-agent-api
+supportedModes:
+  - do-this-for-me
+riskTier: low
+reviewStatus: published
+pricing:
+  unit: per-task
+  amount: 0.8

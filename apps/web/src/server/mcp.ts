@@ -148,6 +148,14 @@ export function setMcpAuthToken(id: string, value: string): McpServerStatus {
   return statusFor(config);
 }
 
+/** Exported for orchestrator.ts's specFrom(), which forwards this to the
+ * Agent Sandbox Service so a directly-connecting sandboxed agent (e.g.
+ * OpenCode) can authenticate to the same MCP server the console itself
+ * uses for Autonomous drafting. */
+export function getMcpAuthToken(id: string): string | undefined {
+  return getSecret(authTokenKey(id));
+}
+
 async function disconnectServer(id: string): Promise<void> {
   const live = store().live.get(id);
   if (!live) return;

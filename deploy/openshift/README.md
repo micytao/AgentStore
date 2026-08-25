@@ -38,12 +38,34 @@ podman build -t agent-runner:dev \
 # push somewhere the cluster can pull, then set agent_runner_image on the template
 ```
 
-## 4. Optional: host the console on OpenShift
+## 4. The console itself
 
-The storefront Deployment/Route/PVC in this directory is **optional**. Use it
-only if you want the console on-cluster later. It is not required for the
-AAP → OpenShift demo. Do not scale it past `replicas: 1` — the secrets vault
-is a single-writer file on the PVC.
+AgentStore runs off-cluster (laptop/VM/container elsewhere) and talks to AAP
+and OpenShift over their APIs. There are no console Deployment/Route/PVC
+manifests here — host the console however you host any other internal web
+app.
 
-OpenShell Helm values remain **optional Engineering** (privileged SCC, TLS
-off, eval only).
+## 5. Optional Engineering: the Agent Sandbox Service
+
+The OpenShell gateway (Helm values in `openshell-values.yaml`, still
+**eval-only** — privileged SCC, TLS off) needs the Kubernetes Agent Sandbox
+controller/CRDs installed first. On top of that, apply the Agent Sandbox
+Service — the in-cluster service that owns all `openshell` CLI / `node-pty`
+mechanics so the console never does:
+
+```bash
+podman build -t agent-sandbox-service:dev \
+  -f apps/agent-sandbox-service/Containerfile .
+# push somewhere the cluster can pull, then set the image on the Deployment below
+
+kubectl create secret generic agent-sandbox-service-token -n agent-workloads \
+  --from-literal=OPENSHELL_SERVICE_TOKEN=$(openssl rand -hex 32)
+
+oc apply -f deploy/openshift/agent-sandbox-service.yaml
+```
+
+Set the Route's URL in **Admin → LLMs → OpenShell → Service URL**, and the
+same `OPENSHELL_SERVICE_TOKEN` value into **Admin → Secrets**. See
+[apps/agent-sandbox-service/README.md](../../apps/agent-sandbox-service/README.md)
+for the CLI-identity bootstrap this service needs (non-interactive — no
+human to click through a browser login) before `POST /sessions` works.

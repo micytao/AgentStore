@@ -1,0 +1,14 @@
+id: vendor-contract-summary
+name: Vendor contract summarizer
+department: finance
+category: Vendor management
+description: Point the agent at a vendor contract. It extracts key terms, obligations, and the renewal date into a one-page summary for finance to review.
+icon: money
+engineType: hosted-agent-api
+supportedModes:
+  - do-this-for-me
+riskTier: low
+reviewStatus: published
+pricing:
+  unit: per-task
+  amount: 0.8

@@ -11,14 +11,18 @@ import {
   pingAap,
   pingOpenshift,
 } from "@agentstore/engine-ansible";
+import { applyOpenShellServiceEnv, isOpenShellServiceConfigured, pingOpenShellService } from "@agentstore/engine-openshell";
 
 const DEFAULT_SETTINGS: PlatformSettings = {
   aapControllerUrl: "",
   aapJobTemplateId: "",
   aapConsoleUrl: "",
+  aapInsecureTls: true,
   openshiftApiUrl: "",
   openshiftNamespace: "agent-workloads",
   openshiftConsoleUrl: "",
+  openshiftInsecureTls: true,
+  openshellServiceUrl: "",
 };
 
 function dataDir(): string {
@@ -61,86 +65,88 @@ export function savePlatformSettings(patch: Partial<PlatformSettings>): Platform
   fs.writeFileSync(settingsPath(), JSON.stringify(next, null, 2));
   cached = next;
   applyPlatformEnv(next);
+  applyOpenShellServiceEnv(next);
   return next;
 }
 
 export function ensurePlatformEnv(): void {
-  applyPlatformEnv(getPlatformSettings());
+  const settings = getPlatformSettings();
+  applyPlatformEnv(settings);
+  applyOpenShellServiceEnv(settings);
+}
+
+async function probeAap(): Promise<PlatformStatus["aap"]> {
+  const configured = isAapConfigured();
+  if (!configured) {
+    return { configured: false, connected: false, error: "Not configured", jobTemplates: [], recentJobs: [] };
+  }
+  const ping = await pingAap();
+  if (!ping.ok) {
+    return { configured: true, connected: false, error: ping.error, jobTemplates: [], recentJobs: [] };
+  }
+  try {
+    const [jobTemplates, recentJobs] = await Promise.all([listJobTemplates(), listRecentJobs(12)]);
+    return { configured: true, connected: true, jobTemplates, recentJobs };
+  } catch (err) {
+    return {
+      configured: true,
+      connected: false,
+      error: err instanceof Error ? err.message : String(err),
+      jobTemplates: [],
+      recentJobs: [],
+    };
+  }
+}
+
+async function probeOpenshift(): Promise<PlatformStatus["openshift"]> {
+  const configured = isOpenshiftConfigured();
+  if (!configured) {
+    return { configured: false, connected: false, error: "Not configured", jobs: [] };
+  }
+  const ping = await pingOpenshift();
+  if (!ping.ok) {
+    return { configured: true, connected: false, error: ping.error, jobs: [] };
+  }
+  try {
+    return { configured: true, connected: true, jobs: await listAgentJobs() };
+  } catch (err) {
+    return {
+      configured: true,
+      connected: false,
+      error: err instanceof Error ? err.message : String(err),
+      jobs: [],
+    };
+  }
+}
+
+async function probeOpenshell(): Promise<PlatformStatus["openshellService"]> {
+  const configured = isOpenShellServiceConfigured();
+  if (!configured) {
+    return { configured: false, connected: false, error: "Not configured" };
+  }
+  const ping = await pingOpenShellService();
+  return { configured: true, connected: ping.ok, error: ping.ok ? undefined : ping.error };
 }
 
 export async function getPlatformStatus(): Promise<PlatformStatus> {
   ensurePlatformEnv();
+  const [aap, openshift, openshellService] = await Promise.all([
+    probeAap(),
+    probeOpenshift(),
+    probeOpenshell(),
+  ]);
+  return { settings: getPlatformSettings(), aap, openshift, openshellService };
+}
+
+export type PlatformTestTarget = "aap" | "openshift";
+
+export async function testPlatformTarget(target: PlatformTestTarget): Promise<{
+  settings: PlatformStatus["settings"];
+  aap?: PlatformStatus["aap"];
+  openshift?: PlatformStatus["openshift"];
+}> {
+  ensurePlatformEnv();
   const settings = getPlatformSettings();
-
-  const aapPing = isAapConfigured() ? await pingAap() : { ok: false, error: "Not configured" };
-  const ocpPing = isOpenshiftConfigured()
-    ? await pingOpenshift()
-    : { ok: false, error: "Not configured" };
-
-  let jobTemplates: PlatformStatus["aap"]["jobTemplates"] = [];
-  let recentJobs: PlatformStatus["aap"]["recentJobs"] = [];
-  if (aapPing.ok) {
-    try {
-      jobTemplates = await listJobTemplates();
-      recentJobs = await listRecentJobs(12);
-    } catch (err) {
-      return {
-        settings,
-        aap: {
-          configured: isAapConfigured(),
-          connected: false,
-          error: err instanceof Error ? err.message : String(err),
-          jobTemplates: [],
-          recentJobs: [],
-        },
-        openshift: {
-          configured: isOpenshiftConfigured(),
-          connected: ocpPing.ok,
-          error: ocpPing.error,
-          jobs: [],
-        },
-      };
-    }
-  }
-
-  let jobs: PlatformStatus["openshift"]["jobs"] = [];
-  if (ocpPing.ok) {
-    try {
-      jobs = await listAgentJobs();
-    } catch (err) {
-      return {
-        settings,
-        aap: {
-          configured: isAapConfigured(),
-          connected: aapPing.ok,
-          error: aapPing.error,
-          jobTemplates,
-          recentJobs,
-        },
-        openshift: {
-          configured: isOpenshiftConfigured(),
-          connected: false,
-          error: err instanceof Error ? err.message : String(err),
-          jobs: [],
-        },
-      };
-    }
-  }
-
-  return {
-    settings,
-    aap: {
-      configured: isAapConfigured(),
-      connected: aapPing.ok,
-      error: aapPing.ok ? undefined : aapPing.error,
-      jobTemplates,
-      recentJobs,
-    },
-    openshift: {
-      configured: isOpenshiftConfigured(),
-      connected: ocpPing.ok,
-      error: ocpPing.ok ? undefined : ocpPing.error,
-      jobs,
-    },
-  };
+  if (target === "aap") return { settings, aap: await probeAap() };
+  return { settings, openshift: await probeOpenshift() };
 }

@@ -2,9 +2,11 @@ import type { OpenshiftJobSummary } from "@agentstore/shared";
 import {
   isOpenshiftConfigured,
   openshiftApiUrl,
+  openshiftInsecureTls,
   openshiftNamespace,
   openshiftToken,
 } from "./config";
+import { dispatcherFor } from "./tls";
 
 async function ocpFetch(path: string, init: RequestInit = {}): Promise<Response> {
   const base = openshiftApiUrl();
@@ -18,12 +20,22 @@ async function ocpFetch(path: string, init: RequestInit = {}): Promise<Response>
   if (init.body && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
   }
-  return fetch(`${base}${path}`, { ...init, headers });
+  const dispatcher = dispatcherFor(openshiftInsecureTls());
+  return fetch(`${base}${path}`, { ...init, headers, ...(dispatcher ? { dispatcher } : {}) } as RequestInit);
 }
 
 export async function pingOpenshift(): Promise<{ ok: boolean; error?: string }> {
   if (!isOpenshiftConfigured()) {
     return { ok: false, error: "OpenShift API URL or token is missing" };
+  }
+  const base = openshiftApiUrl();
+  if (/console-openshift-console/.test(base)) {
+    return {
+      ok: false,
+      error:
+        `"${base}" looks like the web console URL, not the API server. Use the API server URL instead ` +
+        `(usually https://api.<cluster-domain>:6443 — drop "console-openshift-console." and "apps.", add ":6443").`,
+    };
   }
   try {
     const ns = openshiftNamespace();
@@ -32,7 +44,17 @@ export async function pingOpenshift(): Promise<{ ok: boolean; error?: string }> 
     if (!response.ok) return { ok: false, error: `OpenShift API returned ${response.status}` };
     return { ok: true };
   } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    const message = err instanceof Error ? err.message : String(err);
+    const cause = err instanceof Error && err.cause instanceof Error ? err.cause.message : "";
+    if (/self.signed|self signed|certificate/i.test(`${message} ${cause}`)) {
+      return {
+        ok: false,
+        error:
+          "TLS certificate rejected — the kube-apiserver's cert is self-signed on many dev/workshop clusters. " +
+          "Check \"Allow self-signed certificate\" below if you trust this cluster.",
+      };
+    }
+    return { ok: false, error: cause ? `${message}: ${cause}` : message };
   }
 }
 

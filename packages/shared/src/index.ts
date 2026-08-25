@@ -134,6 +134,34 @@ export interface EngineStatus {
   provisioningStep?: string;
 }
 
+/** Model/credential intent resolved by the console (drafting.ts's
+ * providerFor()) and forwarded, as plain data, to the Agent Sandbox
+ * Service's `POST /sessions` — the service is the only thing that knows
+ * how to turn this into an agent-specific config file (e.g. opencode.json). */
+export interface OpenShellModelConfig {
+  kind: ProviderKind;
+  defaultModel?: string;
+  /** Only meaningful for openai-compatible/gemini; must already be
+   * reachable from inside the OpenShift cluster (see the topology caveat
+   * in the plan — no localhost rewriting happens anywhere in this path). */
+  baseUrl?: string;
+  apiKey?: string;
+}
+
+/** A resolved MCP server the console already knows is enabled for this
+ * listing (mcp.ts's listEnabledToolsFor()), reduced to what the sandboxed
+ * agent itself needs to connect directly — only remote transports
+ * (streamable-http/sse) are usable here; stdio servers run as a local
+ * process on the console host and are not reachable from a cluster-hosted
+ * sandbox, so they are filtered out before this is populated. */
+export interface OpenShellMcpServerConfig {
+  id: string;
+  name: string;
+  url: string;
+  transport: "streamable-http" | "sse";
+  authToken?: string;
+}
+
 export interface TaskSpec {
   taskId: string;
   listingId: string;
@@ -141,7 +169,12 @@ export interface TaskSpec {
   mode: AgentMode;
   target?: TaskTarget;
   gitUrl?: string;
+  /** GIT_PAT from the vault, forwarded so the Agent Sandbox Service can
+   * clone inside the sandbox — the console never clones anything itself. */
+  gitToken?: string;
   openshellAgent?: string;
+  openshellModel?: OpenShellModelConfig;
+  openshellMcpServers?: OpenShellMcpServerConfig[];
   aapJobTemplateId?: number;
 }
 
@@ -177,8 +210,15 @@ export interface Task {
     openshiftConsoleUrl?: string;
     namespace?: string;
     provisioningStep?: string;
+    /** Set from EngineStatus.interactive by orchestrator.ts's refresh();
+     * tells the task page which terminal component to render. */
+    interactive?: {
+      kind: "simulated" | "openshell";
+    };
   };
   approvalDecision?: "approved" | "rejected";
+  decidedBy?: Role;
+  cancelledBy?: Role;
   createdAt: string;
   updatedAt: string;
 }
@@ -206,8 +246,8 @@ export type ListingUpdate = Partial<
 export interface EngineSettings {
   /** When true, all tasks run simulated even if AAP or OpenShell is configured. */
   forceSimulated: boolean;
-  /** Whether OPENSHELL_GATEWAY_URL is set in this environment. Read-only. */
-  gatewayConfigured: boolean;
+  /** Whether the Agent Sandbox Service URL + token are configured. Read-only. */
+  openshellServiceConfigured: boolean;
   /** Whether an AAP controller URL and token are configured. Read-only. */
   aapConfigured: boolean;
   /** Whether an OpenShift API URL and token are configured. Read-only. */
@@ -218,9 +258,21 @@ export interface PlatformSettings {
   aapControllerUrl: string;
   aapJobTemplateId: number | "";
   aapConsoleUrl: string;
+  /** Skip TLS certificate verification for the AAP controller — needed for
+   * dev/workshop AAP instances behind a self-signed cert. Never enable this
+   * against a real production controller. */
+  aapInsecureTls: boolean;
   openshiftApiUrl: string;
   openshiftNamespace: string;
   openshiftConsoleUrl: string;
+  /** Skip TLS certificate verification for the OpenShift API server — the
+   * kube-apiserver's own cert (api.<cluster>:6443) is commonly self-signed
+   * even when the cluster's Route/console wildcard cert is real (e.g.
+   * Let's Encrypt), which is exactly the case on most workshop clusters. */
+  openshiftInsecureTls: boolean;
+  /** Agent Sandbox Service's externally-reachable Route base URL — see
+   * packages/engine-openshell. Token lives in the vault (OPENSHELL_SERVICE_TOKEN). */
+  openshellServiceUrl: string;
 }
 
 export interface AapJobTemplate {
@@ -263,6 +315,9 @@ export interface PlatformStatus {
   openshift: PlatformConnectionStatus & {
     jobs: OpenshiftJobSummary[];
   };
+  /** Agent Sandbox Service reachability (GET /health), independent of
+   * whether any listing currently uses it. */
+  openshellService: PlatformConnectionStatus;
 }
 
 export type Role = "user" | "admin";
@@ -287,19 +342,19 @@ export interface SecretSummary extends SecretSlot {
 
 export const SECRET_SLOTS: SecretSlot[] = [
   {
-    key: "OPENSHELL_GATEWAY_TOKEN",
-    label: "OpenShell gateway token",
+    key: "OPENSHELL_SERVICE_TOKEN",
+    label: "Agent Sandbox Service token",
     description:
-      "Auth token forwarded to the openshell CLI when provisioning sandboxes.",
-    usedBy: "engine-openshell adapter",
+      "Bearer token the console uses to call the Agent Sandbox Service's REST API (create/get/delete session, mint terminal tokens). Separate from that service's own openshell gateway credentials, which it manages itself.",
+    usedBy: "engine-openshell adapter (REST client)",
     group: "tooling",
   },
   {
     key: "GIT_PAT",
     label: "Git personal access token",
     description:
-      "Used to clone the repo when a Collaborative task provides a git URL.",
-    usedBy: "engine-openshell adapter (git clone)",
+      "Used to clone the repo when a Collaborative task provides a git URL. Forwarded to the Agent Sandbox Service, which performs the clone inside the sandbox — the console never clones anything itself.",
+    usedBy: "engine-openshell adapter (forwarded for git clone)",
     group: "tooling",
   },
   {

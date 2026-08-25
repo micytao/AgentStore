@@ -1,0 +1,40 @@
+# Agent Sandbox Service — owns all OpenShell CLI/pty mechanics in-cluster.
+# The `openshell` CLI itself is a binary dependency baked into this image
+# (same pattern as ansible/agent-runner/Containerfile), not an npm package.
+FROM registry.access.redhat.com/ubi9/nodejs-22:latest AS build
+USER 0
+WORKDIR /app
+# node-pty has a native component; node-gyp needs a compiler toolchain.
+RUN dnf install -y python3 make gcc-c++ && dnf clean all
+COPY package.json package-lock.json* ./
+COPY apps/agent-sandbox-service ./apps/agent-sandbox-service
+COPY packages ./packages
+RUN npm install
+RUN npm run build --workspace=@agentstore/agent-sandbox-service
+
+FROM registry.access.redhat.com/ubi9/nodejs-22:latest
+USER 0
+WORKDIR /app
+
+# --- Install the openshell CLI --------------------------------------------
+# Replace this with your org's real install method once confirmed during
+# the Stage B1 manual spike (binary release, go install, etc.) — NVIDIA's
+# published quickstart is the source for whatever command belongs here.
+# ARG OPENSHELL_CLI_URL=https://example.invalid/openshell-cli-linux-amd64
+# RUN curl -fsSL "$OPENSHELL_CLI_URL" -o /usr/local/bin/openshell && chmod +x /usr/local/bin/openshell
+
+COPY --from=build /app/node_modules ./node_modules
+COPY --from=build /app/apps/agent-sandbox-service/dist ./apps/agent-sandbox-service/dist
+COPY --from=build /app/apps/agent-sandbox-service/package.json ./apps/agent-sandbox-service/package.json
+COPY --from=build /app/packages ./packages
+
+ENV NODE_ENV=production
+ENV PORT=8090
+EXPOSE 8090
+USER 1001
+
+# The openshell CLI registers its own identity into $HOME/.config/openshell
+# at first run (Stage B1: non-interactive `openshell gateway add`, backed by
+# a mounted Secret) — done by an init step in the Deployment, not baked
+# into this image, so the credential itself is never part of the image.
+CMD ["node", "apps/agent-sandbox-service/dist/server.js"]

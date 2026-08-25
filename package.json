@@ -3,12 +3,14 @@
   "version": "0.1.0",
   "private": true,
   "workspaces": [
-    "apps/web",
+    "apps/*",
     "packages/*"
   ],
   "scripts": {
     "dev": "npm run dev --workspace=@agentstore/web",
     "build": "npm run build --workspace=@agentstore/web",
-    "start": "npm run start --workspace=@agentstore/web"
+    "start": "npm run start --workspace=@agentstore/web",
+    "sandbox-service:build": "npm run build --workspace=@agentstore/agent-sandbox-service",
+    "sandbox-service:start": "npm run start --workspace=@agentstore/agent-sandbox-service"
   }
 }

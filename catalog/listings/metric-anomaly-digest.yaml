@@ -1,0 +1,14 @@
+id: metric-anomaly-digest
+name: Metric anomaly digest
+department: data
+category: Anomaly detection
+description: Scans this week's key metrics for unusual shifts and drafts a digest explaining what moved and why. You review it before it's shared.
+icon: chart
+engineType: hosted-agent-api
+supportedModes:
+  - do-this-for-me
+riskTier: low
+reviewStatus: published
+pricing:
+  unit: per-task
+  amount: 0.8

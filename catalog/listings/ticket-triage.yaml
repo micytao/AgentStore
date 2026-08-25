@@ -1,0 +1,14 @@
+id: ticket-triage
+name: Ticket triage & routing
+department: support
+category: Ticket operations
+description: Scans the incoming support queue and drafts a triage pass — priority, category, and suggested owner for each ticket. You approve before anything is re-routed.
+icon: comments
+engineType: hosted-agent-api
+supportedModes:
+  - do-this-for-me
+riskTier: low
+reviewStatus: published
+pricing:
+  unit: per-task
+  amount: 0.8
