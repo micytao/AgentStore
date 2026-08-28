@@ -75,7 +75,7 @@ export function rejectTask(id: string): Promise<Task> {
 }
 
 export interface InteractiveEndpoint {
-  kind: "simulated" | "openshell";
+  kind: "simulated" | "openshell" | "generic-chat";
   url?: string;
 }
 
@@ -112,6 +112,19 @@ export function deleteListingAdmin(id: string): Promise<void> {
   return fetch(`/api/admin/listings/${id}`, { method: "DELETE" })
     .then((r) => parse<{ ok: boolean }>(r))
     .then(() => undefined);
+}
+
+/** Starts (or re-starts) the "Deploy to OpenShift" AAP job for a
+ * generic-chat listing. */
+export function deployListingAdmin(id: string): Promise<Listing> {
+  return fetch(`/api/admin/listings/${id}/deploy`, { method: "POST" }).then((r) =>
+    parse<Listing>(r)
+  );
+}
+
+/** Polls an in-flight deploy for progress; safe to call on an interval. */
+export function fetchDeploymentStatus(id: string): Promise<Listing> {
+  return fetch(`/api/admin/listings/${id}/deploy`).then((r) => parse<Listing>(r));
 }
 
 export function fetchEngineSettings(): Promise<EngineSettings> {

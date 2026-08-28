@@ -108,11 +108,12 @@ function openshellModelFor(listing: Listing): OpenShellModelConfig | undefined {
 }
 
 /** Resolves the listing's enabled MCP servers down to the subset a
- * sandboxed agent can actually reach directly: remote transports only
+ * cluster-hosted agent can actually reach directly: remote transports only
  * (streamable-http/sse) with a URL. stdio servers spawn a process on the
  * console host and are not reachable from a cluster-hosted sandbox, so
- * they're silently dropped here rather than forwarded. */
-function openshellMcpServersFor(listing: Listing): OpenShellMcpServerConfig[] {
+ * they're silently dropped here rather than forwarded. Shared by
+ * specFrom() (OpenShell) and deployments.ts (generic-chat deploy-once). */
+export function mcpServersFor(listing: Listing): OpenShellMcpServerConfig[] {
   const bindings = listing.agentConfig?.mcpToolBindings;
   const serverIds = bindings && bindings.length > 0
     ? [...new Set(bindings.map((b) => b.serverId))]
@@ -150,7 +151,7 @@ function specFrom(task: Task) {
     gitToken: isOpenShell && task.gitUrl ? getSecret("GIT_PAT") : undefined,
     openshellAgent: listing?.openshellAgent,
     openshellModel: isOpenShell && listing ? openshellModelFor(listing) : undefined,
-    openshellMcpServers: isOpenShell && listing ? openshellMcpServersFor(listing) : undefined,
+    openshellMcpServers: isOpenShell && listing ? mcpServersFor(listing) : undefined,
     aapJobTemplateId: listing?.agentConfig?.aapJobTemplateId,
   };
 }
@@ -243,6 +244,28 @@ export async function createTask(input: {
   store().tasks.set(id, task);
   persistTasks();
 
+  // generic-chat listings are provisioned once (see deployments.ts), not
+  // per-Task: there's nothing for an EngineAdapter to provision here, so a
+  // Task against one is just a lightweight audit-trail entry pointing at
+  // the already-running deployment's link (or a clear error if an admin
+  // hasn't deployed it yet).
+  if (listing.runtime === "generic-chat") {
+    if (listing.deployment?.status === "running" && listing.deployment.routeUrl) {
+      task.status.phase = "Completed";
+      task.status.backend = "generic-chat";
+      task.status.live = true;
+      task.status.interactive = { kind: "generic-chat" };
+      task.status.outputSummary = `Agent is running at ${listing.deployment.routeUrl}`;
+    } else {
+      task.status.phase = "Failed";
+      task.status.error = "This agent has not been deployed yet. Ask an admin to deploy it from the Admin console.";
+    }
+    task.updatedAt = now();
+    store().tasks.set(id, task);
+    persistTasks();
+    return task;
+  }
+
   try {
     const handle = await adapterFor(listing).provision(specFrom(task));
     task.status.engineRef = handle;
@@ -328,11 +351,18 @@ export async function decideTask(
  * minted for this specific request. */
 export async function getInteractiveEndpoint(
   id: string
-): Promise<{ kind: "simulated" | "openshell"; url?: string } | null> {
+): Promise<{ kind: "simulated" | "openshell" | "generic-chat"; url?: string } | null> {
   const task = await getTask(id);
-  if (!task || !task.status.engineRef) return null;
+  if (!task) return null;
   const listing = getListing(task.listingRef);
   if (!listing) return null;
+  if (listing.runtime === "generic-chat") {
+    if (listing.deployment?.status === "running" && listing.deployment.routeUrl) {
+      return { kind: "generic-chat", url: listing.deployment.routeUrl };
+    }
+    return null;
+  }
+  if (!task.status.engineRef) return null;
   return adapterFor(listing).exposeInteractiveEndpoint(task.status.engineRef);
 }
 

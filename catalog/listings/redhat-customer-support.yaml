@@ -1,0 +1,35 @@
+id: redhat-customer-support
+name: Red Hat Customer Support
+department: support
+category: Customer support
+description: Chat agent for CVE lookups, product lifecycle questions, and support-severity triage, built on Red Hat's real `rh-basic` Agentic Skill Pack. Deploy once, then share the link with your support team.
+icon: headset
+engineType: hosted-agent-api
+runtime: generic-chat
+supportedModes:
+  - work-with-me
+riskTier: low
+reviewStatus: draft
+pricing:
+  unit: per-hour
+  amount: 0.4
+agentConfig:
+  skillIds:
+    - red-hat-cve-explainer
+    - red-hat-diagnostics
+    - red-hat-product-lifecycle
+    - red-hat-support-severity
+  # No-op until an admin connects an MCP server with this exact id (Admin →
+  # MCP servers → add `red-hat-security`, https://security-mcp.api.redhat.com/mcp,
+  # streamable-http) — see red-hat-security-mcp-setup's SKILL.md for the
+  # full setup flow. Until then these bindings are silently skipped and the
+  # skills above fall back to WebFetch, per their own instructions.
+  mcpToolBindings:
+    - serverId: red-hat-security
+      tool: get_cve_by_id
+    - serverId: red-hat-security
+      tool: list_advisories_by_cve
+    - serverId: red-hat-security
+      tool: get_errata_by_id
+    - serverId: red-hat-security
+      tool: list_advisory_packages

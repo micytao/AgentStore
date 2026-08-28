@@ -1,0 +1,86 @@
+id: redhat-sre-engineer
+name: Red Hat SRE Engineer
+department: engineering
+category: Site reliability
+description: Chat agent for CVE impact analysis, remediation playbook generation, and AAP-driven patching, built on Red Hat's real `rh-sre` Agentic Skill Pack (13 skills). Deploy once, then share the link with your SRE/ops team.
+icon: shield
+engineType: hosted-agent-api
+runtime: generic-chat
+supportedModes:
+  - work-with-me
+riskTier: medium
+reviewStatus: draft
+pricing:
+  unit: per-hour
+  amount: 0.6
+agentConfig:
+  skillIds:
+    - cve-impact
+    - cve-validation
+    - fleet-inventory
+    - job-template-creator
+    - job-template-remediation-validator
+    - mcp-aap-validator
+    - mcp-lightspeed-validator
+    - playbook-executor
+    - playbook-generator
+    - remediation-verifier
+    - remediation
+    - rh-sre-execution-summary
+    - system-context
+  # No-op until an admin connects MCP servers with these exact ids — the
+  # rh-sre pack's own SKILL.md `allowed-tools` frontmatter (see the
+  # matching entries under catalog/skills/rh-sre/*.json) calls for
+  # `lightspeed-mcp` (CVE/fleet data + remediation playbook generation,
+  # tool names carried over verbatim including their vulnerability__/
+  # inventory__/remediations__ namespacing) and a separate AAP MCP server
+  # (job template + playbook execution, unnamespaced job_templates_*/
+  # jobs_* tools) — a different pairing than the simpler single
+  # `red-hat-security` server the rh-basic pack uses.
+  mcpToolBindings:
+    - serverId: lightspeed-mcp
+      tool: vulnerability__get_cves
+    - serverId: lightspeed-mcp
+      tool: vulnerability__get_cve
+    - serverId: lightspeed-mcp
+      tool: vulnerability__get_cve_systems
+    - serverId: lightspeed-mcp
+      tool: vulnerability__get_system_cves
+    - serverId: lightspeed-mcp
+      tool: vulnerability__load_cve_dashboard
+    - serverId: lightspeed-mcp
+      tool: inventory__find_host_by_name
+    - serverId: lightspeed-mcp
+      tool: inventory__get_host_details
+    - serverId: lightspeed-mcp
+      tool: inventory__list_hosts
+    - serverId: lightspeed-mcp
+      tool: inventory__get_host_system_profile
+    - serverId: lightspeed-mcp
+      tool: inventory__load_inventory_dashboard
+    - serverId: lightspeed-mcp
+      tool: remediations__create_vuln_playbook
+    - serverId: lightspeed-mcp
+      tool: get_mcp_version
+    - serverId: aap-mcp
+      tool: job_templates_list
+    - serverId: aap-mcp
+      tool: job_templates_retrieve
+    - serverId: aap-mcp
+      tool: job_templates_launch_retrieve
+    - serverId: aap-mcp
+      tool: projects_list
+    - serverId: aap-mcp
+      tool: inventories_list
+    - serverId: aap-mcp
+      tool: jobs_retrieve
+    - serverId: aap-mcp
+      tool: jobs_stdout_retrieve
+    - serverId: aap-mcp
+      tool: jobs_job_events_list
+    - serverId: aap-mcp
+      tool: jobs_job_host_summaries_list
+    - serverId: aap-mcp
+      tool: jobs_relaunch_retrieve
+    - serverId: aap-mcp
+      tool: hosts_list

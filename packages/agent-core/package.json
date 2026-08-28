@@ -1,0 +1,11 @@
+{
+  "name": "@agentstore/agent-core",
+  "version": "0.1.0",
+  "private": true,
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "dependencies": {
+    "@agentstore/shared": "*",
+    "@modelcontextprotocol/sdk": "^1.30.0"
+  }
+}

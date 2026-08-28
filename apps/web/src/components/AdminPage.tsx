@@ -1,13 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import type { ComponentType } from "react";
+import { useEffect, useMemo, useState } from "react";
+import type { ComponentType, ReactNode } from "react";
 import {
   BookIcon,
   BrainIcon,
+  ChevronRightIcon,
   CloudIcon,
   NetworkIcon,
   PlugIcon,
+  SearchIcon,
   TasksIcon,
   TerminalIcon,
   ThLargeIcon,
@@ -17,6 +19,7 @@ import {
   departmentLabel,
   PROVIDER_KINDS,
   type AgentMode,
+  type AgentRuntime,
   type DepartmentId,
   type EngineType,
   type Listing,
@@ -34,6 +37,7 @@ import {
   type Skill,
 } from "@agentstore/shared";
 import { ListingCard } from "@/components/ListingCard";
+import { Markdown } from "@/components/Markdown";
 import { PhaseLabel } from "@/components/PhaseLabel";
 import { PlatformPanel } from "@/components/PlatformPanel";
 import { SecretField } from "@/components/SecretField";
@@ -45,7 +49,9 @@ import {
   deleteMcpServerConfig,
   deleteProviderConfig,
   deleteSkillConfig,
+  deployListingAdmin,
   disconnectMcpServerConfig,
+  fetchDeploymentStatus,
   fetchEngineSettings,
   fetchListings,
   fetchMcpServers,
@@ -93,6 +99,82 @@ const REVIEW_STATUSES: ReviewStatus[] = [
   "published",
   "deprecated",
 ];
+
+// Human-readable labels for the Red Hat Agentic Skill Pack ids imported by
+// scripts/import-redhat-skills.ts — falls back to the raw pack id (or
+// "Custom skills" for skills authored in this app) for anything unmapped.
+const PACK_LABELS: Record<string, string> = {
+  "rh-basic": "Red Hat Basics",
+  "rh-sre": "Red Hat SRE",
+  "rh-developer": "Red Hat Developer",
+  "rh-virt": "Red Hat Virtualization",
+  "ocp-admin": "OpenShift Admin",
+  "rh-ai-engineer": "Red Hat AI Engineer",
+  "rh-automation": "Red Hat Automation",
+};
+
+function packLabel(pack: string): string {
+  if (pack === "custom") return "Custom skills";
+  return PACK_LABELS[pack] ?? pack;
+}
+
+interface SkillGroup {
+  key: string;
+  label: string;
+  skills: Skill[];
+}
+
+/** Groups skills by `pack` (skills with no pack, e.g. user-authored ones,
+ * fall into a "custom" group), sorted alphabetically by label with
+ * "custom" always last so home-grown skills don't get buried among the
+ * Red Hat packs. */
+function groupSkillsByPack(skills: Skill[]): SkillGroup[] {
+  const byKey = new Map<string, Skill[]>();
+  for (const skill of skills) {
+    const key = skill.pack ?? "custom";
+    const bucket = byKey.get(key);
+    if (bucket) bucket.push(skill);
+    else byKey.set(key, [skill]);
+  }
+  return [...byKey.entries()]
+    .map(([key, groupSkills]) => ({ key, label: packLabel(key), skills: groupSkills }))
+    .sort((a, b) => {
+      if (a.key === "custom") return 1;
+      if (b.key === "custom") return -1;
+      return a.label.localeCompare(b.label);
+    });
+}
+
+/** Collapsible section used to group skills by pack in the skill picker and
+ * the skills library — purely presentational, open state is controlled by
+ * the parent so it can seed/force-open groups based on search or existing
+ * selections. */
+function CollapsibleGroup({
+  label,
+  badge,
+  open,
+  onToggle,
+  children,
+}: {
+  label: string;
+  badge?: string;
+  open: boolean;
+  onToggle: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <div className="store-skill-group">
+      <button type="button" className="store-skill-group-header" onClick={onToggle} aria-expanded={open}>
+        <span className={`store-skill-group-chevron${open ? " is-open" : ""}`} aria-hidden="true">
+          <ChevronRightIcon />
+        </span>
+        <span className="store-skill-group-label">{label}</span>
+        {badge && <span className="store-pill is-muted">{badge}</span>}
+      </button>
+      {open && <div className="store-skill-group-body">{children}</div>}
+    </div>
+  );
+}
 
 export function AdminPage() {
   const { isAdmin, loading, setRole } = useRole();
@@ -389,6 +471,102 @@ function ListingRow({
   );
 }
 
+/** Search-filterable, collapsible-by-pack replacement for a flat skill
+ * checkbox list — shared by AgentConfigPanel and OnboardAgentWizard step 3,
+ * which both just need "which skill ids are selected" in/out. */
+function SkillPicker({
+  skills,
+  selectedIds,
+  onToggle,
+}: {
+  skills: Skill[];
+  selectedIds: string[];
+  onToggle: (id: string) => void;
+}) {
+  const [query, setQuery] = useState("");
+  const groups = useMemo(() => groupSkillsByPack(skills), [skills]);
+
+  // Seeded once so a listing being edited shows its already-selected
+  // skills' groups open immediately, without fighting the user's manual
+  // open/closed choices on every re-render.
+  const [openGroups, setOpenGroups] = useState<Set<string>>(() => {
+    const initial = new Set<string>();
+    for (const group of groups) {
+      if (group.skills.some((s) => selectedIds.includes(s.id))) initial.add(group.key);
+    }
+    return initial;
+  });
+
+  const trimmedQuery = query.trim().toLowerCase();
+  const filteredGroups = groups
+    .map((group) => ({
+      ...group,
+      skills: trimmedQuery
+        ? group.skills.filter(
+            (s) =>
+              s.name.toLowerCase().includes(trimmedQuery) ||
+              s.description.toLowerCase().includes(trimmedQuery)
+          )
+        : group.skills,
+    }))
+    .filter((group) => group.skills.length > 0);
+
+  function toggleGroup(key: string) {
+    setOpenGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
+
+  return (
+    <div className="store-skill-picker">
+      <div className="store-skill-search">
+        <SearchIcon aria-hidden="true" />
+        <input
+          type="text"
+          placeholder="Search skills by name or description…"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+        />
+      </div>
+
+      {filteredGroups.length === 0 && (
+        <p className="store-resource-empty">No skills match &quot;{query}&quot;.</p>
+      )}
+
+      {filteredGroups.map((group) => {
+        const selectedCount = group.skills.filter((s) => selectedIds.includes(s.id)).length;
+        const isOpen = trimmedQuery.length > 0 || openGroups.has(group.key);
+        return (
+          <CollapsibleGroup
+            key={group.key}
+            label={group.label}
+            badge={selectedCount > 0 ? `${selectedCount} selected` : `${group.skills.length}`}
+            open={isOpen}
+            onToggle={() => toggleGroup(group.key)}
+          >
+            {group.skills.map((skill) => (
+              <label key={skill.id} className="store-skill-row">
+                <input
+                  type="checkbox"
+                  checked={selectedIds.includes(skill.id)}
+                  onChange={() => onToggle(skill.id)}
+                />
+                <span className="store-skill-row-text">
+                  <strong>{skill.name}</strong>
+                  {skill.description && <span>{skill.description}</span>}
+                </span>
+              </label>
+            ))}
+          </CollapsibleGroup>
+        );
+      })}
+    </div>
+  );
+}
+
 function AgentConfigPanel({
   listing,
   providers,
@@ -461,6 +639,13 @@ function AgentConfigPanel({
         and engine override to this agent. Leave provider unset to keep using
         the global active provider. Leave the AAP template unset to use the
         Platform default.
+        {listing.runtime === "generic-chat" && (
+          <>
+            {" "}For this generic-chat listing, the AAP job template must
+            launch <code>provision-generic-agent.yml</code>, not the one-shot
+            playbook.
+          </>
+        )}
       </p>
 
       <div className="store-resource-input-row">
@@ -543,16 +728,7 @@ function AgentConfigPanel({
         {skills.length === 0 ? (
           <p className="store-resource-empty">No skills authored yet. Add one in the Skills tab.</p>
         ) : (
-          skills.map((skill) => (
-            <label key={skill.id} className="store-resource-tool">
-              <span>{skill.name}</span>
-              <input
-                type="checkbox"
-                checked={skillIds.includes(skill.id)}
-                onChange={() => toggleSkill(skill.id)}
-              />
-            </label>
-          ))
+          <SkillPicker skills={skills} selectedIds={skillIds} onToggle={toggleSkill} />
         )}
       </div>
 
@@ -566,6 +742,112 @@ function AgentConfigPanel({
           {saving ? "Saving…" : saved ? "Saved" : "Save agent config"}
         </button>
       </div>
+
+      {listing.runtime === "generic-chat" && <DeploySection listing={listing} onChange={onChange} />}
+    </div>
+  );
+}
+
+/** "Deploy to OpenShift" action for a generic-chat listing: launches (or
+ * re-launches) provision-generic-agent.yml via AAP and polls
+ * GET .../deploy while in flight, same inline-progress idea
+ * TaskDetailPage.tsx uses for Task provisioning — but here it's a one-time,
+ * per-listing action instead of once per Task. */
+function DeploySection({ listing, onChange }: { listing: Listing; onChange: () => void }) {
+  const [deployment, setDeployment] = useState(listing.deployment);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setDeployment(listing.deployment);
+  }, [listing.deployment]);
+
+  useEffect(() => {
+    if (deployment?.status !== "deploying") return;
+    const timer = setInterval(() => {
+      fetchDeploymentStatus(listing.id)
+        .then((next) => {
+          setDeployment(next.deployment);
+          if (next.deployment?.status !== "deploying") onChange();
+        })
+        .catch((err: Error) => setError(err.message));
+    }, 4000);
+    return () => clearInterval(timer);
+  }, [deployment?.status, listing.id, onChange]);
+
+  async function deploy() {
+    setBusy(true);
+    setError(null);
+    try {
+      const updated = await deployListingAdmin(listing.id);
+      setDeployment(updated.deployment);
+      onChange();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const status = deployment?.status ?? "not-deployed";
+  const statusTone = status === "running" ? "is-live" : status === "failed" ? "is-offline" : "is-muted";
+
+  return (
+    <div className="store-panel store-agent-config">
+      <h4 className="store-panel-title">Deploy to OpenShift</h4>
+      <p className="store-lede tight">
+        Generic-chat agents are provisioned once: AAP creates a persistent
+        Deployment + Route on OpenShift, and every user opens the same
+        running agent from its link — no per-launch provisioning.
+      </p>
+
+      {error && <p className="store-banner is-error">{error}</p>}
+      {deployment?.error && <p className="store-banner is-error">{deployment.error}</p>}
+
+      <div className="store-admin-table">
+        <div className="store-admin-row">
+          <div>
+            <strong>Status</strong>
+            <span>
+              {deployment?.updatedAt ? `Updated ${new Date(deployment.updatedAt).toLocaleString()}` : "Never deployed"}
+            </span>
+          </div>
+          <span className={`store-pill ${statusTone}`}>{status}</span>
+        </div>
+      </div>
+
+      <p className="store-lede tight">
+        {deployment?.aapJobUrl && (
+          <>
+            <a href={deployment.aapJobUrl} target="_blank" rel="noreferrer">
+              View AAP job →
+            </a>
+            {"  "}
+          </>
+        )}
+        {status === "running" && deployment?.routeUrl && (
+          <a href={deployment.routeUrl} target="_blank" rel="noreferrer">
+            Open agent →
+          </a>
+        )}
+      </p>
+
+      <div className="store-resource-actions">
+        <button
+          type="button"
+          className="store-btn-primary"
+          onClick={() => void deploy()}
+          disabled={busy || status === "deploying"}
+        >
+          {busy
+            ? "Starting…"
+            : status === "deploying"
+              ? "Deploying…"
+              : status === "running"
+                ? "Redeploy"
+                : "Deploy to OpenShift"}
+        </button>
+      </div>
     </div>
   );
 }
@@ -576,6 +858,8 @@ const ICON_OPTIONS: { id: string; label: string }[] = [
   { id: "shield", label: "Shield" },
   { id: "chart", label: "Chart" },
   { id: "money", label: "Money" },
+  { id: "headset", label: "Headset" },
+  { id: "server", label: "Server" },
 ];
 
 const WIZARD_STEPS = ["Basics", "Modes & engine", "Model & tools", "Skills", "Review & publish"];
@@ -603,7 +887,7 @@ function OnboardAgentWizard({
   const [pricingUnit, setPricingUnit] = useState<PricingUnit>("per-task");
   const [pricingAmount, setPricingAmount] = useState("0.80");
   const [supportedModes, setSupportedModes] = useState<AgentMode[]>(["do-this-for-me"]);
-  const [engineType, setEngineType] = useState<EngineType>("hosted-agent-api");
+  const [runtime, setRuntime] = useState<AgentRuntime>("generic-chat");
   const [openshellAgent, setOpenshellAgent] = useState("");
   const [engineOverride, setEngineOverride] = useState<"auto" | "simulated" | "live">("auto");
   const [providerId, setProviderId] = useState("");
@@ -613,6 +897,11 @@ function OnboardAgentWizard({
   const [err, setErr] = useState<string | null>(null);
 
   const connectedServers = mcpServers.filter((s) => s.connectionState === "connected");
+  // engineType is an adapter-internal detail derived from the Runtime
+  // choice — generic-chat listings are provisioned once via
+  // deployments.ts, not per-Task, so their engineType is effectively
+  // unused, but the field is still required on ListingCreateInput.
+  const engineType: EngineType = runtime === "openshell" ? "self-hosted-sandbox" : "hosted-agent-api";
 
   function toggleMode(mode: AgentMode) {
     setSupportedModes((prev) => (prev.includes(mode) ? prev.filter((m) => m !== mode) : [...prev, mode]));
@@ -636,8 +925,8 @@ function OnboardAgentWizard({
     }
     if (step === 1) {
       if (supportedModes.length === 0) return "Pick at least one mode";
-      if (engineType === "self-hosted-sandbox" && !openshellAgent.trim()) {
-        return "OpenShell agent identifier is required for self-hosted sandbox agents";
+      if (runtime === "openshell" && !openshellAgent.trim()) {
+        return "OpenShell agent identifier is required for the OpenShell runtime";
       }
     }
     return null;
@@ -672,7 +961,8 @@ function OnboardAgentWizard({
         supportedModes,
         riskTier,
         pricing: { unit: pricingUnit, amount: Number(pricingAmount) || 0 },
-        openshellAgent: engineType === "self-hosted-sandbox" ? openshellAgent.trim() : undefined,
+        runtime,
+        openshellAgent: runtime === "openshell" ? openshellAgent.trim() : undefined,
         agentConfig: {
           providerId: providerId || undefined,
           engineOverride,
@@ -697,6 +987,7 @@ function OnboardAgentWizard({
     description: description || "No description yet.",
     icon,
     engineType,
+    runtime,
     supportedModes: supportedModes.length > 0 ? supportedModes : ["do-this-for-me"],
     riskTier,
     reviewStatus: "draft",
@@ -806,11 +1097,11 @@ function OnboardAgentWizard({
             </label>
           </div>
           <div className="store-resource-input-row">
-            <select value={engineType} onChange={(e) => setEngineType(e.target.value as EngineType)}>
-              <option value="hosted-agent-api">Hosted agent API (AAP → OpenShift)</option>
-              <option value="self-hosted-sandbox">Self-hosted sandbox (OpenShell)</option>
+            <select value={runtime} onChange={(e) => setRuntime(e.target.value as AgentRuntime)}>
+              <option value="generic-chat">Generic chat agent (persistent Deployment + Route)</option>
+              <option value="openshell">OpenShell (interactive coding/engineering sandbox)</option>
             </select>
-            {engineType === "self-hosted-sandbox" && (
+            {runtime === "openshell" && (
               <input
                 placeholder="OpenShell agent identifier, e.g. claude"
                 value={openshellAgent}
@@ -826,6 +1117,11 @@ function OnboardAgentWizard({
               <option value="live">Force live (AAP + OpenShift)</option>
             </select>
           </div>
+          <p className="store-lede tight">
+            {runtime === "generic-chat"
+              ? "Provisioned once via AAP as a persistent OpenShift Deployment + Route. Every user opens the same running agent from its web link — pick this for chat/support/SRE personas."
+              : "Provisioned per-task as an OpenShell sandbox session — pick this for collaborative coding/engineering agents that need a live terminal."}
+          </p>
         </div>
       )}
 
@@ -874,19 +1170,7 @@ function OnboardAgentWizard({
               attach later.
             </p>
           ) : (
-            skills.map((skill) => (
-              <label key={skill.id} className="store-resource-tool">
-                <span>
-                  {skill.name}
-                  {skill.description ? ` — ${skill.description}` : ""}
-                </span>
-                <input
-                  type="checkbox"
-                  checked={skillIds.includes(skill.id)}
-                  onChange={() => toggleSkill(skill.id)}
-                />
-              </label>
-            ))
+            <SkillPicker skills={skills} selectedIds={skillIds} onToggle={toggleSkill} />
           )}
         </div>
       )}
@@ -1701,6 +1985,11 @@ function SkillsPanel() {
   const [skills, setSkills] = useState<Skill[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showAdd, setShowAdd] = useState(false);
+  const [query, setQuery] = useState("");
+  // Only the "custom" group (if any custom skills exist) starts open, every
+  // Red Hat pack starts collapsed — seeded once skills first load.
+  const [openGroups, setOpenGroups] = useState<Set<string>>(new Set());
+  const [seeded, setSeeded] = useState(false);
 
   function load() {
     fetchSkills()
@@ -1710,8 +1999,41 @@ function SkillsPanel() {
 
   useEffect(load, []);
 
+  useEffect(() => {
+    if (seeded || !skills) return;
+    setSeeded(true);
+    if (skills.some((s) => s.source === "custom")) {
+      setOpenGroups((prev) => new Set(prev).add("custom"));
+    }
+  }, [seeded, skills]);
+
   if (error) return <p className="store-empty">{error}</p>;
   if (!skills) return <div className="store-loading">Loading skills…</div>;
+
+  const groups = groupSkillsByPack(skills);
+
+  function toggleGroup(key: string) {
+    setOpenGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
+
+  const trimmedQuery = query.trim().toLowerCase();
+  const filteredGroups = groups
+    .map((group) => ({
+      ...group,
+      skills: trimmedQuery
+        ? group.skills.filter(
+            (s) =>
+              s.name.toLowerCase().includes(trimmedQuery) ||
+              s.description.toLowerCase().includes(trimmedQuery)
+          )
+        : group.skills,
+    }))
+    .filter((group) => group.skills.length > 0);
 
   return (
     <div className="store-admin-section">
@@ -1721,18 +2043,44 @@ function SkillsPanel() {
           Author reusable instruction bundles once, then attach one or more
           to any agent (from the Catalog tab or the onboarding wizard). A
           skill&apos;s instructions are merged into that agent&apos;s system
-          prompt when it drafts.
+          prompt via progressive disclosure — the model sees a short menu and
+          calls <code>load_skill</code> for the ones it needs. Red Hat pack
+          skills below are imported and read-only; author your own with
+          &quot;+ Add skill&quot;.
         </p>
 
-        {skills.length === 0 && (
-          <p className="store-resource-empty">No skills authored yet.</p>
+        <div className="store-skill-search">
+          <SearchIcon aria-hidden="true" />
+          <input
+            type="text"
+            placeholder={`Search ${skills.length} skills by name or description…`}
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+        </div>
+
+        {filteredGroups.length === 0 && (
+          <p className="store-resource-empty">No skills match &quot;{query}&quot;.</p>
         )}
 
-        <div className="store-resource-list">
-          {skills.map((skill) => (
-            <SkillRow key={skill.id} skill={skill} onChange={load} />
-          ))}
-        </div>
+        {filteredGroups.map((group) => {
+          const isOpen = trimmedQuery.length > 0 || openGroups.has(group.key);
+          return (
+            <CollapsibleGroup
+              key={group.key}
+              label={group.label}
+              badge={`${group.skills.length}`}
+              open={isOpen}
+              onToggle={() => toggleGroup(group.key)}
+            >
+              <div className="store-resource-list">
+                {group.skills.map((skill) => (
+                  <SkillRow key={skill.id} skill={skill} onChange={load} />
+                ))}
+              </div>
+            </CollapsibleGroup>
+          );
+        })}
 
         {showAdd ? (
           <AddSkillForm
@@ -1819,6 +2167,7 @@ function AddSkillForm({
 
 function SkillRow({ skill, onChange }: { skill: Skill; onChange: () => void }) {
   const [editing, setEditing] = useState(false);
+  const [showInstructions, setShowInstructions] = useState(false);
   const [name, setName] = useState(skill.name);
   const [description, setDescription] = useState(skill.description);
   const [instructions, setInstructions] = useState(skill.instructions);
@@ -1845,24 +2194,33 @@ function SkillRow({ skill, onChange }: { skill: Skill; onChange: () => void }) {
     }
   }
 
+  const isBuiltin = skill.source === "built-in";
+
   return (
     <div className="store-resource-card">
       <div className="store-resource-head">
         <div className="store-resource-title">
           <strong>{skill.name}</strong>
+          {skill.pack && <span className="store-pill is-muted">{skill.pack}</span>}
           {skill.description && <span>{skill.description}</span>}
         </div>
         <div className="store-resource-actions">
-          <button type="button" className="store-btn-ghost" onClick={() => setEditing((v) => !v)}>
-            {editing ? "Close" : "Edit"}
-          </button>
-          <button type="button" className="store-btn-ghost" onClick={remove} disabled={busy}>
-            Remove
-          </button>
+          {isBuiltin ? (
+            <span className="store-pill is-muted">Built-in (read-only)</span>
+          ) : (
+            <>
+              <button type="button" className="store-btn-ghost" onClick={() => setEditing((v) => !v)}>
+                {editing ? "Close" : "Edit"}
+              </button>
+              <button type="button" className="store-btn-ghost" onClick={remove} disabled={busy}>
+                Remove
+              </button>
+            </>
+          )}
         </div>
       </div>
 
-      {editing ? (
+      {!isBuiltin && editing ? (
         <>
           <div className="store-resource-input-row">
             <input value={name} onChange={(e) => setName(e.target.value)} />
@@ -1881,7 +2239,12 @@ function SkillRow({ skill, onChange }: { skill: Skill; onChange: () => void }) {
           </div>
         </>
       ) : (
-        <p className="store-resource-tool-desc">{skill.instructions}</p>
+        <>
+          <button type="button" className="store-btn-ghost" onClick={() => setShowInstructions((v) => !v)}>
+            {showInstructions ? "Hide instructions" : "Show instructions"}
+          </button>
+          {showInstructions && <Markdown>{skill.instructions}</Markdown>}
+        </>
       )}
     </div>
   );

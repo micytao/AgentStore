@@ -1706,6 +1706,256 @@ a {
   border: 1px dashed var(--line-strong);
 }
 
+.store-skill-picker {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.store-skill-search {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  border: 1px solid var(--line-strong);
+  background: rgba(8, 10, 20, 0.72);
+  border-radius: 0.65rem;
+  padding: 0.5rem 0.75rem;
+  margin-bottom: 0.4rem;
+}
+
+.store-skill-search svg {
+  width: 0.9rem;
+  height: 0.9rem;
+  color: #8b90ac;
+  flex-shrink: 0;
+}
+
+.store-skill-search input {
+  flex: 1;
+  border: 0;
+  background: transparent;
+  color: #fff;
+  font: inherit;
+  font-size: 0.85rem;
+  outline: none;
+}
+
+.store-skill-group {
+  border: 1px solid var(--line);
+  border-radius: 0.85rem;
+  background: var(--glass);
+  overflow: hidden;
+}
+
+.store-skill-group + .store-skill-group {
+  margin-top: 0.55rem;
+}
+
+.store-skill-group-header {
+  appearance: none;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.75rem 0.9rem;
+  font: inherit;
+  font-weight: 600;
+  color: #f6f7fc;
+  text-align: left;
+}
+
+.store-skill-group-chevron {
+  display: inline-flex;
+  color: #8b90ac;
+  transition: transform 0.15s ease;
+}
+
+.store-skill-group-chevron svg {
+  width: 0.75rem;
+  height: 0.75rem;
+}
+
+.store-skill-group-chevron.is-open {
+  transform: rotate(90deg);
+}
+
+.store-skill-group-label {
+  flex: 1;
+}
+
+.store-skill-group-body {
+  display: grid;
+  gap: 0.5rem;
+  padding: 0 0.9rem 0.85rem;
+  border-top: 1px dashed var(--line);
+  padding-top: 0.7rem;
+}
+
+.store-skill-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  cursor: pointer;
+}
+
+.store-skill-row input {
+  margin-top: 0.2rem;
+  flex-shrink: 0;
+}
+
+.store-skill-row-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  font-size: 0.85rem;
+}
+
+.store-skill-row-text strong {
+  color: #f6f7fc;
+}
+
+.store-skill-row-text span {
+  color: #a8adc4;
+  font-size: 0.78rem;
+}
+
+.store-markdown {
+  font-size: 0.85rem;
+  line-height: 1.6;
+  color: #d4d8ec;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.store-markdown > :first-child {
+  margin-top: 0;
+}
+
+.store-markdown > :last-child {
+  margin-bottom: 0;
+}
+
+.store-markdown h1,
+.store-markdown h2,
+.store-markdown h3,
+.store-markdown h4 {
+  color: #fff;
+  font-weight: 650;
+  line-height: 1.3;
+  margin: 1.1rem 0 0.5rem;
+}
+
+.store-markdown h1 {
+  font-size: 1.1rem;
+}
+
+.store-markdown h2 {
+  font-size: 1rem;
+  padding-bottom: 0.35rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.store-markdown h3 {
+  font-size: 0.92rem;
+}
+
+.store-markdown h4 {
+  font-size: 0.85rem;
+}
+
+.store-markdown p {
+  margin: 0.6rem 0;
+}
+
+.store-markdown ul,
+.store-markdown ol {
+  margin: 0.5rem 0;
+  padding-left: 1.4rem;
+  display: grid;
+  gap: 0.25rem;
+}
+
+.store-markdown li {
+  margin: 0;
+}
+
+.store-markdown li > ul,
+.store-markdown li > ol {
+  margin-top: 0.25rem;
+}
+
+.store-markdown a {
+  color: var(--cyan);
+  text-decoration: underline;
+  text-decoration-color: rgba(154, 246, 222, 0.4);
+}
+
+.store-markdown strong {
+  color: #f6f7fc;
+  font-weight: 650;
+}
+
+.store-markdown blockquote {
+  margin: 0.6rem 0;
+  padding: 0.3rem 0.9rem;
+  border-left: 2px solid var(--line-strong);
+  color: #a8adc4;
+}
+
+.store-markdown code {
+  font-family: "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+  font-size: 0.8em;
+  background: rgba(8, 10, 20, 0.72);
+  border: 1px solid var(--line);
+  border-radius: 0.35rem;
+  padding: 0.1rem 0.35rem;
+  color: #cdeeff;
+}
+
+.store-markdown pre {
+  margin: 0.6rem 0;
+  padding: 0.75rem 0.9rem;
+  border-radius: 0.65rem;
+  border: 1px solid var(--line);
+  background: rgba(8, 10, 20, 0.72);
+  overflow-x: auto;
+}
+
+.store-markdown pre code {
+  background: transparent;
+  border: 0;
+  padding: 0;
+  color: #e8ebf7;
+}
+
+.store-markdown hr {
+  margin: 1rem 0;
+  border: none;
+  border-top: 1px solid var(--line);
+}
+
+.store-markdown table {
+  width: 100%;
+  margin: 0.6rem 0;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+}
+
+.store-markdown th,
+.store-markdown td {
+  border: 1px solid var(--line);
+  padding: 0.4rem 0.6rem;
+  text-align: left;
+}
+
+.store-markdown th {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.04);
+  font-weight: 650;
+}
+
 @media (max-width: 900px) {
   .store-conn-row {
     grid-template-columns: 1fr;

@@ -119,3 +119,43 @@ export async function readResultConfigMap(jobName: string): Promise<string | und
   const body = (await response.json()) as { data?: Record<string, string> };
   return body.data?.draft ?? body.data?.output;
 }
+
+/** Read-back for provision-generic-agent.yml's deploy-once flow — same
+ * pattern as readResultConfigMap(), just against a `<deployment_name>
+ * -deploy-result` ConfigMap holding the Route host instead of a draft. */
+export async function readDeploymentResult(
+  deploymentName: string
+): Promise<{ status?: string; routeHost?: string } | undefined> {
+  const ns = openshiftNamespace();
+  const response = await ocpFetch(`/api/v1/namespaces/${ns}/configmaps/${deploymentName}-deploy-result`);
+  if (!response.ok) return undefined;
+  const body = (await response.json()) as { data?: Record<string, string> };
+  return { status: body.data?.status, routeHost: body.data?.routeHost };
+}
+
+/** Best-effort teardown of everything provision-generic-agent.yml creates
+ * for one listing, used when an admin re-deploys or removes a generic-chat
+ * agent. Each resource is deleted independently so a 404 on one (already
+ * gone) doesn't block the others. */
+export async function deleteGenericAgentDeployment(deploymentName: string): Promise<void> {
+  const ns = openshiftNamespace();
+  const targets = [
+    { path: `/apis/apps/v1/namespaces/${ns}/deployments/${deploymentName}` },
+    { path: `/api/v1/namespaces/${ns}/services/${deploymentName}` },
+    { path: `/apis/route.openshift.io/v1/namespaces/${ns}/routes/${deploymentName}` },
+    { path: `/api/v1/namespaces/${ns}/secrets/${deploymentName}-config` },
+    { path: `/api/v1/namespaces/${ns}/configmaps/${deploymentName}-deploy-result` },
+  ];
+  await Promise.all(
+    targets.map(async ({ path }) => {
+      try {
+        const response = await ocpFetch(path, { method: "DELETE" });
+        if (!response.ok && response.status !== 404) {
+          console.warn(`[engine-ansible] delete ${path} returned HTTP ${response.status}`);
+        }
+      } catch (err) {
+        console.warn(`[engine-ansible] delete ${path} failed: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    })
+  );
+}

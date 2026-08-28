@@ -47,6 +47,13 @@ export function agentRunnerImage(): string {
   return process.env.AGENT_RUNNER_IMAGE || "agent-runner:dev";
 }
 
+/** Image for the generic-chat runtime container (apps/agent-runtime),
+ * reused across every generic-chat listing's Deployment — provision-
+ * generic-agent.yml's `agent_runtime_image` extra var falls back to this. */
+export function agentRuntimeImage(): string {
+  return process.env.AGENT_RUNTIME_IMAGE || "agent-runtime:dev";
+}
+
 export function isAapConfigured(): boolean {
   return Boolean(aapControllerUrl() && aapToken());
 }

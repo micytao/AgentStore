@@ -19,5 +19,12 @@ export async function POST(request: Request) {
       { status: 400 }
     );
   }
-  return NextResponse.json(upsertSkill(body));
+  try {
+    return NextResponse.json(upsertSkill(body));
+  } catch (err) {
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : String(err) },
+      { status: 400 }
+    );
+  }
 }

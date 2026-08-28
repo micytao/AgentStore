@@ -248,3 +248,22 @@ export {
   openshiftNamespace,
   openshiftConsoleUrl,
 } from "./config";
+export {
+  deleteGenericAgentDeployment,
+  getGenericAgentDeployStatus,
+  launchGenericAgentDeploy,
+  type GenericAgentDeployInput,
+  type GenericAgentDeployStatus,
+} from "./genericAgentDeploy";
+/** Exported so deployments.ts can derive a stable per-listing resource
+ * name the same way this file's (private) jobNameFor() does for Tasks —
+ * DNS-1123-safe (lowercase alphanumeric + "-", no leading/trailing "-"),
+ * since it becomes a Deployment/Service/Route/Secret name. */
+export function genericAgentDeploymentName(listingId: string): string {
+  const slug = listingId
+    .toLowerCase()
+    .replace(/[^a-z0-9-]/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 50);
+  return `agent-${slug || "listing"}`;
+}

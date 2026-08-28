@@ -1,0 +1,21 @@
+{
+  "name": "@agentstore/agent-runtime",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "npm run typecheck && node esbuild.config.mjs",
+    "start": "node dist/server.js",
+    "dev": "node esbuild.config.mjs --watch"
+  },
+  "dependencies": {
+    "@agentstore/agent-core": "*",
+    "@agentstore/shared": "*",
+    "@modelcontextprotocol/sdk": "^1.30.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.18",
+    "esbuild": "^0.28.2",
+    "typescript": "^5.8.3"
+  }
+}

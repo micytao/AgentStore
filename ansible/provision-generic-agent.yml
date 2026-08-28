@@ -1,0 +1,221 @@
+---
+# AAP Project playbook for the `generic-chat` runtime's "deploy once" flow —
+# parallel to provision-agent.yml, but creates a persistent Deployment +
+# Service + Route instead of a one-shot batch Job, since a generic-chat
+# agent keeps running and users just open its link (see
+# apps/web/src/server/deployments.ts, which launches this once per listing,
+# not once per Task).
+#
+# Extra vars come from AgentStore's deployments.ts:
+#   deployment_name, namespace, listing_id, listing_name,
+#   agent_runtime_image (optional),
+#   provider_kind, provider_base_url, provider_default_model, provider_api_key,
+#   intro_lines (list of strings), skills (list of Skill objects),
+#   mcp_servers (list of OpenShellMcpServerConfig objects)
+#
+# Builds one Secret with two kinds of keys off the same object: flat
+# scalars (PROVIDER_KIND/PROVIDER_API_KEY/PROVIDER_BASE_URL/
+# PROVIDER_DEFAULT_MODEL/LISTING_NAME), consumed as env vars via
+# secretKeyRef, and a `config.json` key (the structured
+# GenericAgentRuntimeConfig blob — packages/shared), consumed as a mounted
+# volume at /etc/agent/config.json — see apps/agent-runtime's README for
+# why the split is a hybrid rather than one delivery mechanism.
+- name: Deploy a generic-chat AgentStore agent to OpenShift
+  hosts: localhost
+  gather_facts: false
+  vars:
+    namespace: "{{ namespace | default('agent-workloads') }}"
+    deployment_name: "{{ deployment_name }}"
+    listing_id: "{{ listing_id }}"
+    listing_name: "{{ listing_name }}"
+    agent_runtime_image: "{{ agent_runtime_image | default('agent-runtime:dev') }}"
+    provider_kind: "{{ provider_kind | default('openai-compatible') }}"
+    provider_base_url: "{{ provider_base_url | default('') }}"
+    provider_default_model: "{{ provider_default_model | default('') }}"
+    provider_api_key: "{{ provider_api_key | default('') }}"
+    intro_lines: "{{ intro_lines | default([]) }}"
+    skills: "{{ skills | default([]) }}"
+    mcp_servers: "{{ mcp_servers | default([]) }}"
+    config_json: >-
+      {{ {
+        'listingName': listing_name,
+        'introLines': intro_lines,
+        'skills': skills,
+        'mcpServers': mcp_servers,
+      } | to_json }}
+  tasks:
+    - name: Ensure agent-workloads namespace exists
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Namespace
+          metadata:
+            name: "{{ namespace }}"
+            labels:
+              app.kubernetes.io/managed-by: agentstore
+
+    - name: Create/update the agent's config Secret (env scalars + config.json)
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: "{{ deployment_name }}-config"
+            namespace: "{{ namespace }}"
+            labels:
+              app.kubernetes.io/managed-by: agentstore
+              app.kubernetes.io/name: agent-runtime
+              agentstore/listing-id: "{{ listing_id }}"
+          type: Opaque
+          stringData:
+            LISTING_NAME: "{{ listing_name }}"
+            PROVIDER_KIND: "{{ provider_kind }}"
+            PROVIDER_BASE_URL: "{{ provider_base_url }}"
+            PROVIDER_DEFAULT_MODEL: "{{ provider_default_model }}"
+            PROVIDER_API_KEY: "{{ provider_api_key }}"
+            config.json: "{{ config_json }}"
+
+    - name: Create/update the agent Deployment
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: "{{ deployment_name }}"
+            namespace: "{{ namespace }}"
+            labels:
+              app.kubernetes.io/managed-by: agentstore
+              app.kubernetes.io/name: agent-runtime
+              agentstore/listing-id: "{{ listing_id }}"
+          spec:
+            replicas: 1
+            selector:
+              matchLabels:
+                app.kubernetes.io/name: agent-runtime
+                agentstore/listing-id: "{{ listing_id }}"
+            template:
+              metadata:
+                labels:
+                  app.kubernetes.io/managed-by: agentstore
+                  app.kubernetes.io/name: agent-runtime
+                  agentstore/listing-id: "{{ listing_id }}"
+              spec:
+                containers:
+                  - name: agent-runtime
+                    image: "{{ agent_runtime_image }}"
+                    imagePullPolicy: IfNotPresent
+                    ports:
+                      - containerPort: 8080
+                    envFrom:
+                      - secretRef:
+                          name: "{{ deployment_name }}-config"
+                    volumeMounts:
+                      - name: config
+                        mountPath: /etc/agent
+                        readOnly: true
+                    readinessProbe:
+                      httpGet: { path: /health, port: 8080 }
+                      initialDelaySeconds: 3
+                      periodSeconds: 5
+                    livenessProbe:
+                      httpGet: { path: /health, port: 8080 }
+                      initialDelaySeconds: 10
+                      periodSeconds: 15
+                volumes:
+                  - name: config
+                    secret:
+                      secretName: "{{ deployment_name }}-config"
+                      items:
+                        - key: config.json
+                          path: config.json
+
+    - name: Create/update the agent Service
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Service
+          metadata:
+            name: "{{ deployment_name }}"
+            namespace: "{{ namespace }}"
+            labels:
+              app.kubernetes.io/managed-by: agentstore
+              agentstore/listing-id: "{{ listing_id }}"
+          spec:
+            selector:
+              app.kubernetes.io/name: agent-runtime
+              agentstore/listing-id: "{{ listing_id }}"
+            ports:
+              - name: http
+                port: 8080
+                targetPort: 8080
+
+    # No spec.host — let the cluster's default router subdomain generate
+    # one, then read it back below. Edge termination with no explicit cert
+    # picks up the cluster's default wildcard cert, same as most other
+    # AgentStore-adjacent Routes in this repo.
+    - name: Create/update the agent Route
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: route.openshift.io/v1
+          kind: Route
+          metadata:
+            name: "{{ deployment_name }}"
+            namespace: "{{ namespace }}"
+            labels:
+              app.kubernetes.io/managed-by: agentstore
+              agentstore/listing-id: "{{ listing_id }}"
+          spec:
+            to:
+              kind: Service
+              name: "{{ deployment_name }}"
+            port:
+              targetPort: http
+            tls:
+              termination: edge
+              insecureEdgeTerminationPolicy: Redirect
+
+    - name: Wait for the Deployment to have at least one available replica
+      kubernetes.core.k8s_info:
+        kind: Deployment
+        api_version: apps/v1
+        name: "{{ deployment_name }}"
+        namespace: "{{ namespace }}"
+      register: deploy_info
+      until: (deploy_info.resources[0].status.availableReplicas | default(0)) > 0
+      retries: 60
+      delay: 5
+
+    - name: Read back the Route host
+      kubernetes.core.k8s_info:
+        kind: Route
+        api_version: route.openshift.io/v1
+        name: "{{ deployment_name }}"
+        namespace: "{{ namespace }}"
+      register: route_info
+
+    # Same read-back pattern packages/engine-ansible's openshift.ts
+    # readResultConfigMap() already uses for one-shot Jobs, so
+    # readDeploymentResult() can reuse the exact same HTTP call shape —
+    # just against `<deployment_name>-deploy-result` instead of
+    # `<job_name>-result`, and reading `routeHost` instead of `draft`.
+    - name: Publish the deploy result ConfigMap
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: ConfigMap
+          metadata:
+            name: "{{ deployment_name }}-deploy-result"
+            namespace: "{{ namespace }}"
+            labels:
+              app.kubernetes.io/managed-by: agentstore
+              agentstore/listing-id: "{{ listing_id }}"
+          data:
+            status: >-
+              {{ 'running' if (route_info.resources | length > 0 and (deploy_info.resources[0].status.availableReplicas | default(0)) > 0) else 'failed' }}
+            routeHost: "{{ route_info.resources[0].status.ingress[0].host | default('') }}"

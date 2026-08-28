@@ -1,0 +1,31 @@
+# Generic Chat Agent runtime — a small, pre-built image reused across every
+# `runtime: generic-chat` listing. Per-listing behavior (persona, skills,
+# MCP servers, model) is injected at deploy time via env vars + a mounted
+# config.json (see ansible/provision-generic-agent.yml), not baked into
+# the image, so this never needs to be rebuilt per agent.
+FROM registry.access.redhat.com/ubi9/nodejs-22:latest AS build
+USER 0
+WORKDIR /app
+COPY package.json package-lock.json* ./
+COPY apps/agent-runtime ./apps/agent-runtime
+COPY packages ./packages
+RUN npm install
+RUN npm run build --workspace=@agentstore/agent-runtime
+
+FROM registry.access.redhat.com/ubi9/nodejs-22:latest
+USER 0
+WORKDIR /app
+# esbuild bundles @agentstore/agent-core + @agentstore/shared straight into
+# dist/server.js (see esbuild.config.mjs), so only @modelcontextprotocol/sdk
+# needs to be resolvable from node_modules at runtime — packages/ itself
+# isn't needed in the runtime image.
+COPY --from=build /app/node_modules ./node_modules
+COPY --from=build /app/apps/agent-runtime/dist ./apps/agent-runtime/dist
+COPY --from=build /app/apps/agent-runtime/package.json ./apps/agent-runtime/package.json
+
+ENV NODE_ENV=production
+ENV PORT=8080
+EXPOSE 8080
+USER 1001
+
+CMD ["node", "apps/agent-runtime/dist/server.js"]

@@ -11,6 +11,8 @@ import {
   CodeIcon,
   CommentsIcon,
   DollarSignIcon,
+  HeadsetIcon,
+  ServerIcon,
   ShieldAltIcon,
 } from "@patternfly/react-icons";
 import type { ComponentType } from "react";
@@ -22,6 +24,8 @@ const ICONS: Record<string, ComponentType> = {
   shield: ShieldAltIcon,
   chart: ChartLineIcon,
   money: DollarSignIcon,
+  headset: HeadsetIcon,
+  server: ServerIcon,
 };
 
 export function LaunchPage({ listingId }: { listingId: string }) {
@@ -60,6 +64,8 @@ export function LaunchPage({ listingId }: { listingId: string }) {
   const Icon = ICONS[current.icon] ?? CodeIcon;
   const accent = DEPARTMENT_ACCENT[current.department];
   const canLaunch = interactive || goal.trim().length > 8;
+  const isGenericChat = current.runtime === "generic-chat";
+  const deployment = current.deployment;
 
   async function onLaunch() {
     setSubmitting(true);
@@ -81,6 +87,25 @@ export function LaunchPage({ listingId }: { listingId: string }) {
       setError(err instanceof Error ? err.message : String(err));
       setSubmitting(false);
     }
+  }
+
+  // generic-chat agents are provisioned once by an admin (Deploy to
+  // OpenShift), not per-launch — opening the link just logs a lightweight
+  // audit Task and sends the user straight to the already-running chat UI,
+  // instead of the goal-entry form used by hosted-agent-api/openshell.
+  async function onOpenAgent() {
+    if (!deployment?.routeUrl) return;
+    setSubmitting(true);
+    setError(null);
+    try {
+      await createTask({ listingId: current.id, mode });
+    } catch {
+      // Best-effort audit log — a failed Task write shouldn't block opening
+      // an agent that's demonstrably already running.
+    } finally {
+      setSubmitting(false);
+    }
+    window.open(deployment.routeUrl, "_blank", "noopener,noreferrer");
   }
 
   return (
@@ -111,53 +136,83 @@ export function LaunchPage({ listingId }: { listingId: string }) {
 
       <section className="store-panel">
         {error ? <p className="store-banner is-error">{error}</p> : null}
-        {interactive ? (
-          <label className="store-field">
-            <span>Repository URL</span>
-            <em>optional</em>
-            <input
-              value={gitUrl}
-              onChange={(e) => setGitUrl(e.target.value)}
-              placeholder="https://github.com/example/billing-service"
-            />
-          </label>
+        {isGenericChat ? (
+          deployment?.status === "running" && deployment.routeUrl ? (
+            <>
+              <p className="store-lede tight">
+                This agent is deployed and running. Opening it starts a
+                private chat session in a new tab — your conversation isn&apos;t
+                shared with other users.
+              </p>
+              <div className="store-actions">
+                <button
+                  type="button"
+                  className="store-btn-primary"
+                  disabled={submitting}
+                  onClick={() => void onOpenAgent()}
+                >
+                  {submitting ? "Opening…" : "Open agent →"}
+                </button>
+              </div>
+            </>
+          ) : (
+            <p className="store-banner is-error">
+              This agent hasn&apos;t been deployed yet. Ask an admin to deploy
+              it from the Admin console (Catalog → Agent config → Deploy to
+              OpenShift).
+            </p>
+          )
         ) : (
           <>
-            <label className="store-field">
-              <span>Goal</span>
-              <em>required</em>
-              <textarea
-                rows={5}
-                value={goal}
-                onChange={(e) => setGoal(e.target.value)}
-                placeholder={
-                  current.id === "support-ticket-draft"
-                    ? "Draft a reply to INC-1042 about a billing outage"
-                    : "What should the agent accomplish?"
-                }
-              />
-            </label>
-            <label className="store-field">
-              <span>Success criteria</span>
-              <em>optional</em>
-              <input
-                value={successCriteria}
-                onChange={(e) => setSuccessCriteria(e.target.value)}
-                placeholder="A review-ready draft the customer could receive"
-              />
-            </label>
+            {interactive ? (
+              <label className="store-field">
+                <span>Repository URL</span>
+                <em>optional</em>
+                <input
+                  value={gitUrl}
+                  onChange={(e) => setGitUrl(e.target.value)}
+                  placeholder="https://github.com/example/billing-service"
+                />
+              </label>
+            ) : (
+              <>
+                <label className="store-field">
+                  <span>Goal</span>
+                  <em>required</em>
+                  <textarea
+                    rows={5}
+                    value={goal}
+                    onChange={(e) => setGoal(e.target.value)}
+                    placeholder={
+                      current.id === "support-ticket-draft"
+                        ? "Draft a reply to INC-1042 about a billing outage"
+                        : "What should the agent accomplish?"
+                    }
+                  />
+                </label>
+                <label className="store-field">
+                  <span>Success criteria</span>
+                  <em>optional</em>
+                  <input
+                    value={successCriteria}
+                    onChange={(e) => setSuccessCriteria(e.target.value)}
+                    placeholder="A review-ready draft the customer could receive"
+                  />
+                </label>
+              </>
+            )}
+            <div className="store-actions">
+              <button
+                type="button"
+                className="store-btn-primary"
+                disabled={!canLaunch || submitting}
+                onClick={() => void onLaunch()}
+              >
+                {submitting ? "Launching…" : "Launch agent"}
+              </button>
+            </div>
           </>
         )}
-        <div className="store-actions">
-          <button
-            type="button"
-            className="store-btn-primary"
-            disabled={!canLaunch || submitting}
-            onClick={() => void onLaunch()}
-          >
-            {submitting ? "Launching…" : "Launch agent"}
-          </button>
-        </div>
       </section>
     </div>
   );

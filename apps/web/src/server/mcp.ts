@@ -1,10 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
-import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
-import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
-import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
+import { callMcpTool, connectMcpClient } from "@agentstore/agent-core";
 import type {
   AgentConfig,
   McpServerConfig,
@@ -15,10 +12,14 @@ import type {
 import { getSecret, hasSecret, setSecretRaw, clearSecretRaw } from "./secrets";
 
 /**
- * Real MCP client manager. Server configs (transport, command/url) persist
- * to a local JSON file; connections are live `Client` instances kept in a
- * globalThis-scoped map so they survive across requests (and Next.js dev
- * hot-reloads) without reconnecting every time.
+ * Admin-facing MCP server registry: server configs (transport, command/url)
+ * persist to a local JSON file; connections are live `Client` instances
+ * kept in a globalThis-scoped map so they survive across requests (and
+ * Next.js dev hot-reloads) without reconnecting every time. The actual
+ * protocol work (building a transport, connecting, calling a tool) is
+ * delegated to @agentstore/agent-core's mcpClient, shared with the
+ * generic-chat runtime container — this file owns only persistence, the
+ * vault-backed auth token, and the per-tool enable/disable toggle.
  *
  * `stdio` transport spawns a local process chosen by whoever has Admin
  * access — this is inherent to MCP and is called out in the Admin UI.
@@ -167,28 +168,6 @@ async function disconnectServer(id: string): Promise<void> {
   store().live.delete(id);
 }
 
-function buildTransport(config: StoredServer): Transport {
-  const authToken = getSecret(authTokenKey(config.id));
-  switch (config.transport) {
-    case "stdio": {
-      if (!config.command) throw new Error("stdio server requires a command");
-      return new StdioClientTransport({ command: config.command, args: config.args ?? [] });
-    }
-    case "streamable-http": {
-      if (!config.url) throw new Error("streamable-http server requires a url");
-      return new StreamableHTTPClientTransport(new URL(config.url), {
-        requestInit: authToken ? { headers: { Authorization: `Bearer ${authToken}` } } : undefined,
-      });
-    }
-    case "sse": {
-      if (!config.url) throw new Error("sse server requires a url");
-      return new SSEClientTransport(new URL(config.url), {
-        requestInit: authToken ? { headers: { Authorization: `Bearer ${authToken}` } } : undefined,
-      });
-    }
-  }
-}
-
 /** Real MCP handshake: connects, runs listTools(), and stores the live client. */
 export async function connectServer(id: string): Promise<McpServerStatus> {
   const config = getMcpServer(id);
@@ -197,10 +176,16 @@ export async function connectServer(id: string): Promise<McpServerStatus> {
   await disconnectServer(id);
 
   try {
-    const client = new Client({ name: "agentstore", version: "0.1.0" });
-    const transport = buildTransport(config);
-    await client.connect(transport);
-    const { tools } = await client.listTools();
+    const authToken = getSecret(authTokenKey(config.id));
+    const { client, tools } = await connectMcpClient({
+      id: config.id,
+      name: config.name,
+      transport: config.transport,
+      command: config.command,
+      args: config.args,
+      url: config.url,
+      authToken,
+    });
     const toolInfos: McpToolInfo[] = tools.map((t) => ({
       name: t.name,
       description: t.description,
@@ -280,9 +265,5 @@ export async function callTool(serverId: string, name: string, args: Record<stri
   if (!live || live.connectionState !== "connected") {
     throw new Error(`MCP server ${serverId} is not connected`);
   }
-  const result = await live.client.callTool({ name, arguments: args });
-  const content = result.content as { type: string; text?: string }[] | undefined;
-  return (content ?? [])
-    .map((block) => (block.type === "text" ? block.text ?? "" : JSON.stringify(block)))
-    .join("\n");
+  return callMcpTool(live.client, name, args);
 }

@@ -9,6 +9,13 @@ export async function DELETE(
   const denied = requireAdmin(request);
   if (denied) return denied;
   const { id } = await context.params;
-  deleteSkill(id);
-  return NextResponse.json({ ok: true });
+  try {
+    deleteSkill(id);
+    return NextResponse.json({ ok: true });
+  } catch (err) {
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : String(err) },
+      { status: 400 }
+    );
+  }
 }

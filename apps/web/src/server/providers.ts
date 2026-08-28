@@ -1,10 +1,9 @@
 import fs from "node:fs";
 import path from "node:path";
+import { callProvider as coreCallProvider, defaultBaseUrlFor } from "@agentstore/agent-core";
+import type { CallOptions } from "@agentstore/agent-core";
 import type {
-  ModelMessage,
   ModelResponse,
-  ModelTool,
-  ModelToolCall,
   ProviderConfig,
   ProviderKind,
   ProviderStatus,
@@ -16,9 +15,10 @@ import { getSecret, hasSecret, previewSecret, setSecretRaw, clearSecretRaw } fro
  * default model) is stored in a local JSON file; the API key for each
  * provider is stored in the encrypted vault under `provider:{id}:apiKey`.
  *
- * `testProvider` and `callProvider` make real network calls to the vendor
- * APIs via plain `fetch` — no vendor SDKs are added to keep the footprint
- * small.
+ * The actual per-vendor network call (`callProvider`) lives in
+ * @agentstore/agent-core, shared with the generic-chat runtime container —
+ * this file only resolves config/vault state and hands off to it. `fetch`
+ * only, no vendor SDKs, to keep the footprint small.
  */
 
 function dataDir(): string {
@@ -179,24 +179,11 @@ function requireApiKey(id: string, kind: ProviderKind): string | undefined {
   return key;
 }
 
-function defaultBaseUrl(kind: ProviderKind): string {
-  switch (kind) {
-    case "anthropic":
-      return "https://api.anthropic.com/v1";
-    case "openai":
-      return "https://api.openai.com/v1";
-    case "gemini":
-      return "https://generativelanguage.googleapis.com/v1beta";
-    case "openai-compatible":
-      return "https://api.openai.com/v1";
-  }
-}
-
 /** Real network call per provider kind to confirm the key works and list models. */
 export async function testProvider(id: string): Promise<ProviderStatus> {
   const config = getProvider(id);
   if (!config) throw new Error(`Unknown provider: ${id}`);
-  const base = config.baseUrl || defaultBaseUrl(config.kind);
+  const base = config.baseUrl || defaultBaseUrlFor(config.kind);
   const now = new Date().toISOString();
 
   try {
@@ -239,207 +226,17 @@ async function listModels(config: ProviderConfig, base: string): Promise<string[
   }
 }
 
-interface CallOptions {
-  system: string;
-  messages: ModelMessage[];
-  tools: ModelTool[];
-}
+export type { CallOptions };
 
-/** Real chat/tool-call request against the active provider's vendor API. */
+/** Real chat/tool-call request against the active provider's vendor API —
+ * resolves this provider's config + vault key, then delegates the actual
+ * network call to @agentstore/agent-core's callProvider(). */
 export async function callProvider(id: string, opts: CallOptions): Promise<ModelResponse> {
   const config = getProvider(id);
   if (!config) throw new Error(`Unknown provider: ${id}`);
-  const base = config.baseUrl || defaultBaseUrl(config.kind);
-  const model = config.defaultModel || fallbackModel(config.kind);
-
-  switch (config.kind) {
-    case "anthropic":
-      return callAnthropic(config, base, model, opts);
-    case "openai":
-    case "openai-compatible":
-      return callOpenAiCompatible(config, base, model, opts);
-    case "gemini":
-      return callGemini(config, base, model, opts);
-  }
-}
-
-function fallbackModel(kind: ProviderKind): string {
-  switch (kind) {
-    case "anthropic":
-      return "claude-3-5-sonnet-latest";
-    case "openai":
-    case "openai-compatible":
-      return "gpt-4o-mini";
-    case "gemini":
-      return "gemini-1.5-flash";
-  }
-}
-
-async function callAnthropic(
-  config: ProviderConfig,
-  base: string,
-  model: string,
-  opts: CallOptions
-): Promise<ModelResponse> {
-  const apiKey = requireApiKey(config.id, config.kind) ?? "";
-  const body: Record<string, unknown> = {
-    model,
-    max_tokens: 1024,
-    system: opts.system,
-    messages: opts.messages.map((m) => ({
-      role: m.role === "assistant" ? "assistant" : "user",
-      content: m.content,
-    })),
-  };
-  if (opts.tools.length > 0) {
-    body.tools = opts.tools.map((t) => ({
-      name: t.name,
-      description: t.description,
-      input_schema: t.inputSchema ?? { type: "object", properties: {} },
-    }));
-  }
-
-  const res = await fetch(`${base}/messages`, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
-    },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) throw new Error(`Anthropic /messages failed: ${res.status} ${await res.text()}`);
-  const data = (await res.json()) as {
-    content: { type: string; text?: string; name?: string; input?: Record<string, unknown> }[];
-  };
-
-  const toolCalls: ModelToolCall[] = [];
-  let text = "";
-  for (const block of data.content ?? []) {
-    if (block.type === "text" && block.text) text += block.text;
-    if (block.type === "tool_use" && block.name) {
-      const tool = opts.tools.find((t) => t.name === block.name);
-      toolCalls.push({ serverId: tool?.serverId ?? "", name: block.name, args: block.input ?? {} });
-    }
-  }
-  return toolCalls.length > 0 ? { toolCalls } : { text };
-}
-
-async function callOpenAiCompatible(
-  config: ProviderConfig,
-  base: string,
-  model: string,
-  opts: CallOptions
-): Promise<ModelResponse> {
   const apiKey = requireApiKey(config.id, config.kind);
-  const body: Record<string, unknown> = {
-    model,
-    messages: [
-      { role: "system", content: opts.system },
-      ...opts.messages.map((m) => ({
-        role: m.role === "tool" ? "user" : m.role,
-        content: m.content,
-      })),
-    ],
-  };
-  if (opts.tools.length > 0) {
-    body.tools = opts.tools.map((t) => ({
-      type: "function",
-      function: {
-        name: t.name,
-        description: t.description,
-        parameters: t.inputSchema ?? { type: "object", properties: {} },
-      },
-    }));
-  }
-
-  const res = await fetch(`${base}/chat/completions`, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
-    },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) throw new Error(`/chat/completions failed: ${res.status} ${await res.text()}`);
-  const data = (await res.json()) as {
-    choices?: {
-      message?: {
-        content?: string;
-        tool_calls?: { function: { name: string; arguments: string } }[];
-      };
-    }[];
-  };
-  const message = data.choices?.[0]?.message;
-  if (message?.tool_calls?.length) {
-    const toolCalls: ModelToolCall[] = message.tool_calls.map((call) => {
-      const tool = opts.tools.find((t) => t.name === call.function.name);
-      let args: Record<string, unknown> = {};
-      try {
-        args = JSON.parse(call.function.arguments || "{}");
-      } catch {
-        /* ignore malformed args */
-      }
-      return { serverId: tool?.serverId ?? "", name: call.function.name, args };
-    });
-    return { toolCalls };
-  }
-  return { text: message?.content ?? "" };
-}
-
-async function callGemini(
-  config: ProviderConfig,
-  base: string,
-  model: string,
-  opts: CallOptions
-): Promise<ModelResponse> {
-  const apiKey = requireApiKey(config.id, config.kind) ?? "";
-  const body: Record<string, unknown> = {
-    systemInstruction: { parts: [{ text: opts.system }] },
-    contents: opts.messages.map((m) => ({
-      role: m.role === "assistant" ? "model" : "user",
-      parts: [{ text: m.content }],
-    })),
-  };
-  if (opts.tools.length > 0) {
-    body.tools = [
-      {
-        functionDeclarations: opts.tools.map((t) => ({
-          name: t.name,
-          description: t.description,
-          parameters: t.inputSchema ?? { type: "object", properties: {} },
-        })),
-      },
-    ];
-  }
-
-  const res = await fetch(
-    `${base}/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`,
-    {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(body),
-    }
+  return coreCallProvider(
+    { kind: config.kind, baseUrl: config.baseUrl, defaultModel: config.defaultModel, apiKey },
+    opts
   );
-  if (!res.ok) throw new Error(`Gemini generateContent failed: ${res.status} ${await res.text()}`);
-  const data = (await res.json()) as {
-    candidates?: {
-      content?: { parts?: { text?: string; functionCall?: { name: string; args: Record<string, unknown> } }[] };
-    }[];
-  };
-  const parts = data.candidates?.[0]?.content?.parts ?? [];
-  const toolCalls: ModelToolCall[] = [];
-  let text = "";
-  for (const part of parts) {
-    if (part.text) text += part.text;
-    if (part.functionCall) {
-      const tool = opts.tools.find((t) => t.name === part.functionCall!.name);
-      toolCalls.push({
-        serverId: tool?.serverId ?? "",
-        name: part.functionCall.name,
-        args: part.functionCall.args ?? {},
-      });
-    }
-  }
-  return toolCalls.length > 0 ? { toolCalls } : { text };
 }

@@ -271,6 +271,7 @@ export function createListing(input: ListingCreateInput): Listing {
     reviewStatus,
     pricing: input.pricing,
     openshellAgent: input.openshellAgent,
+    runtime: input.runtime,
     agentConfig: input.agentConfig,
   };
 

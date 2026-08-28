@@ -7,6 +7,7 @@ const nextConfig: NextConfig = {
   devIndicators: false,
   transpilePackages: [
     "@agentstore/shared",
+    "@agentstore/agent-core",
     "@agentstore/engine-fake",
     "@agentstore/engine-ansible",
     "@agentstore/engine-openshell",

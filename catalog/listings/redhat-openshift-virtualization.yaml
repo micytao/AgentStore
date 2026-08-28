@@ -1,0 +1,57 @@
+id: redhat-openshift-virtualization
+name: Red Hat OpenShift Virtualization
+department: engineering
+category: Virtualization
+description: Chat agent for VM lifecycle management, snapshots, cloning, and rebalancing on OpenShift Virtualization, built on Red Hat's real `rh-virt` Agentic Skill Pack (10 skills). Deploy once, then share the link with your virtualization team.
+icon: server
+engineType: hosted-agent-api
+runtime: generic-chat
+supportedModes:
+  - work-with-me
+riskTier: high
+reviewStatus: draft
+pricing:
+  unit: per-hour
+  amount: 0.6
+agentConfig:
+  skillIds:
+    - vm-clone
+    - vm-create
+    - vm-delete
+    - vm-inventory
+    - vm-lifecycle-manager
+    - vm-rebalance
+    - vm-snapshot-create
+    - vm-snapshot-delete
+    - vm-snapshot-list
+    - vm-snapshot-restore
+  # No-op until an admin connects an MCP server with this exact id — the
+  # rh-virt pack's SKILL.md files (catalog/skills/rh-virt/*.json) call for a
+  # Kubernetes/OpenShift-Virtualization MCP server exposing generic
+  # resource + VM-lifecycle tools (not the CVE-focused red-hat-security or
+  # lightspeed-mcp servers the other two Red Hat listings use).
+  mcpToolBindings:
+    - serverId: openshift-virt-mcp
+      tool: resources_get
+    - serverId: openshift-virt-mcp
+      tool: resources_list
+    - serverId: openshift-virt-mcp
+      tool: resources_create_or_update
+    - serverId: openshift-virt-mcp
+      tool: resources_delete
+    - serverId: openshift-virt-mcp
+      tool: namespaces_list
+    - serverId: openshift-virt-mcp
+      tool: events_list
+    - serverId: openshift-virt-mcp
+      tool: vm_create
+    - serverId: openshift-virt-mcp
+      tool: vm_lifecycle
+    - serverId: openshift-virt-mcp
+      tool: pods_list_in_namespace
+    - serverId: openshift-virt-mcp
+      tool: nodes_top
+    - serverId: openshift-virt-mcp
+      tool: pods_top
+    - serverId: openshift-virt-mcp
+      tool: nodes_stats_summary

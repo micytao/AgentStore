@@ -7,6 +7,32 @@ export type DepartmentId =
 
 export type EngineType = "self-hosted-sandbox" | "hosted-agent-api";
 
+/** Which container/runtime a listing's agent actually runs as, independent of
+ * `engineType`/`openshellAgent`. "generic-chat" is the new default: a small,
+ * pre-built chat container (apps/agent-runtime) configured per-listing with
+ * a provider, MCP servers, and skills, deployed once by AAP as a persistent
+ * Deployment+Route. "openshell" is the existing, unchanged Engineering path
+ * (Agent Sandbox Service + per-task sandbox), kept for coding agents. */
+export type AgentRuntime = "generic-chat" | "openshell";
+
+export type AgentDeploymentStatus = "not-deployed" | "deploying" | "running" | "failed";
+
+/** State of the one-time "deploy this agent to OpenShift via AAP" action for
+ * a `generic-chat` listing. Populated by deployments.ts, not part of the
+ * YAML source — this is what turns into the persistent web link users open,
+ * as opposed to Task/EngineHandle which model a single user's launch. */
+export interface AgentDeployment {
+  status: AgentDeploymentStatus;
+  aapJobId?: string;
+  aapJobUrl?: string;
+  openshiftDeploymentName?: string;
+  namespace?: string;
+  /** The persistent chat URL, once status is "running". */
+  routeUrl?: string;
+  error?: string;
+  updatedAt?: string;
+}
+
 export type AgentMode = "work-with-me" | "do-this-for-me";
 
 export type RiskTier = "low" | "medium" | "high";
@@ -48,8 +74,15 @@ export interface Listing {
   pricing?: Pricing;
   /** Adapter-private. Only set on Engine 1 listings. */
   openshellAgent?: string;
+  /** Which runtime container this agent runs as. Defaults to "generic-chat"
+   * when unset (older listings created before this field existed). */
+  runtime?: AgentRuntime;
   /** Per-agent bindings configured by the admin (provider, tools, skills, engine override). */
   agentConfig?: AgentConfig;
+  /** Set by deployments.ts for `runtime: "generic-chat"` listings once an
+   * admin has run the one-time "Deploy to OpenShift" action. Not part of
+   * the YAML source — persisted the same way `agentConfig` overrides are. */
+  deployment?: AgentDeployment;
   /**
    * Set by catalog.ts at load time based on which directory the listing was
    * loaded from; not present in the YAML source itself. "custom" listings
@@ -74,13 +107,33 @@ export interface AgentConfig {
 }
 
 /** A reusable instruction bundle an admin can author once and attach to any
- * number of agents; its `instructions` are merged into the agent's system
- * prompt when drafting. */
+ * number of agents. Loaded progressively (see packages/agent-core's
+ * chatLoop): only `name`+`description` sit in the system prompt as a menu;
+ * `instructions` are injected on demand when the model calls `load_skill`. */
 export interface Skill {
   id: string;
   name: string;
   description: string;
   instructions: string;
+  /** Tool names (matched by `ModelTool.name`) this skill's SKILL.md declares
+   * via its `allowed-tools` frontmatter. When set, those tools are only
+   * visible to the model while this skill is active; tools not claimed by
+   * any skill's `allowedTools` stay always-visible. Undefined/empty means
+   * this skill doesn't scope tool visibility at all. */
+  allowedTools?: string[];
+  /** Red Hat agentic-plugins pack this skill was imported from (e.g.
+   * "rh-sre"), for admin-side filtering. Unset for custom, hand-authored
+   * skills. */
+  pack?: string;
+  /**
+   * Set by skills.ts at load time based on which directory the skill was
+   * loaded from (mirrors Listing.source): "built-in" skills ship in
+   * catalog/skills/**, imported once by scripts/import-redhat-skills.ts,
+   * and are read-only — attempting to edit/delete one is rejected.
+   * "custom" skills are authored through the Admin Skills panel and are
+   * freely editable. Not present in the JSON source itself.
+   */
+  source?: "built-in" | "custom";
 }
 
 /** Full input for the Admin onboarding wizard (creating a brand-new agent),
@@ -97,6 +150,7 @@ export interface ListingCreateInput {
   riskTier: RiskTier;
   pricing?: Pricing;
   openshellAgent?: string;
+  runtime?: AgentRuntime;
   agentConfig?: AgentConfig;
   /** If true, the new listing starts published; otherwise it starts as a draft. */
   publish?: boolean;
@@ -107,7 +161,7 @@ export interface TaskTarget {
   successCriteria?: string;
 }
 
-export type EngineBackend = "aap" | "simulated" | "openshell" | "fake";
+export type EngineBackend = "aap" | "simulated" | "openshell" | "generic-chat" | "fake";
 
 export interface EngineHandle {
   engineType: EngineType | "fake" | "ansible";
@@ -122,7 +176,7 @@ export interface EngineStatus {
   phase: TaskPhase;
   outputSummary?: string;
   interactive?: {
-    kind: "simulated" | "openshell";
+    kind: "simulated" | "openshell" | "generic-chat";
     attachHint?: string;
   };
   backend?: EngineBackend;
@@ -162,6 +216,20 @@ export interface OpenShellMcpServerConfig {
   authToken?: string;
 }
 
+/** Shape of the JSON file mounted at /etc/agent/config.json inside the
+ * generic-chat runtime container (apps/agent-runtime) — the structured half
+ * of the hybrid config-delivery split (flat scalars like provider kind/key
+ * go in as env vars instead; see ansible/provision-generic-agent.yml).
+ * `introLines` + `skills` are fed straight into packages/agent-core's
+ * buildSystemPrompt()/chatLoop so the container computes the same
+ * progressive-disclosure system prompt drafting.ts does. */
+export interface GenericAgentRuntimeConfig {
+  listingName: string;
+  introLines: string[];
+  skills: Skill[];
+  mcpServers: OpenShellMcpServerConfig[];
+}
+
 export interface TaskSpec {
   taskId: string;
   listingId: string;
@@ -183,7 +251,7 @@ export interface EngineAdapter {
   getStatus(handle: EngineHandle, spec: TaskSpec): Promise<EngineStatus>;
   exposeInteractiveEndpoint(
     handle: EngineHandle
-  ): Promise<{ kind: "simulated" | "openshell"; url?: string } | null>;
+  ): Promise<{ kind: "simulated" | "openshell" | "generic-chat"; url?: string } | null>;
   terminate(handle: EngineHandle): Promise<void>;
 }
 
@@ -213,7 +281,7 @@ export interface Task {
     /** Set from EngineStatus.interactive by orchestrator.ts's refresh();
      * tells the task page which terminal component to render. */
     interactive?: {
-      kind: "simulated" | "openshell";
+      kind: "simulated" | "openshell" | "generic-chat";
     };
   };
   approvalDecision?: "approved" | "rejected";
@@ -240,6 +308,8 @@ export type ListingUpdate = Partial<
     | "reviewStatus"
     | "pricing"
     | "agentConfig"
+    | "runtime"
+    | "deployment"
   >
 >;
 

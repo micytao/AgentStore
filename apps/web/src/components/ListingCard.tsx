@@ -7,6 +7,8 @@ import {
   CodeIcon,
   CommentsIcon,
   DollarSignIcon,
+  HeadsetIcon,
+  ServerIcon,
   ShieldAltIcon,
 } from "@patternfly/react-icons";
 import Link from "next/link";
@@ -20,12 +22,15 @@ const ICONS: Record<string, ComponentType> = {
   shield: ShieldAltIcon,
   chart: ChartLineIcon,
   money: DollarSignIcon,
+  headset: HeadsetIcon,
+  server: ServerIcon,
 };
 
 export function ListingCard({ listing }: { listing: Listing }) {
   const Icon = ICONS[listing.icon] ?? CodeIcon;
   const accent = DEPARTMENT_ACCENT[listing.department];
   const mode = listing.supportedModes[0];
+  const isRunningGenericChat = listing.runtime === "generic-chat" && listing.deployment?.status === "running";
 
   return (
     <Link href={`/listings/${listing.id}`} className="store-card-link">
@@ -49,7 +54,7 @@ export function ListingCard({ listing }: { listing: Listing }) {
             <span className="store-pill is-price">{formatPrice(listing.pricing)}</span>
           )}
         </div>
-        <div className="store-card-cta">Launch →</div>
+        <div className="store-card-cta">{isRunningGenericChat ? "Open agent →" : "Launch →"}</div>
       </article>
     </Link>
   );
