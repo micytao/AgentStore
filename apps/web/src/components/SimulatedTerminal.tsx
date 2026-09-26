@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import "@xterm/xterm/css/xterm.css";
+import { Card, CardBody, CardTitle } from "@patternfly/react-core";
 
 export function SimulatedTerminal({
   listingName,
@@ -86,14 +87,11 @@ export function SimulatedTerminal({
   }, [listingName, live]);
 
   return (
-    <div className="store-terminal-chrome">
-      <div className="store-terminal-bar">
-        <span />
-        <span />
-        <span />
-        <em>{listingName}</em>
-      </div>
-      <div ref={hostRef} className="store-terminal" />
-    </div>
+    <Card isCompact>
+      <CardTitle>{listingName}</CardTitle>
+      <CardBody>
+        <div ref={hostRef} className="store-terminal" />
+      </CardBody>
+    </Card>
   );
 }

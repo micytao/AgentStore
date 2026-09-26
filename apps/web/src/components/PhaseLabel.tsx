@@ -1,17 +1,22 @@
 "use client";
 
 import type { TaskPhase } from "@agentstore/shared";
+import { Label } from "@patternfly/react-core";
 
-const TONE: Record<TaskPhase, string> = {
-  Pending: "muted",
-  Provisioning: "info",
-  Running: "info",
-  AwaitingApproval: "warn",
-  Completed: "ok",
-  Failed: "bad",
-  Cancelled: "muted",
+const COLOR: Record<TaskPhase, "blue" | "green" | "orange" | "red" | "grey"> = {
+  Pending: "grey",
+  Provisioning: "blue",
+  Running: "blue",
+  AwaitingApproval: "orange",
+  Completed: "green",
+  Failed: "red",
+  Cancelled: "grey",
 };
 
 export function PhaseLabel({ phase }: { phase: TaskPhase }) {
-  return <span className={`store-phase is-${TONE[phase]}`}>{phase}</span>;
+  return (
+    <Label color={COLOR[phase]} isCompact>
+      {phase}
+    </Label>
+  );
 }

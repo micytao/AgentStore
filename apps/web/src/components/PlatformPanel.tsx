@@ -8,6 +8,33 @@ import type {
   PlatformStatus,
   SecretSummary,
 } from "@agentstore/shared";
+import {
+  Alert,
+  Bullseye,
+  Button,
+  Card,
+  CardBody,
+  CardTitle,
+  Checkbox,
+  Content,
+  ContentVariants,
+  DescriptionList,
+  DescriptionListDescription,
+  DescriptionListGroup,
+  DescriptionListTerm,
+  Flex,
+  FlexItem,
+  Form,
+  FormGroup,
+  Gallery,
+  GalleryItem,
+  Label,
+  Spinner,
+  Switch,
+  TextInput,
+  Title,
+} from "@patternfly/react-core";
+import { Table, Tbody, Td, Th, Thead, Tr } from "@patternfly/react-table";
 import { SecretField } from "@/components/SecretField";
 import {
   fetchEngineSettings,
@@ -21,18 +48,10 @@ type TestOutcome = { ok: boolean; message: string };
 
 function TestBanner({ result, pending }: { result?: TestOutcome; pending?: boolean }) {
   if (pending) {
-    return (
-      <p className="store-banner tight is-muted" role="status">
-        Testing connection…
-      </p>
-    );
+    return <Alert variant="info" isInline isPlain title="Testing connection…" />;
   }
   if (!result) return null;
-  return (
-    <p className={`store-banner tight ${result.ok ? "is-ok" : "is-error"}`} role="status">
-      {result.message}
-    </p>
-  );
+  return <Alert variant={result.ok ? "success" : "danger"} isInline isPlain title={result.message} />;
 }
 
 function ConnectionCard({
@@ -53,57 +72,53 @@ function ConnectionCard({
     : connection.configured
       ? "Disconnected"
       : "Not configured";
-  const statusClass = connection.connected
-    ? "is-live"
+  const statusColor: "green" | "red" | "grey" = connection.connected
+    ? "green"
     : connection.configured
-      ? "is-offline"
-      : "is-muted";
+      ? "red"
+      : "grey";
   const errorMessage = result && !result.ok ? result.message : connection.error;
   const showError = Boolean(errorMessage && !connection.connected);
   const showSuccess = Boolean(result?.ok);
 
   return (
-    <article className="store-conn-card">
-      <h4 className="store-conn-card-title">{name}</h4>
-      <dl className="store-conn-dl">
-        <div className="store-conn-row">
-          <dt>Status</dt>
-          <dd>
-            <span className={`store-pill ${statusClass}`}>{statusLabel}</span>
-          </dd>
-        </div>
-        <div className="store-conn-row">
-          <dt>URL</dt>
-          <dd>
-            {url ? (
-              <span className="store-conn-url" title={url}>
-                {url}
-              </span>
-            ) : (
-              <span className="store-conn-empty">Not configured</span>
-            )}
-          </dd>
-        </div>
-        {details?.map((item) => (
-          <div className="store-conn-row" key={item.label}>
-            <dt>{item.label}</dt>
-            <dd>{item.value}</dd>
-          </div>
-        ))}
-        {showSuccess ? (
-          <div className="store-conn-row is-ok">
-            <dt>Result</dt>
-            <dd>{result!.message}</dd>
-          </div>
-        ) : null}
-        {showError ? (
-          <div className="store-conn-row is-error">
-            <dt>Error</dt>
-            <dd>{errorMessage}</dd>
-          </div>
-        ) : null}
-      </dl>
-    </article>
+    <Card isCompact>
+      <CardTitle>{name}</CardTitle>
+      <CardBody>
+        <DescriptionList isCompact>
+          <DescriptionListGroup>
+            <DescriptionListTerm>Status</DescriptionListTerm>
+            <DescriptionListDescription>
+              <Label color={statusColor} isCompact>
+                {statusLabel}
+              </Label>
+            </DescriptionListDescription>
+          </DescriptionListGroup>
+          <DescriptionListGroup>
+            <DescriptionListTerm>URL</DescriptionListTerm>
+            <DescriptionListDescription>
+              {url ? (
+                <span title={url}>{url}</span>
+              ) : (
+                <Content component={ContentVariants.small}>Not configured</Content>
+              )}
+            </DescriptionListDescription>
+          </DescriptionListGroup>
+          {details?.map((item) => (
+            <DescriptionListGroup key={item.label}>
+              <DescriptionListTerm>{item.label}</DescriptionListTerm>
+              <DescriptionListDescription>{item.value}</DescriptionListDescription>
+            </DescriptionListGroup>
+          ))}
+        </DescriptionList>
+        {showSuccess && (
+          <Alert variant="success" isInline isPlain title={result!.message} style={{ marginTop: "0.5rem" }} />
+        )}
+        {showError && (
+          <Alert variant="danger" isInline isPlain title={errorMessage} style={{ marginTop: "0.5rem" }} />
+        )}
+      </CardBody>
+    </Card>
   );
 }
 
@@ -200,38 +215,38 @@ export function PlatformPanel() {
     setEngineSettings(next);
   }
 
-  if (error && !status) return <p className="store-empty">{error}</p>;
-  if (!status || !draft) return <div className="store-loading">Loading platform…</div>;
+  if (error && !status) return <Alert variant="danger" isInline title={error} />;
+  if (!status || !draft) {
+    return (
+      <Bullseye>
+        <Spinner aria-label="Loading platform" />
+      </Bullseye>
+    );
+  }
 
   function field<K extends keyof PlatformSettings>(key: K, label: string, placeholder = "") {
+    const id = `platform-${key}`;
     return (
-      <label className="store-field-mini">
-        <span>{label}</span>
-        <input
+      <FormGroup label={label} fieldId={id}>
+        <TextInput
+          id={id}
           value={String(draft![key] ?? "")}
           placeholder={placeholder}
-          onChange={(e) =>
-            setDraft((prev) =>
-              prev ? { ...prev, [key]: e.target.value } : prev
-            )
-          }
+          onChange={(_e, v) => setDraft((prev) => (prev ? { ...prev, [key]: v } : prev))}
         />
-      </label>
+      </FormGroup>
     );
   }
 
   function insecureTlsToggle<K extends "aapInsecureTls" | "openshiftInsecureTls">(key: K) {
+    const id = `platform-${key}`;
     return (
-      <label className="store-admin-checkbox">
-        <input
-          type="checkbox"
-          checked={Boolean(draft![key])}
-          onChange={(e) =>
-            setDraft((prev) => (prev ? { ...prev, [key]: e.target.checked } : prev))
-          }
-        />
-        <span>Allow self-signed certificate (dev/workshop clusters only)</span>
-      </label>
+      <Checkbox
+        id={id}
+        label="Allow self-signed certificate (dev/workshop clusters only)"
+        isChecked={Boolean(draft![key])}
+        onChange={(_e, checked) => setDraft((prev) => (prev ? { ...prev, [key]: checked } : prev))}
+      />
     );
   }
 
@@ -239,175 +254,238 @@ export function PlatformPanel() {
   const openshiftToken = secrets.find((s) => s.key === "OPENSHIFT_TOKEN");
 
   return (
-    <div className="store-admin-section">
-      {error ? <p className="store-banner is-error">{error}</p> : null}
+    <Flex direction={{ default: "column" }} spaceItems={{ default: "spaceItemsLg" }}>
+      {error ? (
+        <FlexItem>
+          <Alert variant="danger" isInline title={error} />
+        </FlexItem>
+      ) : null}
 
-      <div className="store-panel">
-        <h3 className="store-panel-title">Connections</h3>
-        <p className="store-lede tight">
-          AgentStore is a console. It talks to Ansible Automation Platform to
-          provision, and to prod OpenShift to watch the Job that actually
-          runs. URLs and tokens for both are configured below.
-        </p>
-        <div className="store-conn-list">
-          <ConnectionCard
-            name="Ansible Automation Platform"
-            connection={status.aap}
-            url={status.aap.configured ? status.settings.aapControllerUrl : undefined}
-            result={testResults.aap}
-          />
-          <ConnectionCard
-            name="OpenShift (prod)"
-            connection={status.openshift}
-            url={status.openshift.configured ? status.settings.openshiftApiUrl : undefined}
-            details={
-              status.openshift.configured
-                ? [{ label: "Namespace", value: status.settings.openshiftNamespace || "agent-workloads" }]
-                : undefined
-            }
-            result={testResults.openshift}
-          />
-        </div>
-      </div>
+      <FlexItem>
+        <Card>
+          <CardTitle>Connections</CardTitle>
+          <CardBody>
+            <Content component={ContentVariants.p}>
+              AgentStore is a console. It talks to Ansible Automation Platform to
+              provision, and to prod OpenShift to watch the Job that actually
+              runs. URLs and tokens for both are configured below.
+            </Content>
+            <Gallery hasGutter minWidths={{ default: "300px" }}>
+              <GalleryItem>
+                <ConnectionCard
+                  name="Ansible Automation Platform"
+                  connection={status.aap}
+                  url={status.aap.configured ? status.settings.aapControllerUrl : undefined}
+                  result={testResults.aap}
+                />
+              </GalleryItem>
+              <GalleryItem>
+                <ConnectionCard
+                  name="OpenShift (prod)"
+                  connection={status.openshift}
+                  url={status.openshift.configured ? status.settings.openshiftApiUrl : undefined}
+                  details={
+                    status.openshift.configured
+                      ? [{ label: "Namespace", value: status.settings.openshiftNamespace || "agent-workloads" }]
+                      : undefined
+                  }
+                  result={testResults.openshift}
+                />
+              </GalleryItem>
+            </Gallery>
+          </CardBody>
+        </Card>
+      </FlexItem>
 
-      <div className="store-panel">
-        <div className="store-panel-head">
-          <h3 className="store-panel-title">AAP controller</h3>
-          <button
-            type="button"
-            className="store-btn-ghost store-btn-compact"
-            disabled={testing !== null}
-            onClick={() => void test("aap")}
-          >
-            {testing === "aap" ? "Testing…" : "Test"}
-          </button>
-        </div>
-        <TestBanner result={testResults.aap} pending={testing === "aap"} />
-        <div className="store-resource-input-row">
-          {field("aapControllerUrl", "Controller URL", "https://aap.example.com")}
-          {field("aapConsoleUrl", "Console URL (deep links)", "https://aap.example.com")}
-          {field("aapJobTemplateId", "Default job template id", "42")}
-        </div>
-        {status.aap.jobTemplates.length > 0 ? (
-          <p className="store-lede tight">
-            Templates:{" "}
-            {status.aap.jobTemplates
-              .slice(0, 8)
-              .map((t) => `${t.name} (#${t.id})`)
-              .join(" · ")}
-          </p>
-        ) : null}
-        {insecureTlsToggle("aapInsecureTls")}
-        {aapToken && <SecretField secret={aapToken} onChange={loadSecrets} />}
-      </div>
+      <FlexItem>
+        <Card>
+          <CardTitle>
+            <Flex justifyContent={{ default: "justifyContentSpaceBetween" }} alignItems={{ default: "alignItemsCenter" }}>
+              <FlexItem>AAP controller</FlexItem>
+              <FlexItem>
+                <Button variant="secondary" isDisabled={testing !== null} onClick={() => void test("aap")}>
+                  {testing === "aap" ? "Testing…" : "Test"}
+                </Button>
+              </FlexItem>
+            </Flex>
+          </CardTitle>
+          <CardBody>
+            <TestBanner result={testResults.aap} pending={testing === "aap"} />
+            <Form>
+              <Flex spaceItems={{ default: "spaceItemsMd" }}>
+                <FlexItem flex={{ default: "flex_1" }}>
+                  {field("aapControllerUrl", "Controller URL", "https://aap.example.com")}
+                </FlexItem>
+                <FlexItem flex={{ default: "flex_1" }}>
+                  {field("aapConsoleUrl", "Console URL (deep links)", "https://aap.example.com")}
+                </FlexItem>
+                <FlexItem flex={{ default: "flex_1" }}>{field("aapJobTemplateId", "Default job template id", "42")}</FlexItem>
+              </Flex>
+            </Form>
+            {status.aap.jobTemplates.length > 0 ? (
+              <Content component={ContentVariants.small}>
+                Templates:{" "}
+                {status.aap.jobTemplates
+                  .slice(0, 8)
+                  .map((t) => `${t.name} (#${t.id})`)
+                  .join(" · ")}
+              </Content>
+            ) : null}
+            {insecureTlsToggle("aapInsecureTls")}
+            {aapToken && <SecretField secret={aapToken} onChange={loadSecrets} />}
+          </CardBody>
+        </Card>
+      </FlexItem>
 
-      <div className="store-panel">
-        <div className="store-panel-head">
-          <h3 className="store-panel-title">Prod OpenShift</h3>
-          <button
-            type="button"
-            className="store-btn-ghost store-btn-compact"
-            disabled={testing !== null}
-            onClick={() => void test("openshift")}
-          >
-            {testing === "openshift" ? "Testing…" : "Test"}
-          </button>
-        </div>
-        <TestBanner result={testResults.openshift} pending={testing === "openshift"} />
-        <p className="store-lede tight">
-          This must be the <strong>API server</strong> URL, not the web console — usually{" "}
-          <code>https://api.&lt;cluster-domain&gt;:6443</code>. It is a different hostname from the console
-          (which starts with <code>console-openshift-console.apps.</code>) and almost always needs an explicit
-          <code>:6443</code> port.
-        </p>
-        <div className="store-resource-input-row">
-          {field("openshiftApiUrl", "API URL", "https://api.cluster.example.com:6443")}
-          {field("openshiftNamespace", "Namespace", "agent-workloads")}
-          {field("openshiftConsoleUrl", "Console URL", "https://console-openshift-console.apps.example.com")}
-        </div>
-        {insecureTlsToggle("openshiftInsecureTls")}
-        {openshiftToken && <SecretField secret={openshiftToken} onChange={loadSecrets} />}
-      </div>
+      <FlexItem>
+        <Card>
+          <CardTitle>
+            <Flex justifyContent={{ default: "justifyContentSpaceBetween" }} alignItems={{ default: "alignItemsCenter" }}>
+              <FlexItem>Prod OpenShift</FlexItem>
+              <FlexItem>
+                <Button variant="secondary" isDisabled={testing !== null} onClick={() => void test("openshift")}>
+                  {testing === "openshift" ? "Testing…" : "Test"}
+                </Button>
+              </FlexItem>
+            </Flex>
+          </CardTitle>
+          <CardBody>
+            <TestBanner result={testResults.openshift} pending={testing === "openshift"} />
+            <Content component={ContentVariants.small}>
+              This must be the <strong>API server</strong> URL, not the web console — usually{" "}
+              <code>https://api.&lt;cluster-domain&gt;:6443</code>. It is a different hostname from the console
+              (which starts with <code>console-openshift-console.apps.</code>) and almost always needs an explicit
+              <code>:6443</code> port.
+            </Content>
+            <Form>
+              <Flex spaceItems={{ default: "spaceItemsMd" }}>
+                <FlexItem flex={{ default: "flex_1" }}>
+                  {field("openshiftApiUrl", "API URL", "https://api.cluster.example.com:6443")}
+                </FlexItem>
+                <FlexItem flex={{ default: "flex_1" }}>{field("openshiftNamespace", "Namespace", "agent-workloads")}</FlexItem>
+                <FlexItem flex={{ default: "flex_1" }}>
+                  {field("openshiftConsoleUrl", "Console URL", "https://console-openshift-console.apps.example.com")}
+                </FlexItem>
+              </Flex>
+            </Form>
+            {insecureTlsToggle("openshiftInsecureTls")}
+            {openshiftToken && <SecretField secret={openshiftToken} onChange={loadSecrets} />}
+          </CardBody>
+        </Card>
+      </FlexItem>
 
       {engineSettings && (
-        <div className="store-panel">
-          <h3 className="store-panel-title">Execution</h3>
-          <p className="store-lede tight">
-            Business listings are provisioned by AAP onto prod OpenShift. If
-            AAP is not connected, launches use a labeled simulated job
-            instead. Use this switch to force every task simulated,
-            regardless of connection status.
-          </p>
-          <div className="store-switch-row">
-            <button
-              type="button"
-              className="store-switch-row-btn"
-              onClick={() => void toggleForceSimulated()}
-              aria-pressed={engineSettings.forceSimulated}
-              aria-label="Force simulated engine for every task"
-            >
-              <span
-                className={`store-switch${engineSettings.forceSimulated ? " is-on" : ""}`}
-                aria-hidden="true"
-              >
-                <span className="store-switch-knob" />
-              </span>
-            </button>
-            <span>Force simulated engine for every task</span>
-          </div>
-        </div>
+        <FlexItem>
+          <Card>
+            <CardTitle>Execution</CardTitle>
+            <CardBody>
+              <Content component={ContentVariants.p}>
+                Business listings are provisioned by AAP onto prod OpenShift. If
+                AAP is not connected, launches use a labeled simulated job
+                instead. Use this switch to force every task simulated,
+                regardless of connection status.
+              </Content>
+              <Switch
+                id="force-simulated"
+                label="Force simulated engine for every task"
+                isChecked={engineSettings.forceSimulated}
+                onChange={() => void toggleForceSimulated()}
+              />
+            </CardBody>
+          </Card>
+        </FlexItem>
       )}
 
-      <div className="store-panel">
-        <h3 className="store-panel-title">Recent AAP jobs</h3>
-        {status.aap.recentJobs.length === 0 ? (
-          <p className="store-lede tight">No jobs yet — or AAP is not connected.</p>
-        ) : (
-          <div className="store-admin-table">
-            {status.aap.recentJobs.map((job) => (
-              <div className="store-admin-row" key={job.id}>
-                <div>
-                  <strong>#{job.id} {job.name}</strong>
-                  <span>{job.status}</span>
-                </div>
-                {job.url ? (
-                  <a href={job.url} target="_blank" rel="noreferrer">
-                    Open in AAP
-                  </a>
-                ) : (
-                  <span>{job.started ?? ""}</span>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+      <FlexItem>
+        <Card>
+          <CardTitle>Recent AAP jobs</CardTitle>
+          <CardBody>
+            {status.aap.recentJobs.length === 0 ? (
+              <Content component={ContentVariants.small}>No jobs yet — or AAP is not connected.</Content>
+            ) : (
+              <Table aria-label="Recent AAP jobs" variant="compact">
+                <Thead>
+                  <Tr>
+                    <Th>Job</Th>
+                    <Th>Status</Th>
+                    <Th>Link</Th>
+                  </Tr>
+                </Thead>
+                <Tbody>
+                  {status.aap.recentJobs.map((job) => (
+                    <Tr key={job.id}>
+                      <Td dataLabel="Job">
+                        #{job.id} {job.name}
+                      </Td>
+                      <Td dataLabel="Status">
+                        <Label isCompact>{job.status}</Label>
+                      </Td>
+                      <Td dataLabel="Link">
+                        {job.url ? (
+                          <a href={job.url} target="_blank" rel="noreferrer">
+                            Open in AAP
+                          </a>
+                        ) : (
+                          job.started ?? ""
+                        )}
+                      </Td>
+                    </Tr>
+                  ))}
+                </Tbody>
+              </Table>
+            )}
+          </CardBody>
+        </Card>
+      </FlexItem>
 
-      <div className="store-panel">
-        <h3 className="store-panel-title">Agent Jobs on OpenShift</h3>
-        {status.openshift.jobs.length === 0 ? (
-          <p className="store-lede tight">
-            No <code>agent-*</code> Jobs in {status.settings.openshiftNamespace || "agent-workloads"}.
-          </p>
-        ) : (
-          <div className="store-admin-table">
-            {status.openshift.jobs.map((job) => (
-              <div className="store-admin-row" key={`${job.namespace}/${job.name}`}>
-                <div>
-                  <strong>{job.name}</strong>
-                  <span>
-                    {job.namespace}
-                    {job.taskId ? ` · task ${job.taskId}` : ""}
-                  </span>
-                </div>
-                <span>
-                  {job.succeeded ? "succeeded" : job.failed ? "failed" : job.active ? "active" : "pending"}
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
+      <FlexItem>
+        <Card>
+          <CardTitle>Agent Jobs on OpenShift</CardTitle>
+          <CardBody>
+            {status.openshift.jobs.length === 0 ? (
+              <Content component={ContentVariants.small}>
+                No <code>agent-*</code> Jobs in {status.settings.openshiftNamespace || "agent-workloads"}.
+              </Content>
+            ) : (
+              <Table aria-label="Agent jobs on OpenShift" variant="compact">
+                <Thead>
+                  <Tr>
+                    <Th>Job</Th>
+                    <Th>Namespace</Th>
+                    <Th>Status</Th>
+                  </Tr>
+                </Thead>
+                <Tbody>
+                  {status.openshift.jobs.map((job) => {
+                    const statusLabel = job.succeeded ? "succeeded" : job.failed ? "failed" : job.active ? "active" : "pending";
+                    const statusColor: "green" | "red" | "blue" | "grey" = job.succeeded
+                      ? "green"
+                      : job.failed
+                        ? "red"
+                        : job.active
+                          ? "blue"
+                          : "grey";
+                    return (
+                      <Tr key={`${job.namespace}/${job.name}`}>
+                        <Td dataLabel="Job">
+                          {job.name}
+                          {job.taskId ? ` · task ${job.taskId}` : ""}
+                        </Td>
+                        <Td dataLabel="Namespace">{job.namespace}</Td>
+                        <Td dataLabel="Status">
+                          <Label color={statusColor} isCompact>
+                            {statusLabel}
+                          </Label>
+                        </Td>
+                      </Tr>
+                    );
+                  })}
+                </Tbody>
+              </Table>
+            )}
+          </CardBody>
+        </Card>
+      </FlexItem>
+    </Flex>
   );
 }

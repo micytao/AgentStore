@@ -2,6 +2,24 @@
 
 import { DEPARTMENTS } from "@agentstore/shared";
 import { useEffect, useState } from "react";
+import {
+  Alert,
+  Bullseye,
+  Card,
+  CardBody,
+  CardTitle,
+  Content,
+  ContentVariants,
+  EmptyState,
+  EmptyStateBody,
+  Gallery,
+  Label,
+  PageSection,
+  Spinner,
+  Title,
+  ToggleGroup,
+  ToggleGroupItem,
+} from "@patternfly/react-core";
 import { ListingCard } from "@/components/ListingCard";
 import { fetchListings } from "@/lib/api";
 import type { Listing } from "@agentstore/shared";
@@ -19,80 +37,84 @@ export function CatalogPage() {
   }, [department]);
 
   return (
-    <div className="store-page">
-      <section className="store-hero">
-        <p className="store-kicker">Self-service · governed · auditable</p>
-        <h1 className="store-display">
-          Pick a job.
-          <br />
-          <em>We stand the agent up.</em>
-        </h1>
-        <p className="store-lede store-lede-wide">
-          Browse business agents by department. Launch one, and Ansible
-          Automation Platform provisions it onto the company OpenShift cluster.
-          The platform handles the infrastructure — you just review the draft.
-        </p>
-        <div className="store-path-grid">
-          <div className="store-path">
-            <span className="store-path-index">A</span>
-            <div>
-              <strong>Autonomous Mode</strong>
-              <p>
-                Do this for me. AAP stands up an OpenShift Job. The agent
-                drafts; you approve before anything ships.
-              </p>
-            </div>
-          </div>
-          <div className="store-path">
-            <span className="store-path-index">C</span>
-            <div>
-              <strong>Collaborative Mode</strong>
-              <p>
-                Work with me. Engineering specialist agents (optional OpenShell
-                sandbox) for live pairing — listed last in the catalog.
-              </p>
-            </div>
-          </div>
-        </div>
-      </section>
+    <>
+      <PageSection variant="secondary">
+        <Content>
+          <Content component={ContentVariants.small}>
+            Self-service · governed · auditable
+          </Content>
+          <Title headingLevel="h1" size="2xl">
+            Pick a job. We stand the agent up.
+          </Title>
+          <Content component={ContentVariants.p}>
+            Browse business agents by department. Launch one, and Ansible
+            Automation Platform provisions it onto the company OpenShift
+            cluster. The platform handles the infrastructure — you just
+            review the draft.
+          </Content>
+        </Content>
+        <Gallery hasGutter minWidths={{ default: "18rem" }} style={{ marginTop: "1rem" }}>
+          <Card isCompact>
+            <CardTitle>
+              <Label color="blue" isCompact>
+                A
+              </Label>{" "}
+              Autonomous Mode
+            </CardTitle>
+            <CardBody>
+              Do this for me. AAP stands up an OpenShift Job. The agent
+              drafts; you approve before anything ships.
+            </CardBody>
+          </Card>
+          <Card isCompact>
+            <CardTitle>
+              <Label color="purple" isCompact>
+                C
+              </Label>{" "}
+              Collaborative Mode
+            </CardTitle>
+            <CardBody>
+              Work with me. Engineering specialist agents (optional OpenShell
+              sandbox) for live pairing — listed last in the catalog.
+            </CardBody>
+          </Card>
+        </Gallery>
+      </PageSection>
 
-      <div className="store-filters" role="tablist" aria-label="Department">
-        {DEPARTMENTS.map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            role="tab"
-            aria-selected={department === item.id}
-            className={`store-chip${department === item.id ? " is-active" : ""}`}
-            onClick={() => setDepartment(item.id)}
-          >
-            {item.name}
-          </button>
-        ))}
-      </div>
-
-      {!listings && !error ? (
-        <div className="store-loading">Loading catalog…</div>
-      ) : error ? (
-        <p className="store-empty">{error}</p>
-      ) : listings && listings.length === 0 ? (
-        <p className="store-empty">
-          Nothing published here yet. Ask an admin to publish an agent, or pick
-          another department.
-        </p>
-      ) : (
-        <div className="store-gallery">
-          {listings?.map((listing, index) => (
-            <div
-              key={listing.id}
-              className="store-gallery-item"
-              style={{ animationDelay: `${index * 60}ms` }}
-            >
-              <ListingCard listing={listing} />
-            </div>
+      <PageSection>
+        <ToggleGroup aria-label="Department filter" style={{ marginBottom: "1.5rem" }}>
+          {DEPARTMENTS.map((item) => (
+            <ToggleGroupItem
+              key={item.id}
+              text={item.name}
+              isSelected={department === item.id}
+              onChange={() => setDepartment(item.id)}
+            />
           ))}
-        </div>
-      )}
-    </div>
+        </ToggleGroup>
+
+        {!listings && !error ? (
+          <Bullseye>
+            <Spinner aria-label="Loading catalog" />
+          </Bullseye>
+        ) : error ? (
+          <Alert variant="danger" isInline title="Could not load catalog">
+            {error}
+          </Alert>
+        ) : listings && listings.length === 0 ? (
+          <EmptyState titleText="Nothing published here yet" headingLevel="h2">
+            <EmptyStateBody>
+              Ask an admin to publish an agent, or pick another department.
+            </EmptyStateBody>
+          </EmptyState>
+        ) : (
+          <Gallery hasGutter minWidths={{ default: "20rem" }}>
+            {listings?.map((listing) => (
+              <ListingCard key={listing.id} listing={listing} />
+            ))}
+          </Gallery>
+        )}
+      </PageSection>
+    </>
   );
 }

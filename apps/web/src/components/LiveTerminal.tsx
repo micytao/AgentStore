@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import "@xterm/xterm/css/xterm.css";
+import { Alert, Card, CardBody, CardTitle } from "@patternfly/react-core";
 import { fetchTerminalEndpoint } from "@/lib/api";
 
 /**
@@ -88,20 +89,15 @@ export function LiveTerminal({ taskId, listingName }: { taskId: string; listingN
   }, [taskId]);
 
   return (
-    <div className="store-terminal-chrome">
-      <div className="store-terminal-bar">
-        <span />
-        <span />
-        <span />
-        <em>{listingName}</em>
-      </div>
-      {error ? (
-        <div className="store-terminal is-error">
-          <p className="store-banner is-error">{error}</p>
-        </div>
-      ) : (
-        <div ref={hostRef} className="store-terminal" />
-      )}
-    </div>
+    <Card isCompact>
+      <CardTitle>{listingName}</CardTitle>
+      <CardBody>
+        {error ? (
+          <Alert variant="danger" isInline title={error} />
+        ) : (
+          <div ref={hostRef} className="store-terminal" />
+        )}
+      </CardBody>
+    </Card>
   );
 }

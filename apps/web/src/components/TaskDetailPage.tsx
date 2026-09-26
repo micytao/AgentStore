@@ -3,6 +3,27 @@
 import { departmentLabel, splitSkillsFooter } from "@agentstore/shared";
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import {
+  Alert,
+  Bullseye,
+  Button,
+  Card,
+  CardBody,
+  CodeBlock,
+  CodeBlockCode,
+  Content,
+  ContentVariants,
+  DescriptionList,
+  DescriptionListDescription,
+  DescriptionListGroup,
+  DescriptionListTerm,
+  Label,
+  PageSection,
+  ProgressStep,
+  ProgressStepper,
+  Spinner,
+  Title,
+} from "@patternfly/react-core";
 import { LiveTerminal } from "@/components/LiveTerminal";
 import { PhaseLabel } from "@/components/PhaseLabel";
 import { SimulatedTerminal } from "@/components/SimulatedTerminal";
@@ -52,16 +73,20 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
 
   if (!task && !error) {
     return (
-      <div className="store-page">
-        <div className="store-loading">Opening session…</div>
-      </div>
+      <PageSection>
+        <Bullseye>
+          <Spinner aria-label="Opening session" />
+        </Bullseye>
+      </PageSection>
     );
   }
   if (!task) {
     return (
-      <div className="store-page">
-        <p className="store-empty">{error ?? "Task not found"}</p>
-      </div>
+      <PageSection>
+        <Alert variant="danger" isInline title="Task not found">
+          {error}
+        </Alert>
+      </PageSection>
     );
   }
 
@@ -75,200 +100,220 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
     task.status.phase === "Provisioning" ||
     task.status.phase === "Pending";
 
+  const backendLabel =
+    task.status.backend === "aap"
+      ? "Live AAP"
+      : task.status.backend === "simulated"
+        ? "Simulated AAP"
+        : task.status.live
+          ? "Live sandbox"
+          : "Simulated";
+
   return (
-    <div className="store-page store-page-wide">
+    <PageSection isWidthLimited>
       <Link href="/tasks" className="store-back">
         ← My tasks
       </Link>
-      <header className="store-task-head">
-        <div>
-          <p className="store-kicker">
-            {departmentLabel(task.department)} · {task.requestedBy}
-          </p>
-          <h1 className="store-launch-title">{task.listingName}</h1>
-        </div>
-        <div className="store-task-badges">
-          <PhaseLabel phase={task.status.phase} />
-          <span className={`store-pill ${task.status.live ? "is-live" : ""}`}>
-            {task.status.backend === "aap"
-              ? "Live AAP"
-              : task.status.backend === "simulated"
-                ? "Simulated AAP"
-                : task.status.live
-                  ? "Live sandbox"
-                  : "Simulated"}
-          </span>
-        </div>
-      </header>
 
-      {error ? <p className="store-banner is-error">{error}</p> : null}
+      <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: "0.75rem", margin: "0.5rem 0 1.25rem" }}>
+        <div>
+          <Content component={ContentVariants.small}>
+            {departmentLabel(task.department)} · {task.requestedBy}
+          </Content>
+          <Title headingLevel="h1" size="2xl">
+            {task.listingName}
+          </Title>
+        </div>
+        <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+          <PhaseLabel phase={task.status.phase} />
+          <Label color={task.status.live ? "green" : "grey"} isCompact>
+            {backendLabel}
+          </Label>
+        </div>
+      </div>
+
+      {error ? (
+        <Alert variant="danger" isInline title="Something went wrong" style={{ marginBottom: "1rem" }}>
+          {error}
+        </Alert>
+      ) : null}
       {task.status.error ? (
-        <p className="store-banner is-error">{task.status.error}</p>
+        <Alert variant="danger" isInline title="Task error" style={{ marginBottom: "1rem" }}>
+          {task.status.error}
+        </Alert>
       ) : null}
       {task.approvalDecision ? (
-        <p
-          className={`store-banner ${task.approvalDecision === "approved" ? "is-ok" : "is-muted"}`}
-        >
-          {task.approvalDecision === "approved"
-            ? "Approved. The draft was accepted — nothing was sent outside the store."
-            : "Rejected. The draft was discarded."}
-        </p>
+        <Alert
+          variant={task.approvalDecision === "approved" ? "success" : "info"}
+          isInline
+          title={
+            task.approvalDecision === "approved"
+              ? "Approved. The draft was accepted — nothing was sent outside the store."
+              : "Rejected. The draft was discarded."
+          }
+          style={{ marginBottom: "1rem" }}
+        />
       ) : null}
 
-      <dl className="store-stats">
-        <div>
-          <dt>Mode</dt>
-          <dd>{modeLabel(task.mode)}</dd>
-        </div>
-        <div>
-          <dt>Est. cost</dt>
-          <dd>{formatUsd(task.status.costEstimate ?? 0)}</dd>
-        </div>
+      <DescriptionList isHorizontal style={{ marginBottom: "1.5rem" }}>
+        <DescriptionListGroup>
+          <DescriptionListTerm>Mode</DescriptionListTerm>
+          <DescriptionListDescription>{modeLabel(task.mode)}</DescriptionListDescription>
+        </DescriptionListGroup>
+        <DescriptionListGroup>
+          <DescriptionListTerm>Est. cost</DescriptionListTerm>
+          <DescriptionListDescription>{formatUsd(task.status.costEstimate ?? 0)}</DescriptionListDescription>
+        </DescriptionListGroup>
         {task.gitUrl ? (
-          <div>
-            <dt>Repository</dt>
-            <dd>{task.gitUrl}</dd>
-          </div>
+          <DescriptionListGroup>
+            <DescriptionListTerm>Repository</DescriptionListTerm>
+            <DescriptionListDescription>{task.gitUrl}</DescriptionListDescription>
+          </DescriptionListGroup>
         ) : null}
         {task.target?.goal ? (
-          <div>
-            <dt>Goal</dt>
-            <dd>{task.target.goal}</dd>
-          </div>
+          <DescriptionListGroup>
+            <DescriptionListTerm>Goal</DescriptionListTerm>
+            <DescriptionListDescription>{task.target.goal}</DescriptionListDescription>
+          </DescriptionListGroup>
         ) : null}
-      </dl>
+      </DescriptionList>
 
       {task.status.backend === "aap" || task.status.backend === "simulated" || task.status.aapJobId ? (
-        <ol className="store-timeline">
-          <li className="store-timeline-step is-done">
-            <strong>
-              {task.status.backend === "aap" ? "AAP job" : "Simulated AAP job"}
-            </strong>
-            <span>
-              {task.status.aapJobId ?? "pending"}
-              {task.status.provisioningStep ? ` · ${task.status.provisioningStep}` : ""}
-            </span>
+        <ProgressStepper aria-label="Provisioning timeline" style={{ marginBottom: "1.5rem" }}>
+          <ProgressStep
+            variant="success"
+            id="aap-job"
+            titleId="aap-job-title"
+            aria-label="AAP job step"
+          >
+            <strong>{task.status.backend === "aap" ? "AAP job" : "Simulated AAP job"}</strong>
+            <br />
+            {task.status.aapJobId ?? "pending"}
+            {task.status.provisioningStep ? ` · ${task.status.provisioningStep}` : ""}
             {task.status.aapJobUrl ? (
-              <a href={task.status.aapJobUrl} target="_blank" rel="noreferrer">
-                Open in AAP
-              </a>
+              <>
+                {" "}
+                <a href={task.status.aapJobUrl} target="_blank" rel="noreferrer">
+                  Open in AAP
+                </a>
+              </>
             ) : null}
-          </li>
-          <li
-            className={`store-timeline-step${
+          </ProgressStep>
+          <ProgressStep
+            variant={
               task.status.phase === "Running" ||
               task.status.phase === "AwaitingApproval" ||
               task.status.phase === "Completed"
-                ? " is-done"
-                : ""
-            }`}
+                ? "success"
+                : "pending"
+            }
+            isCurrent={provisioning}
+            id="openshift-job"
+            titleId="openshift-job-title"
+            aria-label="OpenShift Job step"
           >
             <strong>OpenShift Job</strong>
-            <span>
-              {task.status.openshiftJobName
-                ? `${task.status.openshiftJobName} (${task.status.namespace ?? "agent-workloads"})`
-                : "waiting"}
-            </span>
+            <br />
+            {task.status.openshiftJobName
+              ? `${task.status.openshiftJobName} (${task.status.namespace ?? "agent-workloads"})`
+              : "waiting"}
             {task.status.openshiftConsoleUrl ? (
-              <a href={task.status.openshiftConsoleUrl} target="_blank" rel="noreferrer">
-                Open in OpenShift
-              </a>
+              <>
+                {" "}
+                <a href={task.status.openshiftConsoleUrl} target="_blank" rel="noreferrer">
+                  Open in OpenShift
+                </a>
+              </>
             ) : null}
-          </li>
-          <li
-            className={`store-timeline-step${
+          </ProgressStep>
+          <ProgressStep
+            variant={
               task.status.phase === "AwaitingApproval" || task.status.phase === "Completed"
-                ? " is-done"
-                : ""
-            }`}
+                ? "success"
+                : "pending"
+            }
+            isCurrent={running}
+            id="draft"
+            titleId="draft-title"
+            aria-label="Draft step"
           >
             <strong>Draft</strong>
-            <span>
-              {task.status.phase === "AwaitingApproval" || task.status.phase === "Completed"
-                ? "Ready for review"
-                : "Not yet"}
-            </span>
-          </li>
-        </ol>
+            <br />
+            {task.status.phase === "AwaitingApproval" || task.status.phase === "Completed"
+              ? "Ready for review"
+              : "Not yet"}
+          </ProgressStep>
+        </ProgressStepper>
       ) : null}
 
       {interactive && (running || provisioning) ? (
-        <section className="store-panel is-terminal">
-          {provisioning ? (
-            <div className="store-provision">
-              <span className="store-pulse" />
-              Provisioning an isolated session…
-            </div>
-          ) : task.status.interactive?.kind === "openshell" ? (
-            <LiveTerminal taskId={task.id} listingName={task.listingName} />
-          ) : (
-            <SimulatedTerminal
-              listingName={task.listingName}
-              live={task.status.live}
-            />
-          )}
-          {canStop ? (
-            <button
-              type="button"
-              className="store-btn-ghost"
-              disabled={busy}
-              onClick={() => void run(() => cancelTask(task.id))}
-            >
-              Stop session
-            </button>
-          ) : null}
-        </section>
+        <Card>
+          <CardBody>
+            {provisioning ? (
+              <Bullseye>
+                <Spinner size="md" aria-label="Provisioning" /> &nbsp;Provisioning an isolated session…
+              </Bullseye>
+            ) : task.status.interactive?.kind === "openshell" ? (
+              <LiveTerminal taskId={task.id} listingName={task.listingName} />
+            ) : (
+              <SimulatedTerminal listingName={task.listingName} live={task.status.live} />
+            )}
+            {canStop ? (
+              <Button
+                variant="secondary"
+                isDisabled={busy}
+                onClick={() => void run(() => cancelTask(task.id))}
+                style={{ marginTop: "0.75rem" }}
+              >
+                Stop session
+              </Button>
+            ) : null}
+          </CardBody>
+        </Card>
       ) : null}
 
       {!interactive ? (
-        <section className="store-panel">
-          {provisioning || task.status.phase === "Running" ? (
-            <div className="store-provision">
-              <span className="store-pulse" />
-              Working on your goal. You will approve the draft before anything
-              ships.
-            </div>
-          ) : null}
-          {task.status.outputSummary ? (
-            <>
-              <h2 className="store-panel-title">Draft output</h2>
-              {(() => {
-                const { draft, skillIds } = splitSkillsFooter(task.status.outputSummary);
-                return (
-                  <>
-                    <pre className="store-draft">{draft}</pre>
-                    {skillIds.length > 0 ? (
-                      <p className="store-lede tight">
-                        <strong>Skills used:</strong> {skillIds.join(", ")}
-                      </p>
-                    ) : null}
-                  </>
-                );
-              })()}
-            </>
-          ) : null}
-          {awaiting ? (
-            <div className="store-actions">
-              <button
-                type="button"
-                className="store-btn-primary"
-                disabled={busy}
-                onClick={() => void run(() => approveTask(task.id))}
-              >
-                Approve
-              </button>
-              <button
-                type="button"
-                className="store-btn-ghost"
-                disabled={busy}
-                onClick={() => void run(() => rejectTask(task.id))}
-              >
-                Reject
-              </button>
-            </div>
-          ) : null}
-        </section>
+        <Card>
+          <CardBody>
+            {provisioning || task.status.phase === "Running" ? (
+              <Bullseye>
+                <Spinner size="md" aria-label="Working" /> &nbsp;Working on your goal. You will
+                approve the draft before anything ships.
+              </Bullseye>
+            ) : null}
+            {task.status.outputSummary
+              ? (() => {
+                  const { draft, skillIds } = splitSkillsFooter(task.status.outputSummary);
+                  return (
+                    <>
+                      <Title headingLevel="h2" size="md" style={{ marginBottom: "0.6rem" }}>
+                        Draft output
+                      </Title>
+                      <CodeBlock>
+                        <CodeBlockCode>{draft}</CodeBlockCode>
+                      </CodeBlock>
+                      {skillIds.length > 0 ? (
+                        <Content component={ContentVariants.small} style={{ marginTop: "0.6rem" }}>
+                          <strong>Skills used:</strong> {skillIds.join(", ")}
+                        </Content>
+                      ) : null}
+                    </>
+                  );
+                })()
+              : null}
+            {awaiting ? (
+              <div style={{ display: "flex", gap: "0.75rem", marginTop: "1rem" }}>
+                <Button variant="primary" isDisabled={busy} onClick={() => void run(() => approveTask(task.id))}>
+                  Approve
+                </Button>
+                <Button variant="secondary" isDisabled={busy} onClick={() => void run(() => rejectTask(task.id))}>
+                  Reject
+                </Button>
+              </div>
+            ) : null}
+          </CardBody>
+        </Card>
       ) : null}
-    </div>
+    </PageSection>
   );
 }

@@ -2,7 +2,33 @@
 
 import { useState } from "react";
 import type { SecretSummary } from "@agentstore/shared";
+import {
+  Button,
+  Card,
+  CardBody,
+  Content,
+  ContentVariants,
+  Flex,
+  FlexItem,
+  InputGroup,
+  InputGroupItem,
+  Label,
+  TextInput,
+} from "@patternfly/react-core";
+import { EyeIcon, EyeSlashIcon } from "@patternfly/react-icons";
 import { clearSecretValue, setSecretValue } from "@/lib/api";
+
+const SOURCE_COLOR: Record<SecretSummary["source"], "green" | "blue" | "grey"> = {
+  vault: "green",
+  env: "blue",
+  none: "grey",
+};
+
+const SOURCE_LABEL: Record<SecretSummary["source"], string> = {
+  vault: "Vault",
+  env: "Env",
+  none: "Not set",
+};
 
 /** Inline card for viewing/setting/clearing a single fixed secret slot.
  * Shared by the Platform tab (AAP/OpenShift tokens) and the LLMs tab's
@@ -15,6 +41,7 @@ export function SecretField({
   onChange: () => void;
 }) {
   const [value, setValue] = useState("");
+  const [visible, setVisible] = useState(false);
   const [busy, setBusy] = useState(false);
 
   async function save() {
@@ -40,40 +67,64 @@ export function SecretField({
   }
 
   return (
-    <div className="store-resource-card">
-      <div className="store-resource-head">
-        <div className="store-resource-title">
-          <strong>{secret.label}</strong>
-          <span>
-            {secret.description} · Used by: {secret.usedBy}
-          </span>
-        </div>
-        <div className="store-resource-badges">
-          <span
-            className={`store-phase is-${secret.source === "vault" ? "ok" : secret.source === "env" ? "info" : "muted"}`}
-          >
-            {secret.source === "vault" ? "Vault" : secret.source === "env" ? "Env" : "Not set"}
-          </span>
-          {secret.preview && <span className="store-phase is-muted">{secret.preview}</span>}
-        </div>
-      </div>
+    <Card isCompact>
+      <CardBody>
+        <Flex justifyContent={{ default: "justifyContentSpaceBetween" }} alignItems={{ default: "alignItemsFlexStart" }}>
+          <FlexItem>
+            <Content>
+              <Content component={ContentVariants.p}>
+                <strong>{secret.label}</strong>
+              </Content>
+              <Content component={ContentVariants.small}>
+                {secret.description} · Used by: {secret.usedBy}
+              </Content>
+            </Content>
+          </FlexItem>
+          <FlexItem>
+            <Label color={SOURCE_COLOR[secret.source]} isCompact>
+              {SOURCE_LABEL[secret.source]}
+            </Label>{" "}
+            {secret.preview && (
+              <Label color="grey" isCompact>
+                {secret.preview}
+              </Label>
+            )}
+          </FlexItem>
+        </Flex>
 
-      <div className="store-resource-input-row">
-        <input
-          type="password"
-          placeholder="Set a new value"
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-        />
-        <button type="button" className="store-btn-ghost" onClick={() => void save()} disabled={busy || !value.trim()}>
-          Save
-        </button>
-        {secret.hasValue && (
-          <button type="button" className="store-btn-ghost" onClick={() => void clear()} disabled={busy}>
-            Clear
-          </button>
-        )}
-      </div>
-    </div>
+        <InputGroup style={{ marginTop: "0.75rem" }}>
+          <InputGroupItem isFill>
+            <TextInput
+              type={visible ? "text" : "password"}
+              aria-label={`New value for ${secret.label}`}
+              placeholder="Set a new value"
+              value={value}
+              onChange={(_e, v) => setValue(v)}
+            />
+          </InputGroupItem>
+          <InputGroupItem>
+            <Button
+              variant="control"
+              aria-label={visible ? "Hide value" : "Show value"}
+              onClick={() => setVisible((v) => !v)}
+            >
+              {visible ? <EyeSlashIcon /> : <EyeIcon />}
+            </Button>
+          </InputGroupItem>
+          <InputGroupItem>
+            <Button variant="secondary" onClick={() => void save()} isDisabled={busy || !value.trim()}>
+              Save
+            </Button>
+          </InputGroupItem>
+          {secret.hasValue && (
+            <InputGroupItem>
+              <Button variant="danger" onClick={() => void clear()} isDisabled={busy}>
+                Clear
+              </Button>
+            </InputGroupItem>
+          )}
+        </InputGroup>
+      </CardBody>
+    </Card>
   );
 }

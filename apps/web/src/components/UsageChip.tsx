@@ -1,28 +1,33 @@
 "use client";
 
+import { Label } from "@patternfly/react-core";
 import { fetchUsage } from "@/lib/api";
 import { formatUsd } from "@/lib/format";
 import { useEffect, useState } from "react";
 
-export function UsageChip({ compact = false }: { compact?: boolean }) {
+export function UsageChip() {
   const [label, setLabel] = useState("—");
+  const [isOffline, setIsOffline] = useState(false);
 
   useEffect(() => {
     const load = () =>
       fetchUsage()
-        .then((usage) =>
-          setLabel(`${usage.totalTasks} tasks · ${formatUsd(usage.estimatedCost)}`)
-        )
-        .catch(() => setLabel("offline"));
+        .then((usage) => {
+          setIsOffline(false);
+          setLabel(`${usage.totalTasks} tasks · ${formatUsd(usage.estimatedCost)}`);
+        })
+        .catch(() => {
+          setIsOffline(true);
+          setLabel("offline");
+        });
     load();
     const timer = setInterval(load, 4000);
     return () => clearInterval(timer);
   }, []);
 
   return (
-    <span className="store-usage" title={compact ? label : undefined}>
-      <span className="store-usage-dot" />
-      {!compact && label}
-    </span>
+    <Label isCompact color={isOffline ? "grey" : "green"}>
+      {label}
+    </Label>
   );
 }

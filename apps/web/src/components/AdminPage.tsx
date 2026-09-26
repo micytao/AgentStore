@@ -5,15 +5,54 @@ import type { ComponentType, ReactNode } from "react";
 import {
   BookIcon,
   BrainIcon,
-  ChevronRightIcon,
   CloudIcon,
   NetworkIcon,
   PlugIcon,
-  SearchIcon,
   TasksIcon,
   TerminalIcon,
   ThLargeIcon,
 } from "@patternfly/react-icons";
+import {
+  Alert,
+  Bullseye,
+  Button,
+  Card,
+  CardBody,
+  CardTitle,
+  Checkbox,
+  Content,
+  ContentVariants,
+  ExpandableSection,
+  Flex,
+  FlexItem,
+  Form,
+  FormGroup,
+  FormSelect,
+  FormSelectOption,
+  InputGroup,
+  InputGroupItem,
+  Label,
+  Modal,
+  ModalBody,
+  ModalFooter,
+  ModalHeader,
+  PageSection,
+  SearchInput,
+  Spinner,
+  Tab,
+  Tabs,
+  TabTitleIcon,
+  TabTitleText,
+  TextArea,
+  TextInput,
+  Title,
+  Wizard,
+  WizardFooterWrapper,
+  WizardHeader,
+  WizardStep,
+  useWizardContext,
+} from "@patternfly/react-core";
+import { ExpandableRowContent, Table, Tbody, Td, Th, Thead, Tr } from "@patternfly/react-table";
 import {
   DEPARTMENTS,
   departmentLabel,
@@ -80,9 +119,9 @@ import {
 import { formatUsd, modeLabel } from "@/lib/format";
 import { useRole } from "@/lib/role";
 
-type Tab = "catalog" | "platform" | "llms" | "skills" | "audit";
+type AdminTabId = "catalog" | "platform" | "llms" | "skills" | "audit";
 
-const TABS: { id: Tab; label: string; icon: ComponentType }[] = [
+const TABS: { id: AdminTabId; label: string; icon: ComponentType }[] = [
   { id: "catalog", label: "Catalog", icon: ThLargeIcon },
   { id: "platform", label: "Platform", icon: CloudIcon },
   { id: "llms", label: "LLMs", icon: BrainIcon },
@@ -150,34 +189,19 @@ function groupSkillsByPack(skills: Skill[]): SkillGroup[] {
     });
 }
 
-/** Collapsible section used to group skills by pack in the skill picker and
- * the skills library — purely presentational, open state is controlled by
- * the parent so it can seed/force-open groups based on search or existing
- * selections. */
-function CollapsibleGroup({
-  label,
-  badge,
-  open,
-  onToggle,
-  children,
-}: {
-  label: string;
-  badge?: string;
-  open: boolean;
-  onToggle: () => void;
-  children: ReactNode;
-}) {
+/** Toggle content for the `ExpandableSection`s used to group skills by pack
+ * in the skill picker and the skills library — a label plus a count/selection
+ * badge. */
+function skillGroupToggle(label: string, badge?: string) {
   return (
-    <div className="store-skill-group">
-      <button type="button" className="store-skill-group-header" onClick={onToggle} aria-expanded={open}>
-        <span className={`store-skill-group-chevron${open ? " is-open" : ""}`} aria-hidden="true">
-          <ChevronRightIcon />
-        </span>
-        <span className="store-skill-group-label">{label}</span>
-        {badge && <span className="store-pill is-muted">{badge}</span>}
-      </button>
-      {open && <div className="store-skill-group-body">{children}</div>}
-    </div>
+    <Flex spaceItems={{ default: "spaceItemsSm" }} alignItems={{ default: "alignItemsCenter" }} display={{ default: "inlineFlex" }}>
+      <FlexItem>{label}</FlexItem>
+      {badge && (
+        <FlexItem>
+          <Label isCompact>{badge}</Label>
+        </FlexItem>
+      )}
+    </Flex>
   );
 }
 
@@ -186,30 +210,34 @@ export function AdminPage() {
 
   if (loading) {
     return (
-      <div className="store-page store-page-narrow">
-        <div className="store-loading">Checking session…</div>
-      </div>
+      <PageSection>
+        <Bullseye>
+          <Spinner aria-label="Checking session" />
+        </Bullseye>
+      </PageSection>
     );
   }
 
   if (!isAdmin) {
     return (
-      <div className="store-page store-page-narrow">
-        <section className="store-hero is-compact">
-          <p className="store-kicker">Restricted</p>
-          <h1 className="store-display sm">Admin console</h1>
-        </section>
-        <div className="store-admin-gate">
+      <PageSection isWidthLimited>
+        <Content>
+          <Content component={ContentVariants.small}>Restricted</Content>
+          <Title headingLevel="h1" size="lg">
+            Admin console
+          </Title>
+        </Content>
+        <Alert variant="info" isInline title="Admin mode is off" style={{ marginTop: "1rem" }}>
           <p>
-            Admin mode is off. Switch to Admin to manage the catalog, onboard
-            new agents, choose which engine tasks run on, and audit
-            everything launched across departments.
+            Switch to Admin to manage the catalog, onboard new agents, choose
+            which engine tasks run on, and audit everything launched across
+            departments.
           </p>
-          <button type="button" className="store-btn-primary" onClick={() => void setRole("admin")}>
+          <Button variant="primary" onClick={() => void setRole("admin")} style={{ marginTop: "0.75rem" }}>
             Switch to Admin
-          </button>
-        </div>
-      </div>
+          </Button>
+        </Alert>
+      </PageSection>
     );
   }
 
@@ -217,46 +245,57 @@ export function AdminPage() {
 }
 
 function AdminConsole() {
-  const [tab, setTab] = useState<Tab>("catalog");
+  const [tab, setTab] = useState<AdminTabId>("catalog");
 
   return (
-    <div className="store-page">
-      <section className="store-hero is-compact">
-        <p className="store-kicker">Admin console</p>
-        <h1 className="store-display sm">Configure the store</h1>
-        <p className="store-lede tight">
-          Manage catalog listings, choose which engine tasks run on, and
-          audit every task launched across departments.
-        </p>
-      </section>
+    <>
+      <PageSection variant="secondary">
+        <Content>
+          <Content component={ContentVariants.small}>Admin console</Content>
+          <Title headingLevel="h1" size="2xl">
+            Configure the store
+          </Title>
+          <Content component={ContentVariants.p}>
+            Manage catalog listings, choose which engine tasks run on, and
+            audit every task launched across departments.
+          </Content>
+        </Content>
+      </PageSection>
 
-      <div className="store-tabs" role="tablist" aria-label="Admin sections">
-        {TABS.map((item) => {
-          const Icon = item.icon;
-          return (
-            <button
-              key={item.id}
-              type="button"
-              role="tab"
-              aria-selected={tab === item.id}
-              className={`store-tab${tab === item.id ? " is-active" : ""}`}
-              onClick={() => setTab(item.id)}
-            >
-              <span className="store-tab-icon" aria-hidden="true">
-                <Icon />
-              </span>
-              {item.label}
-            </button>
-          );
-        })}
-      </div>
+      <PageSection type="tabs">
+        <Tabs
+          activeKey={tab}
+          onSelect={(_event, eventKey) => setTab(eventKey as AdminTabId)}
+          aria-label="Admin sections"
+        >
+          {TABS.map((item) => {
+            const Icon = item.icon;
+            return (
+              <Tab
+                key={item.id}
+                eventKey={item.id}
+                title={
+                  <>
+                    <TabTitleIcon>
+                      <Icon />
+                    </TabTitleIcon>
+                    <TabTitleText>{item.label}</TabTitleText>
+                  </>
+                }
+              />
+            );
+          })}
+        </Tabs>
+      </PageSection>
 
-      {tab === "catalog" && <CatalogManager />}
-      {tab === "platform" && <PlatformPanel />}
-      {tab === "llms" && <LLMsPanel />}
-      {tab === "skills" && <SkillsPanel />}
-      {tab === "audit" && <AuditLog />}
-    </div>
+      <PageSection>
+        {tab === "catalog" && <CatalogManager />}
+        {tab === "platform" && <PlatformPanel />}
+        {tab === "llms" && <LLMsPanel />}
+        {tab === "skills" && <SkillsPanel />}
+        {tab === "audit" && <AuditLog />}
+      </PageSection>
+    </>
   );
 }
 
@@ -281,49 +320,71 @@ function CatalogManager() {
 
   useEffect(loadAll, []);
 
-  if (error) return <p className="store-empty">{error}</p>;
-  if (!listings) return <div className="store-loading">Loading catalog…</div>;
+  if (error) return <Alert variant="danger" isInline title={error} />;
+  if (!listings) {
+    return (
+      <Bullseye>
+        <Spinner aria-label="Loading catalog" />
+      </Bullseye>
+    );
+  }
 
   return (
-    <div className="store-admin-section">
-      <div className="store-admin-table-head">
-        <h3 className="store-panel-title">Catalog listings</h3>
-        <p className="store-lede tight">
+    <Flex direction={{ default: "column" }} spaceItems={{ default: "spaceItemsLg" }}>
+      <FlexItem>
+        <Title headingLevel="h3" size="lg">
+          Catalog listings
+        </Title>
+        <Content component={ContentVariants.small}>
           Adjust risk tier, review status, and price per listing — changes
           save immediately. Expand a row to bind a provider, tools, skills,
           and the AAP job template, or delete the agent entirely.
-        </p>
-      </div>
-      <div className="store-admin-table">
-        {listings.map((listing) => (
-          <ListingRow
-            key={listing.id}
-            listing={listing}
+        </Content>
+      </FlexItem>
+
+      <FlexItem>
+        <Table aria-label="Catalog listings">
+          <Thead>
+            <Tr>
+              <Th width={30}>Listing</Th>
+              <Th modifier="nowrap">Risk tier</Th>
+              <Th modifier="nowrap">Review status</Th>
+              <Th modifier="nowrap">Price</Th>
+              <Th screenReaderText="Actions" />
+            </Tr>
+          </Thead>
+          {listings.map((listing) => (
+            <ListingRow
+              key={listing.id}
+              listing={listing}
+              providers={providers}
+              mcpServers={mcpServers}
+              skills={skills}
+              onChange={loadAll}
+            />
+          ))}
+        </Table>
+      </FlexItem>
+
+      <FlexItem>
+        {showWizard ? (
+          <OnboardAgentWizard
             providers={providers}
             mcpServers={mcpServers}
             skills={skills}
-            onChange={loadAll}
+            onDone={() => {
+              setShowWizard(false);
+              loadAll();
+            }}
+            onCancel={() => setShowWizard(false)}
           />
-        ))}
-      </div>
-
-      {showWizard ? (
-        <OnboardAgentWizard
-          providers={providers}
-          mcpServers={mcpServers}
-          skills={skills}
-          onDone={() => {
-            setShowWizard(false);
-            loadAll();
-          }}
-          onCancel={() => setShowWizard(false)}
-        />
-      ) : (
-        <button type="button" className="store-btn-primary" onClick={() => setShowWizard(true)}>
-          + Onboard new agent
-        </button>
-      )}
-    </div>
+        ) : (
+          <Button variant="primary" onClick={() => setShowWizard(true)}>
+            + Onboard new agent
+          </Button>
+        )}
+      </FlexItem>
+    </Flex>
   );
 }
 
@@ -380,100 +441,98 @@ function ListingRow({
   }
 
   return (
-    <div className="store-admin-row-group">
-      <div className="store-admin-row">
-        <div>
+    <Tbody isExpanded={showConfig}>
+      <Tr>
+        <Td dataLabel="Listing">
           <strong>{listing.name}</strong>
-          <span>
+          <br />
+          <Content component={ContentVariants.small}>
             {departmentLabel(listing.department)} · {listing.category}
             {listing.source === "custom" ? " · Custom" : ""}
-          </span>
-        </div>
-        <div className="store-admin-field">
-          <span className="store-admin-field-label">Risk tier</span>
-          <select
+          </Content>
+        </Td>
+        <Td dataLabel="Risk tier">
+          <FormSelect
+            aria-label={`Risk tier for ${listing.name}`}
             value={draft.riskTier}
-            onChange={(e) => update({ riskTier: e.target.value as RiskTier })}
+            onChange={(_e, v) => update({ riskTier: v as RiskTier })}
           >
             {RISK_TIERS.map((tier) => (
-              <option key={tier} value={tier}>
-                {tier}
-              </option>
+              <FormSelectOption key={tier} value={tier} label={tier} />
             ))}
-          </select>
-        </div>
-        <div className="store-admin-field">
-          <span className="store-admin-field-label">Review status</span>
-          <select
+          </FormSelect>
+        </Td>
+        <Td dataLabel="Review status">
+          <FormSelect
+            aria-label={`Review status for ${listing.name}`}
             value={draft.reviewStatus}
-            onChange={(e) =>
-              update({ reviewStatus: e.target.value as ReviewStatus })
-            }
+            onChange={(_e, v) => update({ reviewStatus: v as ReviewStatus })}
           >
             {REVIEW_STATUSES.map((status) => (
-              <option key={status} value={status}>
-                {status}
-              </option>
+              <FormSelectOption key={status} value={status} label={status} />
             ))}
-          </select>
-        </div>
-        <div className="store-admin-field">
-          <span className="store-admin-field-label">Price</span>
-          <div className="store-admin-price">
-            <input
-              inputMode="decimal"
-              value={draft.pricing.amount}
-              onChange={(e) =>
-                update({ pricing: { ...draft.pricing, amount: Number(e.target.value) || 0 } })
-              }
-            />
-            <select
-              value={draft.pricing.unit}
-              onChange={(e) =>
-                update({ pricing: { ...draft.pricing, unit: e.target.value as PricingUnit } })
-              }
-            >
-              {PRICING_UNITS.map((u) => (
-                <option key={u.id} value={u.id}>
-                  {u.label}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-        <div className="store-admin-row-actions">
-          <button
-            type="button"
-            className={`store-btn-ghost store-admin-save${saved ? " is-saved" : ""}`}
-            onClick={() => void save()}
-            disabled={saving}
-          >
-            {saving ? "Saving…" : saved ? "Saved" : "Save"}
-          </button>
-          <button type="button" className="store-btn-ghost" onClick={() => setShowConfig((v) => !v)}>
-            {showConfig ? "Hide config" : "Agent config"}
-          </button>
-          <button
-            type="button"
-            className="store-btn-ghost is-danger"
-            onClick={() => void remove()}
-            disabled={deleting}
-          >
-            {deleting ? "Deleting…" : "Delete"}
-          </button>
-        </div>
-      </div>
-
+          </FormSelect>
+        </Td>
+        <Td dataLabel="Price">
+          <InputGroup>
+            <InputGroupItem>
+              <TextInput
+                style={{ width: "5rem" }}
+                aria-label={`Price amount for ${listing.name}`}
+                inputMode="decimal"
+                value={String(draft.pricing.amount)}
+                onChange={(_e, v) => update({ pricing: { ...draft.pricing, amount: Number(v) || 0 } })}
+              />
+            </InputGroupItem>
+            <InputGroupItem>
+              <FormSelect
+                aria-label={`Price unit for ${listing.name}`}
+                value={draft.pricing.unit}
+                onChange={(_e, v) => update({ pricing: { ...draft.pricing, unit: v as PricingUnit } })}
+              >
+                {PRICING_UNITS.map((u) => (
+                  <FormSelectOption key={u.id} value={u.id} label={u.label} />
+                ))}
+              </FormSelect>
+            </InputGroupItem>
+          </InputGroup>
+        </Td>
+        <Td dataLabel="Actions" modifier="fitContent">
+          <Flex spaceItems={{ default: "spaceItemsSm" }} flexWrap={{ default: "nowrap" }}>
+            <FlexItem>
+              <Button variant={saved ? "secondary" : "primary"} size="sm" onClick={() => void save()} isDisabled={saving}>
+                {saving ? "Saving…" : saved ? "Saved" : "Save"}
+              </Button>
+            </FlexItem>
+            <FlexItem>
+              <Button variant="secondary" size="sm" onClick={() => setShowConfig((v) => !v)}>
+                {showConfig ? "Hide config" : "Agent config"}
+              </Button>
+            </FlexItem>
+            <FlexItem>
+              <Button variant="danger" size="sm" onClick={() => void remove()} isDisabled={deleting}>
+                {deleting ? "Deleting…" : "Delete"}
+              </Button>
+            </FlexItem>
+          </Flex>
+        </Td>
+      </Tr>
       {showConfig && (
-        <AgentConfigPanel
-          listing={listing}
-          providers={providers}
-          mcpServers={mcpServers}
-          skills={skills}
-          onChange={onChange}
-        />
+        <Tr isExpanded>
+          <Td colSpan={5}>
+            <ExpandableRowContent>
+              <AgentConfigPanel
+                listing={listing}
+                providers={providers}
+                mcpServers={mcpServers}
+                skills={skills}
+                onChange={onChange}
+              />
+            </ExpandableRowContent>
+          </Td>
+        </Tr>
       )}
-    </div>
+    </Tbody>
   );
 }
 
@@ -527,49 +586,57 @@ function SkillPicker({
   }
 
   return (
-    <div className="store-skill-picker">
-      <div className="store-skill-search">
-        <SearchIcon aria-hidden="true" />
-        <input
-          type="text"
+    <Flex direction={{ default: "column" }} spaceItems={{ default: "spaceItemsMd" }}>
+      <FlexItem>
+        <SearchInput
+          aria-label="Search skills"
           placeholder="Search skills by name or description…"
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
+          onChange={(_e, v) => setQuery(v)}
+          onClear={() => setQuery("")}
         />
-      </div>
+      </FlexItem>
 
       {filteredGroups.length === 0 && (
-        <p className="store-resource-empty">No skills match &quot;{query}&quot;.</p>
+        <FlexItem>
+          <Content component={ContentVariants.small}>No skills match &quot;{query}&quot;.</Content>
+        </FlexItem>
       )}
 
       {filteredGroups.map((group) => {
         const selectedCount = group.skills.filter((s) => selectedIds.includes(s.id)).length;
         const isOpen = trimmedQuery.length > 0 || openGroups.has(group.key);
         return (
-          <CollapsibleGroup
-            key={group.key}
-            label={group.label}
-            badge={selectedCount > 0 ? `${selectedCount} selected` : `${group.skills.length}`}
-            open={isOpen}
-            onToggle={() => toggleGroup(group.key)}
-          >
-            {group.skills.map((skill) => (
-              <label key={skill.id} className="store-skill-row">
-                <input
-                  type="checkbox"
-                  checked={selectedIds.includes(skill.id)}
-                  onChange={() => onToggle(skill.id)}
-                />
-                <span className="store-skill-row-text">
-                  <strong>{skill.name}</strong>
-                  {skill.description && <span>{skill.description}</span>}
-                </span>
-              </label>
-            ))}
-          </CollapsibleGroup>
+          <FlexItem key={group.key}>
+            <ExpandableSection
+              toggleContent={skillGroupToggle(group.label, selectedCount > 0 ? `${selectedCount} selected` : `${group.skills.length}`)}
+              isExpanded={isOpen}
+              onToggle={() => toggleGroup(group.key)}
+            >
+              <Flex direction={{ default: "column" }} spaceItems={{ default: "spaceItemsSm" }}>
+                {group.skills.map((skill) => (
+                  <FlexItem key={skill.id}>
+                    <Checkbox
+                      id={`skill-picker-${skill.id}`}
+                      isChecked={selectedIds.includes(skill.id)}
+                      onChange={() => onToggle(skill.id)}
+                      label={
+                        <>
+                          <strong>{skill.name}</strong>
+                          {skill.description && (
+                            <Content component={ContentVariants.small}>{skill.description}</Content>
+                          )}
+                        </>
+                      }
+                    />
+                  </FlexItem>
+                ))}
+              </Flex>
+            </ExpandableSection>
+          </FlexItem>
         );
       })}
-    </div>
+    </Flex>
   );
 }
 
@@ -638,119 +705,138 @@ function AgentConfigPanel({
   }
 
   return (
-    <div className="store-panel store-agent-config">
-      <h4 className="store-panel-title">Agent config — {listing.name}</h4>
-      <p className="store-lede tight">
-        Bind a specific model provider, tool subset, skills, AAP job template,
-        and engine override to this agent. Leave provider unset to keep using
-        the global active provider. Leave the AAP template unset to use the
-        Platform default.
-        {listing.runtime === "generic-chat" && (
-          <>
-            {" "}For this generic-chat listing, the AAP job template must
-            launch <code>provision-generic-agent.yml</code>, not the one-shot
-            playbook.
-          </>
-        )}
-      </p>
+    <Flex direction={{ default: "column" }} spaceItems={{ default: "spaceItemsLg" }}>
+      <FlexItem>
+        <Title headingLevel="h4" size="md">
+          Agent config — {listing.name}
+        </Title>
+        <Content component={ContentVariants.small}>
+          Bind a specific model provider, tool subset, skills, AAP job template,
+          and engine override to this agent. Leave provider unset to keep using
+          the global active provider. Leave the AAP template unset to use the
+          Platform default.
+          {listing.runtime === "generic-chat" && (
+            <>
+              {" "}For this generic-chat listing, the AAP job template must
+              launch <code>provision-generic-agent.yml</code>, not the one-shot
+              playbook.
+            </>
+          )}
+        </Content>
+      </FlexItem>
 
-      <div className="store-resource-input-row">
-        <div className="store-field-mini">
-          <span>Model provider</span>
-          <select
-            value={providerId}
-            onChange={(e) => {
-              setProviderId(e.target.value);
-              setSaved(false);
-            }}
-          >
-            <option value="">Use global active provider</option>
-            {providers.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.label}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="store-field-mini">
-          <span>Engine</span>
-          <select
-            value={engineOverride}
-            onChange={(e) => {
-              setEngineOverride(e.target.value as "auto" | "simulated" | "live");
-              setSaved(false);
-            }}
-          >
-            <option value="auto">Auto (use global engine setting)</option>
-            <option value="simulated">Force simulated</option>
-            <option value="live">Force live (AAP or OpenShell)</option>
-          </select>
-        </div>
-        <div className="store-field-mini">
-          <span>AAP job template id</span>
-          <input
-            inputMode="numeric"
-            placeholder="Platform default"
-            value={aapJobTemplateId}
-            onChange={(e) => {
-              setAapJobTemplateId(e.target.value);
-              setSaved(false);
-            }}
-          />
-        </div>
-      </div>
+      <FlexItem>
+        <Form>
+          <Flex spaceItems={{ default: "spaceItemsMd" }}>
+            <FlexItem flex={{ default: "flex_1" }}>
+              <FormGroup label="Model provider" fieldId="agent-config-provider">
+                <FormSelect
+                  id="agent-config-provider"
+                  value={providerId}
+                  onChange={(_e, v) => {
+                    setProviderId(v);
+                    setSaved(false);
+                  }}
+                >
+                  <FormSelectOption value="" label="Use global active provider" />
+                  {providers.map((p) => (
+                    <FormSelectOption key={p.id} value={p.id} label={p.label} />
+                  ))}
+                </FormSelect>
+              </FormGroup>
+            </FlexItem>
+            <FlexItem flex={{ default: "flex_1" }}>
+              <FormGroup label="Engine" fieldId="agent-config-engine">
+                <FormSelect
+                  id="agent-config-engine"
+                  value={engineOverride}
+                  onChange={(_e, v) => {
+                    setEngineOverride(v as "auto" | "simulated" | "live");
+                    setSaved(false);
+                  }}
+                >
+                  <FormSelectOption value="auto" label="Auto (use global engine setting)" />
+                  <FormSelectOption value="simulated" label="Force simulated" />
+                  <FormSelectOption value="live" label="Force live (AAP or OpenShell)" />
+                </FormSelect>
+              </FormGroup>
+            </FlexItem>
+            <FlexItem flex={{ default: "flex_1" }}>
+              <FormGroup label="AAP job template id" fieldId="agent-config-aap-template">
+                <TextInput
+                  id="agent-config-aap-template"
+                  inputMode="numeric"
+                  placeholder="Platform default"
+                  value={aapJobTemplateId}
+                  onChange={(_e, v) => {
+                    setAapJobTemplateId(v);
+                    setSaved(false);
+                  }}
+                />
+              </FormGroup>
+            </FlexItem>
+          </Flex>
+        </Form>
+      </FlexItem>
 
-      <div>
-        <p className="store-lede tight">Tools</p>
+      <FlexItem>
+        <Title headingLevel="h5" size="md">
+          Tools
+        </Title>
         {connectedServers.length === 0 ? (
-          <p className="store-resource-empty">
+          <Content component={ContentVariants.small}>
             No connected MCP servers. Connect one in the MCP tab first.
-          </p>
+          </Content>
         ) : (
-          connectedServers.map((server) => (
-            <div key={server.id} className="store-resource-tools">
-              <strong>{server.name}</strong>
-              {server.tools.length === 0 ? (
-                <p className="store-resource-empty">No tools advertised.</p>
-              ) : (
-                server.tools.map((tool) => (
-                  <label key={tool.name} className="store-resource-tool">
-                    <span>{tool.name}</span>
-                    <input
-                      type="checkbox"
-                      checked={toolBindings.some((b) => b.serverId === server.id && b.tool === tool.name)}
-                      onChange={() => toggleTool(server.id, tool.name)}
-                    />
-                  </label>
-                ))
-              )}
-            </div>
-          ))
+          <Flex direction={{ default: "column" }} spaceItems={{ default: "spaceItemsMd" }}>
+            {connectedServers.map((server) => (
+              <FlexItem key={server.id}>
+                <strong>{server.name}</strong>
+                {server.tools.length === 0 ? (
+                  <Content component={ContentVariants.small}>No tools advertised.</Content>
+                ) : (
+                  <Flex direction={{ default: "column" }} spaceItems={{ default: "spaceItemsXs" }}>
+                    {server.tools.map((tool) => (
+                      <FlexItem key={tool.name}>
+                        <Checkbox
+                          id={`agent-config-tool-${server.id}-${tool.name}`}
+                          label={tool.name}
+                          isChecked={toolBindings.some((b) => b.serverId === server.id && b.tool === tool.name)}
+                          onChange={() => toggleTool(server.id, tool.name)}
+                        />
+                      </FlexItem>
+                    ))}
+                  </Flex>
+                )}
+              </FlexItem>
+            ))}
+          </Flex>
         )}
-      </div>
+      </FlexItem>
 
-      <div>
-        <p className="store-lede tight">Skills</p>
+      <FlexItem>
+        <Title headingLevel="h5" size="md">
+          Skills
+        </Title>
         {skills.length === 0 ? (
-          <p className="store-resource-empty">No skills authored yet. Add one in the Skills tab.</p>
+          <Content component={ContentVariants.small}>No skills authored yet. Add one in the Skills tab.</Content>
         ) : (
           <SkillPicker skills={skills} selectedIds={skillIds} onToggle={toggleSkill} />
         )}
-      </div>
+      </FlexItem>
 
-      <div className="store-resource-actions">
-        <button
-          type="button"
-          className={`store-btn-primary store-admin-save${saved ? " is-saved" : ""}`}
-          onClick={() => void save()}
-          disabled={saving}
-        >
+      <FlexItem>
+        <Button variant="primary" onClick={() => void save()} isDisabled={saving}>
           {saving ? "Saving…" : saved ? "Saved" : "Save agent config"}
-        </button>
-      </div>
+        </Button>
+      </FlexItem>
 
-      {listing.runtime === "generic-chat" && <DeploySection listing={listing} onChange={onChange} />}
-    </div>
+      {listing.runtime === "generic-chat" && (
+        <FlexItem>
+          <DeploySection listing={listing} onChange={onChange} />
+        </FlexItem>
+      )}
+    </Flex>
   );
 }
 
@@ -796,65 +882,82 @@ function DeploySection({ listing, onChange }: { listing: Listing; onChange: () =
   }
 
   const status = deployment?.status ?? "not-deployed";
-  const statusTone = status === "running" ? "is-live" : status === "failed" ? "is-offline" : "is-muted";
+  const statusColor: "green" | "red" | "grey" = status === "running" ? "green" : status === "failed" ? "red" : "grey";
 
   return (
-    <div className="store-panel store-agent-config">
-      <h4 className="store-panel-title">Deploy to OpenShift</h4>
-      <p className="store-lede tight">
-        Generic-chat agents are provisioned once: AAP creates a persistent
-        Deployment + Route on OpenShift, and every user opens the same
-        running agent from its link — no per-launch provisioning.
-      </p>
+    <Card isCompact>
+      <CardTitle>Deploy to OpenShift</CardTitle>
+      <CardBody>
+        <Flex direction={{ default: "column" }} spaceItems={{ default: "spaceItemsMd" }}>
+          <FlexItem>
+            <Content component={ContentVariants.small}>
+              Generic-chat agents are provisioned once: AAP creates a persistent
+              Deployment + Route on OpenShift, and every user opens the same
+              running agent from its link — no per-launch provisioning.
+            </Content>
+          </FlexItem>
 
-      {error && <p className="store-banner is-error">{error}</p>}
-      {deployment?.error && <p className="store-banner is-error">{deployment.error}</p>}
+          {error && (
+            <FlexItem>
+              <Alert variant="danger" isInline title={error} />
+            </FlexItem>
+          )}
+          {deployment?.error && (
+            <FlexItem>
+              <Alert variant="danger" isInline title={deployment.error} />
+            </FlexItem>
+          )}
 
-      <div className="store-admin-table">
-        <div className="store-admin-row">
-          <div>
-            <strong>Status</strong>
-            <span>
-              {deployment?.updatedAt ? `Updated ${new Date(deployment.updatedAt).toLocaleString()}` : "Never deployed"}
-            </span>
-          </div>
-          <span className={`store-pill ${statusTone}`}>{status}</span>
-        </div>
-      </div>
+          <FlexItem>
+            <Flex justifyContent={{ default: "justifyContentSpaceBetween" }} alignItems={{ default: "alignItemsCenter" }}>
+              <FlexItem>
+                <strong>Status</strong>
+                <Content component={ContentVariants.small}>
+                  {deployment?.updatedAt ? `Updated ${new Date(deployment.updatedAt).toLocaleString()}` : "Never deployed"}
+                </Content>
+              </FlexItem>
+              <FlexItem>
+                <Label color={statusColor} isCompact>
+                  {status}
+                </Label>
+              </FlexItem>
+            </Flex>
+          </FlexItem>
 
-      <p className="store-lede tight">
-        {deployment?.aapJobUrl && (
-          <>
-            <a href={deployment.aapJobUrl} target="_blank" rel="noreferrer">
-              View AAP job →
-            </a>
-            {"  "}
-          </>
-        )}
-        {status === "running" && deployment?.routeUrl && (
-          <a href={deployment.routeUrl} target="_blank" rel="noreferrer">
-            Open agent →
-          </a>
-        )}
-      </p>
+          {(deployment?.aapJobUrl || (status === "running" && deployment?.routeUrl)) && (
+            <FlexItem>
+              <Content component={ContentVariants.small}>
+                {deployment?.aapJobUrl && (
+                  <>
+                    <a href={deployment.aapJobUrl} target="_blank" rel="noreferrer">
+                      View AAP job →
+                    </a>
+                    {"  "}
+                  </>
+                )}
+                {status === "running" && deployment?.routeUrl && (
+                  <a href={deployment.routeUrl} target="_blank" rel="noreferrer">
+                    Open agent →
+                  </a>
+                )}
+              </Content>
+            </FlexItem>
+          )}
 
-      <div className="store-resource-actions">
-        <button
-          type="button"
-          className="store-btn-primary"
-          onClick={() => void deploy()}
-          disabled={busy || status === "deploying"}
-        >
-          {busy
-            ? "Starting…"
-            : status === "deploying"
-              ? "Deploying…"
-              : status === "running"
-                ? "Redeploy"
-                : "Deploy to OpenShift"}
-        </button>
-      </div>
-    </div>
+          <FlexItem>
+            <Button variant="primary" onClick={() => void deploy()} isDisabled={busy || status === "deploying"}>
+              {busy
+                ? "Starting…"
+                : status === "deploying"
+                  ? "Deploying…"
+                  : status === "running"
+                    ? "Redeploy"
+                    : "Deploy to OpenShift"}
+            </Button>
+          </FlexItem>
+        </Flex>
+      </CardBody>
+    </Card>
   );
 }
 
@@ -868,7 +971,68 @@ const ICON_OPTIONS: { id: string; label: string }[] = [
   { id: "server", label: "Server" },
 ];
 
-const WIZARD_STEPS = ["Basics", "Modes & engine", "Model & tools", "Skills", "Review & publish"];
+/** Footer for wizard steps that must validate before advancing — `onNext`
+ * runs the step's validation and returns an error message (blocking the
+ * advance) or null (clear to proceed). */
+function WizardStepFooter({
+  onNext,
+  onCancel,
+}: {
+  onNext: () => string | null;
+  onCancel: () => void;
+}) {
+  const { goToNextStep, goToPrevStep, activeStep } = useWizardContext();
+  return (
+    <WizardFooterWrapper>
+      <Button variant="secondary" onClick={() => void goToPrevStep()} isDisabled={activeStep.index === 1}>
+        Back
+      </Button>
+      <Button
+        variant="primary"
+        onClick={() => {
+          if (onNext() === null) void goToNextStep();
+        }}
+      >
+        Next
+      </Button>
+      <Button variant="link" onClick={onCancel}>
+        Cancel
+      </Button>
+    </WizardFooterWrapper>
+  );
+}
+
+/** Footer for the final "Review & publish" step — replaces Next with the
+ * two real submit actions. */
+function ReviewWizardStepFooter({
+  onCancel,
+  onSaveDraft,
+  onPublish,
+  saving,
+}: {
+  onCancel: () => void;
+  onSaveDraft: () => void;
+  onPublish: () => void;
+  saving: boolean;
+}) {
+  const { goToPrevStep } = useWizardContext();
+  return (
+    <WizardFooterWrapper>
+      <Button variant="secondary" onClick={() => void goToPrevStep()} isDisabled={saving}>
+        Back
+      </Button>
+      <Button variant="link" onClick={onCancel} isDisabled={saving}>
+        Cancel
+      </Button>
+      <Button variant="secondary" onClick={onSaveDraft} isDisabled={saving}>
+        {saving ? "Saving…" : "Save as draft"}
+      </Button>
+      <Button variant="primary" onClick={onPublish} isDisabled={saving}>
+        {saving ? "Publishing…" : "Publish now"}
+      </Button>
+    </WizardFooterWrapper>
+  );
+}
 
 function OnboardAgentWizard({
   providers,
@@ -883,7 +1047,6 @@ function OnboardAgentWizard({
   onDone: () => void;
   onCancel: () => void;
 }) {
-  const [step, setStep] = useState(0);
   const [name, setName] = useState("");
   const [department, setDepartment] = useState<DepartmentId>("engineering");
   const [category, setCategory] = useState("");
@@ -923,33 +1086,18 @@ function OnboardAgentWizard({
     setSkillIds((prev) => (prev.includes(id) ? prev.filter((s) => s !== id) : [...prev, id]));
   }
 
-  function validateStep(): string | null {
-    if (step === 0) {
-      if (!name.trim()) return "Name is required";
-      if (!category.trim()) return "Category is required";
-      if (!description.trim()) return "Description is required";
-    }
-    if (step === 1) {
-      if (runtime === "openshell" && !openshellAgent.trim()) {
-        return "OpenShell agent identifier is required for the OpenShell runtime";
-      }
-    }
+  function validateBasics(): string | null {
+    if (!name.trim()) return "Name is required";
+    if (!category.trim()) return "Category is required";
+    if (!description.trim()) return "Description is required";
     return null;
   }
 
-  function next() {
-    const validationError = validateStep();
-    if (validationError) {
-      setErr(validationError);
-      return;
+  function validateModes(): string | null {
+    if (runtime === "openshell" && !openshellAgent.trim()) {
+      return "OpenShell agent identifier is required for the OpenShell runtime";
     }
-    setErr(null);
-    setStep((s) => Math.min(s + 1, WIZARD_STEPS.length - 1));
-  }
-
-  function back() {
-    setErr(null);
-    setStep((s) => Math.max(s - 1, 0));
+    return null;
   }
 
   async function submit(publish: boolean) {
@@ -999,216 +1147,202 @@ function OnboardAgentWizard({
   };
 
   return (
-    <div className="store-panel store-wizard">
-      <div className="store-wizard-steps">
-        {WIZARD_STEPS.map((label, idx) => (
-          <span
-            key={label}
-            className={`store-wizard-step${idx === step ? " is-active" : idx < step ? " is-done" : ""}`}
+    <Card>
+      <CardBody>
+        <Wizard
+          onClose={onCancel}
+          isVisitRequired
+          header={
+            <WizardHeader
+              title="Onboard a new agent"
+              description="Publish a new listing to the catalog, or save it as a draft to finish later."
+              onClose={onCancel}
+            />
+          }
+        >
+          <WizardStep
+            id="basics"
+            name="Basics"
+            footer={<WizardStepFooter onNext={() => { const e = validateBasics(); setErr(e); return e; }} onCancel={onCancel} />}
           >
-            {idx + 1}. {label}
-          </span>
-        ))}
-      </div>
+            {err && <Alert variant="danger" isInline title={err} style={{ marginBottom: "1rem" }} />}
+            <Form>
+              <FormGroup label="Agent name" isRequired fieldId="wizard-name">
+                <TextInput
+                  id="wizard-name"
+                  value={name}
+                  onChange={(_e, v) => setName(v)}
+                  placeholder="e.g. Contract summarizer"
+                />
+              </FormGroup>
+              <FormGroup label="Department" isRequired fieldId="wizard-department">
+                <FormSelect id="wizard-department" value={department} onChange={(_e, v) => setDepartment(v as DepartmentId)}>
+                  {DEPARTMENTS.filter((d) => d.id !== "all").map((d) => (
+                    <FormSelectOption key={d.id} value={d.id} label={d.name} />
+                  ))}
+                </FormSelect>
+              </FormGroup>
+              <FormGroup label="Category" isRequired fieldId="wizard-category">
+                <TextInput
+                  id="wizard-category"
+                  value={category}
+                  onChange={(_e, v) => setCategory(v)}
+                  placeholder="e.g. Contract review"
+                />
+              </FormGroup>
+              <FormGroup label="Icon" fieldId="wizard-icon">
+                <FormSelect id="wizard-icon" value={icon} onChange={(_e, v) => setIcon(v)}>
+                  {ICON_OPTIONS.map((i) => (
+                    <FormSelectOption key={i.id} value={i.id} label={i.label} />
+                  ))}
+                </FormSelect>
+              </FormGroup>
+              <FormGroup label="Risk tier" fieldId="wizard-risk">
+                <FormSelect id="wizard-risk" value={riskTier} onChange={(_e, v) => setRiskTier(v as RiskTier)}>
+                  {RISK_TIERS.map((tier) => (
+                    <FormSelectOption key={tier} value={tier} label={`${tier} risk`} />
+                  ))}
+                </FormSelect>
+              </FormGroup>
+              <FormGroup label="Price (USD)" fieldId="wizard-price">
+                <TextInput id="wizard-price" inputMode="decimal" value={pricingAmount} onChange={(_e, v) => setPricingAmount(v)} />
+              </FormGroup>
+              <FormGroup label="Billed" fieldId="wizard-billed">
+                <FormSelect id="wizard-billed" value={pricingUnit} onChange={(_e, v) => setPricingUnit(v as PricingUnit)}>
+                  {PRICING_UNITS.map((u) => (
+                    <FormSelectOption key={u.id} value={u.id} label={u.label} />
+                  ))}
+                </FormSelect>
+              </FormGroup>
+              <FormGroup label="Description" isRequired fieldId="wizard-description">
+                <TextArea
+                  id="wizard-description"
+                  rows={3}
+                  value={description}
+                  onChange={(_e, v) => setDescription(v)}
+                  placeholder="What does this agent do?"
+                />
+              </FormGroup>
+            </Form>
+          </WizardStep>
 
-      {err && <p className="store-banner is-error">{err}</p>}
+          <WizardStep
+            id="modes"
+            name="Modes & engine"
+            footer={<WizardStepFooter onNext={() => { const e = validateModes(); setErr(e); return e; }} onCancel={onCancel} />}
+          >
+            {err && <Alert variant="danger" isInline title={err} style={{ marginBottom: "1rem" }} />}
+            <Form>
+              <FormGroup label="Runtime" fieldId="wizard-runtime">
+                <FormSelect id="wizard-runtime" value={runtime} onChange={(_e, v) => setRuntime(v as AgentRuntime)}>
+                  <FormSelectOption value="generic-chat" label="Generic chat agent (persistent Deployment + Route)" />
+                  <FormSelectOption value="openshell" label="OpenShell (interactive coding/engineering sandbox)" />
+                </FormSelect>
+              </FormGroup>
+              {runtime === "openshell" && (
+                <FormGroup label="OpenShell agent identifier" isRequired fieldId="wizard-openshell-agent">
+                  <TextInput
+                    id="wizard-openshell-agent"
+                    value={openshellAgent}
+                    onChange={(_e, v) => setOpenshellAgent(v)}
+                    placeholder="e.g. claude"
+                  />
+                </FormGroup>
+              )}
+              <FormGroup label="Engine" fieldId="wizard-engine">
+                <FormSelect
+                  id="wizard-engine"
+                  value={engineOverride}
+                  onChange={(_e, v) => setEngineOverride(v as "auto" | "simulated" | "live")}
+                >
+                  <FormSelectOption value="auto" label="Auto (use global engine setting)" />
+                  <FormSelectOption value="simulated" label="Force simulated" />
+                  <FormSelectOption value="live" label="Force live (AAP + OpenShift)" />
+                </FormSelect>
+              </FormGroup>
+            </Form>
+            <Content component={ContentVariants.small} style={{ marginTop: "1rem" }}>
+              {runtime === "generic-chat"
+                ? "Provisioned once via AAP as a persistent OpenShift Deployment + Route. Every user opens the same running agent from its web link — pick this for chat/support/SRE personas."
+                : "Provisioned per-task as an OpenShell sandbox session — pick this for collaborative coding/engineering agents that need a live terminal."}
+            </Content>
+            <Content component={ContentVariants.small}>
+              This will be listed as <strong>{modeLabel(mode)}</strong> — mode follows the runtime you
+              picked above and isn&apos;t set independently.
+            </Content>
+          </WizardStep>
 
-      {step === 0 && (
-        <div className="store-wizard-body">
-          <div className="store-resource-input-row">
-            <input
-              placeholder="Agent name, e.g. Contract summarizer"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-            />
-            <select value={department} onChange={(e) => setDepartment(e.target.value as DepartmentId)}>
-              {DEPARTMENTS.filter((d) => d.id !== "all").map((d) => (
-                <option key={d.id} value={d.id}>
-                  {d.name}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="store-resource-input-row">
-            <input
-              placeholder="Category, e.g. Contract review"
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
-            />
-            <select value={icon} onChange={(e) => setIcon(e.target.value)}>
-              {ICON_OPTIONS.map((i) => (
-                <option key={i.id} value={i.id}>
-                  {i.label}
-                </option>
-              ))}
-            </select>
-            <select value={riskTier} onChange={(e) => setRiskTier(e.target.value as RiskTier)}>
-              {RISK_TIERS.map((tier) => (
-                <option key={tier} value={tier}>
-                  {tier} risk
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="store-resource-input-row">
-            <label className="store-field-mini">
-              <span>Price (USD)</span>
-              <input
-                inputMode="decimal"
-                value={pricingAmount}
-                onChange={(e) => setPricingAmount(e.target.value)}
-              />
-            </label>
-            <label className="store-field-mini">
-              <span>Billed</span>
-              <select value={pricingUnit} onChange={(e) => setPricingUnit(e.target.value as PricingUnit)}>
-                {PRICING_UNITS.map((u) => (
-                  <option key={u.id} value={u.id}>
-                    {u.label}
-                  </option>
+          <WizardStep id="model" name="Model & tools">
+            <Form>
+              <FormGroup label="Model provider" fieldId="wizard-provider">
+                <FormSelect id="wizard-provider" value={providerId} onChange={(_e, v) => setProviderId(v)}>
+                  <FormSelectOption value="" label="Use global active provider" />
+                  {providers.map((p) => (
+                    <FormSelectOption key={p.id} value={p.id} label={p.label} />
+                  ))}
+                </FormSelect>
+              </FormGroup>
+            </Form>
+            {connectedServers.length === 0 ? (
+              <Content component={ContentVariants.small} style={{ marginTop: "1rem" }}>
+                No connected MCP servers yet — connect one in the MCP tab to bind
+                tools now, or skip and bind later.
+              </Content>
+            ) : (
+              <Flex direction={{ default: "column" }} spaceItems={{ default: "spaceItemsMd" }} style={{ marginTop: "1rem" }}>
+                {connectedServers.map((server) => (
+                  <FlexItem key={server.id}>
+                    <strong>{server.name}</strong>
+                    <Flex direction={{ default: "column" }} spaceItems={{ default: "spaceItemsXs" }}>
+                      {server.tools.map((tool) => (
+                        <FlexItem key={tool.name}>
+                          <Checkbox
+                            id={`wizard-tool-${server.id}-${tool.name}`}
+                            label={tool.name}
+                            isChecked={toolBindings.some((b) => b.serverId === server.id && b.tool === tool.name)}
+                            onChange={() => toggleTool(server.id, tool.name)}
+                          />
+                        </FlexItem>
+                      ))}
+                    </Flex>
+                  </FlexItem>
                 ))}
-              </select>
-            </label>
-          </div>
-          <textarea
-            rows={3}
-            className="store-textarea"
-            placeholder="What does this agent do?"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-          />
-        </div>
-      )}
-
-      {step === 1 && (
-        <div className="store-wizard-body">
-          <div className="store-resource-input-row">
-            <select value={runtime} onChange={(e) => setRuntime(e.target.value as AgentRuntime)}>
-              <option value="generic-chat">Generic chat agent (persistent Deployment + Route)</option>
-              <option value="openshell">OpenShell (interactive coding/engineering sandbox)</option>
-            </select>
-            {runtime === "openshell" && (
-              <input
-                placeholder="OpenShell agent identifier, e.g. claude"
-                value={openshellAgent}
-                onChange={(e) => setOpenshellAgent(e.target.value)}
-              />
+              </Flex>
             )}
-            <select
-              value={engineOverride}
-              onChange={(e) => setEngineOverride(e.target.value as "auto" | "simulated" | "live")}
-            >
-              <option value="auto">Auto (use global engine setting)</option>
-              <option value="simulated">Force simulated</option>
-              <option value="live">Force live (AAP + OpenShift)</option>
-            </select>
-          </div>
-          <p className="store-lede tight">
-            {runtime === "generic-chat"
-              ? "Provisioned once via AAP as a persistent OpenShift Deployment + Route. Every user opens the same running agent from its web link — pick this for chat/support/SRE personas."
-              : "Provisioned per-task as an OpenShell sandbox session — pick this for collaborative coding/engineering agents that need a live terminal."}
-          </p>
-          <p className="store-lede tight">
-            This will be listed as <strong>{modeLabel(mode)}</strong> — mode follows the runtime you
-            picked above and isn&apos;t set independently.
-          </p>
-        </div>
-      )}
+          </WizardStep>
 
-      {step === 2 && (
-        <div className="store-wizard-body">
-          <div className="store-resource-input-row">
-            <select value={providerId} onChange={(e) => setProviderId(e.target.value)}>
-              <option value="">Use global active provider</option>
-              {providers.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.label}
-                </option>
-              ))}
-            </select>
-          </div>
-          {connectedServers.length === 0 ? (
-            <p className="store-resource-empty">
-              No connected MCP servers yet — connect one in the MCP tab to bind
-              tools now, or skip and bind later.
-            </p>
-          ) : (
-            connectedServers.map((server) => (
-              <div key={server.id} className="store-resource-tools">
-                <strong>{server.name}</strong>
-                {server.tools.map((tool) => (
-                  <label key={tool.name} className="store-resource-tool">
-                    <span>{tool.name}</span>
-                    <input
-                      type="checkbox"
-                      checked={toolBindings.some((b) => b.serverId === server.id && b.tool === tool.name)}
-                      onChange={() => toggleTool(server.id, tool.name)}
-                    />
-                  </label>
-                ))}
-              </div>
-            ))
-          )}
-        </div>
-      )}
+          <WizardStep id="skills" name="Skills">
+            {skills.length === 0 ? (
+              <Content component={ContentVariants.small}>
+                No skills authored yet — add one in the Skills tab, or skip and
+                attach later.
+              </Content>
+            ) : (
+              <SkillPicker skills={skills} selectedIds={skillIds} onToggle={toggleSkill} />
+            )}
+          </WizardStep>
 
-      {step === 3 && (
-        <div className="store-wizard-body">
-          {skills.length === 0 ? (
-            <p className="store-resource-empty">
-              No skills authored yet — add one in the Skills tab, or skip and
-              attach later.
-            </p>
-          ) : (
-            <SkillPicker skills={skills} selectedIds={skillIds} onToggle={toggleSkill} />
-          )}
-        </div>
-      )}
-
-      {step === 4 && (
-        <div className="store-wizard-body">
-          <p className="store-lede tight">This is what users will see in the catalog:</p>
-          <div className="store-wizard-preview">
-            <ListingCard listing={previewListing} />
-          </div>
-        </div>
-      )}
-
-      <div className="store-resource-actions store-wizard-actions">
-        {step > 0 && (
-          <button type="button" className="store-btn-ghost" onClick={back} disabled={saving}>
-            Back
-          </button>
-        )}
-        <button type="button" className="store-btn-ghost" onClick={onCancel} disabled={saving}>
-          Cancel
-        </button>
-        {step < WIZARD_STEPS.length - 1 ? (
-          <button type="button" className="store-btn-primary" onClick={next}>
-            Next
-          </button>
-        ) : (
-          <>
-            <button
-              type="button"
-              className="store-btn-ghost"
-              onClick={() => void submit(false)}
-              disabled={saving}
-            >
-              {saving ? "Saving…" : "Save as draft"}
-            </button>
-            <button
-              type="button"
-              className="store-btn-primary"
-              onClick={() => void submit(true)}
-              disabled={saving}
-            >
-              {saving ? "Publishing…" : "Publish now"}
-            </button>
-          </>
-        )}
-      </div>
-    </div>
+          <WizardStep
+            id="review"
+            name="Review & publish"
+            footer={
+              <ReviewWizardStepFooter
+                onCancel={onCancel}
+                onSaveDraft={() => void submit(false)}
+                onPublish={() => void submit(true)}
+                saving={saving}
+              />
+            }
+          >
+            {err && <Alert variant="danger" isInline title={err} style={{ marginBottom: "1rem" }} />}
+            <Content component={ContentVariants.small}>This is what users will see in the catalog:</Content>
+            <div style={{ marginTop: "1rem", maxWidth: "22rem" }}>
+              <ListingCard listing={previewListing} />
+            </div>
+          </WizardStep>
+        </Wizard>
+      </CardBody>
+    </Card>
   );
 }
 
@@ -1224,32 +1358,40 @@ function LLMsPanel() {
   const [subTab, setSubTab] = useState<LLMsSubTab>("providers");
 
   return (
-    <div className="store-admin-section">
-      <div className="store-tabs is-compact" role="tablist" aria-label="LLM sections">
-        {LLMS_SUBTABS.map((item) => {
-          const Icon = item.icon;
-          return (
-            <button
-              key={item.id}
-              type="button"
-              role="tab"
-              aria-selected={subTab === item.id}
-              className={`store-tab is-compact${subTab === item.id ? " is-active" : ""}`}
-              onClick={() => setSubTab(item.id)}
-            >
-              <span className="store-tab-icon" aria-hidden="true">
-                <Icon />
-              </span>
-              {item.label}
-            </button>
-          );
-        })}
-      </div>
+    <Flex direction={{ default: "column" }} spaceItems={{ default: "spaceItemsLg" }}>
+      <FlexItem>
+        <Tabs
+          activeKey={subTab}
+          onSelect={(_event, eventKey) => setSubTab(eventKey as LLMsSubTab)}
+          aria-label="LLM sections"
+          isSubtab
+        >
+          {LLMS_SUBTABS.map((item) => {
+            const Icon = item.icon;
+            return (
+              <Tab
+                key={item.id}
+                eventKey={item.id}
+                title={
+                  <>
+                    <TabTitleIcon>
+                      <Icon />
+                    </TabTitleIcon>
+                    <TabTitleText>{item.label}</TabTitleText>
+                  </>
+                }
+              />
+            );
+          })}
+        </Tabs>
+      </FlexItem>
 
-      {subTab === "providers" && <ProvidersPanel />}
-      {subTab === "mcp" && <McpPanel />}
-      {subTab === "openshell" && <OpenShellPanel />}
-    </div>
+      <FlexItem>
+        {subTab === "providers" && <ProvidersPanel />}
+        {subTab === "mcp" && <McpPanel />}
+        {subTab === "openshell" && <OpenShellPanel />}
+      </FlexItem>
+    </Flex>
   );
 }
 
@@ -1362,207 +1504,253 @@ function OpenShellPanel() {
     }
   }
 
-  if (error) return <p className="store-empty">{error}</p>;
+  if (error) return <Alert variant="danger" isInline title={error} />;
   if (!settings || !listings || !platform) {
-    return <div className="store-loading">Loading OpenShell settings…</div>;
+    return (
+      <Bullseye>
+        <Spinner aria-label="Loading OpenShell settings" />
+      </Bullseye>
+    );
   }
 
   const wired = listings.filter((listing) => listing.openshellAgent);
   const serviceToken = secrets.find((s) => s.key === "OPENSHELL_SERVICE_TOKEN");
   const gitPat = secrets.find((s) => s.key === "GIT_PAT");
+  const gatewayStatusColor: "green" | "red" | "grey" =
+    gatewayDeployment?.status === "running" ? "green" : gatewayDeployment?.status === "failed" ? "red" : "grey";
 
   return (
-    <div className="store-admin-section">
-      <div className="store-panel">
-        <h3 className="store-panel-title">Onboard the OpenShell gateway</h3>
-        <p className="store-lede tight">
-          NVIDIA OpenShell is the real sandboxing runtime the Agent Sandbox
-          Service below talks to. Installing it is a live{" "}
-          <code>helm upgrade --install</code> against the chart reference
-          below, run once via AAP — the console never runs Helm itself. See{" "}
-          <a href="https://docs.nvidia.com/openshell/kubernetes/openshift" target="_blank" rel="noreferrer">
-            docs.nvidia.com/openshell/kubernetes/openshift
-          </a>
-          .
-        </p>
-        <p className="store-lede tight">
-          <strong>Before you deploy:</strong> the cluster-scoped Agent Sandbox
-          controller + CRDs are a separate, one-time, elevated-privilege
-          prerequisite this job intentionally does not install — a
-          platform admin applies those once per cluster, outside this
-          self-service flow. See{" "}
-          <em>deploy/openshift/README.md</em> for the exact command.
-        </p>
+    <Flex direction={{ default: "column" }} spaceItems={{ default: "spaceItemsLg" }}>
+      <FlexItem>
+        <Card>
+          <CardTitle>Onboard the OpenShell gateway</CardTitle>
+          <CardBody>
+            <Content component={ContentVariants.small}>
+              NVIDIA OpenShell is the real sandboxing runtime the Agent Sandbox
+              Service below talks to. Installing it is a live{" "}
+              <code>helm upgrade --install</code> against the chart reference
+              below, run once via AAP — the console never runs Helm itself. See{" "}
+              <a href="https://docs.nvidia.com/openshell/kubernetes/openshift" target="_blank" rel="noreferrer">
+                docs.nvidia.com/openshell/kubernetes/openshift
+              </a>
+              .
+            </Content>
+            <Content component={ContentVariants.small}>
+              <strong>Before you deploy:</strong> the cluster-scoped Agent Sandbox
+              controller + CRDs are a separate, one-time, elevated-privilege
+              prerequisite this job intentionally does not install — a
+              platform admin applies those once per cluster, outside this
+              self-service flow. See <em>deploy/openshift/README.md</em> for the exact command.
+            </Content>
 
-        {gatewayDeployment && (
-          <div className="store-admin-table">
-            <div className="store-admin-row">
-              <div>
-                <strong>{gatewayDeployment.releaseName ?? "openshell"}</strong>
-                <span>
-                  {gatewayDeployment.namespace} · {gatewayDeployment.chartRef}
-                  {gatewayDeployment.chartVersion ? `@${gatewayDeployment.chartVersion}` : ""} ·{" "}
-                  {gatewayDeployment.workloadKind}
-                </span>
-              </div>
-              <span
-                className={`store-pill ${
-                  gatewayDeployment.status === "running"
-                    ? "is-live"
-                    : gatewayDeployment.status === "failed"
-                      ? "is-offline"
-                      : ""
-                }`}
-              >
-                {gatewayDeployment.status}
-              </span>
-            </div>
-            {gatewayDeployment.gatewayUrl && (
-              <p className="store-lede tight">
-                Gateway URL (in-cluster): <code>{gatewayDeployment.gatewayUrl}</code> — use this for the Agent
-                Sandbox Service's non-interactive <code>openshell gateway add --url</code> bootstrap.
-              </p>
+            {gatewayDeployment && (
+              <Card isCompact style={{ marginTop: "1rem" }}>
+                <CardBody>
+                  <Flex justifyContent={{ default: "justifyContentSpaceBetween" }} alignItems={{ default: "alignItemsFlexStart" }}>
+                    <FlexItem>
+                      <strong>{gatewayDeployment.releaseName ?? "openshell"}</strong>
+                      <Content component={ContentVariants.small}>
+                        {gatewayDeployment.namespace} · {gatewayDeployment.chartRef}
+                        {gatewayDeployment.chartVersion ? `@${gatewayDeployment.chartVersion}` : ""} ·{" "}
+                        {gatewayDeployment.workloadKind}
+                      </Content>
+                    </FlexItem>
+                    <FlexItem>
+                      <Label color={gatewayStatusColor} isCompact>
+                        {gatewayDeployment.status}
+                      </Label>
+                    </FlexItem>
+                  </Flex>
+                  {gatewayDeployment.gatewayUrl && (
+                    <Content component={ContentVariants.small} style={{ marginTop: "0.5rem" }}>
+                      Gateway URL (in-cluster): <code>{gatewayDeployment.gatewayUrl}</code> — use this for the Agent
+                      Sandbox Service&apos;s non-interactive <code>openshell gateway add --url</code> bootstrap.
+                    </Content>
+                  )}
+                  {gatewayDeployment.error && (
+                    <Alert variant="danger" isInline title={gatewayDeployment.error} style={{ marginTop: "0.5rem" }} />
+                  )}
+                  {gatewayDeployment.aapJobUrl && (
+                    <Content component={ContentVariants.small} style={{ marginTop: "0.5rem" }}>
+                      <a href={gatewayDeployment.aapJobUrl} target="_blank" rel="noreferrer">
+                        View AAP job
+                      </a>
+                    </Content>
+                  )}
+                </CardBody>
+              </Card>
             )}
-            {gatewayDeployment.error && <p className="store-banner is-error">{gatewayDeployment.error}</p>}
-            {gatewayDeployment.aapJobUrl && (
-              <p className="store-lede tight">
-                <a href={gatewayDeployment.aapJobUrl} target="_blank" rel="noreferrer">
-                  View AAP job
-                </a>
-              </p>
-            )}
-          </div>
-        )}
 
-        <div className="store-resource-input-row">
-          <label className="store-field-mini">
-            <span>Helm chart reference</span>
-            <input value={gatewayChartRef} onChange={(e) => setGatewayChartRef(e.target.value)} />
-          </label>
-          <label className="store-field-mini">
-            <span>Chart version (optional)</span>
-            <input
-              value={gatewayChartVersion}
-              placeholder="latest"
-              onChange={(e) => setGatewayChartVersion(e.target.value)}
-            />
-          </label>
-        </div>
-        <div className="store-resource-input-row">
-          <label className="store-field-mini">
-            <span>Namespace</span>
-            <input value={gatewayNamespace} onChange={(e) => setGatewayNamespace(e.target.value)} />
-          </label>
-          <label className="store-field-mini">
-            <span>Workload kind</span>
-            <select
-              value={gatewayWorkloadKind}
-              onChange={(e) => setGatewayWorkloadKind(e.target.value as GatewayWorkloadKind)}
+            <Form style={{ marginTop: "1rem" }}>
+              <Flex spaceItems={{ default: "spaceItemsMd" }}>
+                <FlexItem flex={{ default: "flex_1" }}>
+                  <FormGroup label="Helm chart reference" fieldId="gateway-chart-ref">
+                    <TextInput
+                      id="gateway-chart-ref"
+                      value={gatewayChartRef}
+                      onChange={(_e, v) => setGatewayChartRef(v)}
+                    />
+                  </FormGroup>
+                </FlexItem>
+                <FlexItem flex={{ default: "flex_1" }}>
+                  <FormGroup label="Chart version (optional)" fieldId="gateway-chart-version">
+                    <TextInput
+                      id="gateway-chart-version"
+                      placeholder="latest"
+                      value={gatewayChartVersion}
+                      onChange={(_e, v) => setGatewayChartVersion(v)}
+                    />
+                  </FormGroup>
+                </FlexItem>
+              </Flex>
+              <Flex spaceItems={{ default: "spaceItemsMd" }}>
+                <FlexItem flex={{ default: "flex_1" }}>
+                  <FormGroup label="Namespace" fieldId="gateway-namespace">
+                    <TextInput id="gateway-namespace" value={gatewayNamespace} onChange={(_e, v) => setGatewayNamespace(v)} />
+                  </FormGroup>
+                </FlexItem>
+                <FlexItem flex={{ default: "flex_1" }}>
+                  <FormGroup label="Workload kind" fieldId="gateway-workload-kind">
+                    <FormSelect
+                      id="gateway-workload-kind"
+                      value={gatewayWorkloadKind}
+                      onChange={(_e, v) => setGatewayWorkloadKind(v as GatewayWorkloadKind)}
+                    >
+                      <FormSelectOption value="statefulset" label="StatefulSet (SQLite, default)" />
+                      <FormSelectOption value="deployment" label="Deployment (external Postgres, HA)" />
+                    </FormSelect>
+                  </FormGroup>
+                </FlexItem>
+                <FlexItem flex={{ default: "flex_1" }}>
+                  <FormGroup label="AAP job template id" fieldId="gateway-job-template">
+                    <TextInput
+                      id="gateway-job-template"
+                      placeholder="e.g. 43"
+                      value={gatewayJobTemplateId}
+                      onChange={(_e, v) => setGatewayJobTemplateId(v)}
+                    />
+                  </FormGroup>
+                </FlexItem>
+              </Flex>
+            </Form>
+            {platform.aap.jobTemplates.length > 0 && (
+              <Content component={ContentVariants.small}>
+                Templates: {platform.aap.jobTemplates.slice(0, 8).map((t) => `${t.name} (#${t.id})`).join(" · ")}
+              </Content>
+            )}
+            {gatewayError && <Alert variant="danger" isInline title={gatewayError} style={{ marginTop: "0.5rem" }} />}
+            <Flex spaceItems={{ default: "spaceItemsSm" }} style={{ marginTop: "0.75rem" }}>
+              <FlexItem>
+                <Button
+                  variant="secondary"
+                  isDisabled={savingGateway || deployingGateway}
+                  onClick={() => void saveGatewaySettings()}
+                >
+                  {savingGateway ? "Saving…" : "Save settings"}
+                </Button>
+              </FlexItem>
+              <FlexItem>
+                <Button
+                  variant="primary"
+                  isDisabled={deployingGateway || gatewayDeployment?.status === "deploying"}
+                  onClick={() => void deployGatewayNow()}
+                >
+                  {deployingGateway || gatewayDeployment?.status === "deploying"
+                    ? "Installing…"
+                    : gatewayDeployment
+                      ? "Re-install gateway"
+                      : "Install gateway"}
+                </Button>
+              </FlexItem>
+            </Flex>
+          </CardBody>
+        </Card>
+      </FlexItem>
+
+      <FlexItem>
+        <Card>
+          <CardTitle>Agent Sandbox Service</CardTitle>
+          <CardBody>
+            <Content component={ContentVariants.small}>
+              Engineering listings with an OpenShell agent run interactively in a
+              real sandbox provisioned by the in-cluster Agent Sandbox Service —
+              the console never runs the openshell CLI or a terminal bridge
+              itself, it only calls this service&apos;s REST + WebSocket API.
+            </Content>
+            <Flex
+              justifyContent={{ default: "justifyContentSpaceBetween" }}
+              alignItems={{ default: "alignItemsCenter" }}
+              style={{ marginTop: "0.75rem" }}
             >
-              <option value="statefulset">StatefulSet (SQLite, default)</option>
-              <option value="deployment">Deployment (external Postgres, HA)</option>
-            </select>
-          </label>
-          <label className="store-field-mini">
-            <span>AAP job template id</span>
-            <input
-              value={gatewayJobTemplateId}
-              placeholder="e.g. 43"
-              onChange={(e) => setGatewayJobTemplateId(e.target.value)}
-            />
-          </label>
-        </div>
-        {platform.aap.jobTemplates.length > 0 && (
-          <p className="store-lede tight">
-            Templates: {platform.aap.jobTemplates.slice(0, 8).map((t) => `${t.name} (#${t.id})`).join(" · ")}
-          </p>
-        )}
-        {gatewayError && <p className="store-banner is-error">{gatewayError}</p>}
-        <div className="store-resource-actions">
-          <button
-            type="button"
-            className="store-btn-ghost"
-            disabled={savingGateway || deployingGateway}
-            onClick={() => void saveGatewaySettings()}
-          >
-            {savingGateway ? "Saving…" : "Save settings"}
-          </button>
-          <button
-            type="button"
-            className="store-btn-primary"
-            disabled={deployingGateway || gatewayDeployment?.status === "deploying"}
-            onClick={() => void deployGatewayNow()}
-          >
-            {deployingGateway || gatewayDeployment?.status === "deploying"
-              ? "Installing…"
-              : gatewayDeployment
-                ? "Re-install gateway"
-                : "Install gateway"}
-          </button>
-        </div>
-      </div>
+              <FlexItem>
+                <strong>Agent Sandbox Service</strong>
+                <Content component={ContentVariants.small}>
+                  {platform.openshellService.configured ? platform.settings.openshellServiceUrl : "Not configured"}
+                </Content>
+              </FlexItem>
+              <FlexItem>
+                <Label color={platform.openshellService.connected ? "green" : "grey"} isCompact>
+                  {platform.openshellService.connected ? "Connected" : platform.openshellService.error ?? "Disconnected"}
+                </Label>
+              </FlexItem>
+            </Flex>
+            <InputGroup style={{ marginTop: "0.75rem" }}>
+              <InputGroupItem isFill>
+                <TextInput
+                  aria-label="Agent Sandbox Service URL"
+                  value={serviceUrlDraft}
+                  placeholder="https://agent-sandbox-service-agent-workloads.apps.example.com"
+                  onChange={(_e, v) => setServiceUrlDraft(v)}
+                />
+              </InputGroupItem>
+              <InputGroupItem>
+                <Button variant="primary" isDisabled={saving} onClick={() => void saveServiceUrl()}>
+                  {saving ? "Saving…" : "Save & test"}
+                </Button>
+              </InputGroupItem>
+            </InputGroup>
+            <Content component={ContentVariants.small}>
+              Service configured: <strong>{settings.openshellServiceConfigured ? "Yes" : "No"}</strong> (needs both this
+              URL and the token below)
+            </Content>
+            {serviceToken && <SecretField secret={serviceToken} onChange={loadSecrets} />}
+            {gitPat && <SecretField secret={gitPat} onChange={loadSecrets} />}
+          </CardBody>
+        </Card>
+      </FlexItem>
 
-      <div className="store-panel">
-        <h3 className="store-panel-title">Agent Sandbox Service</h3>
-        <p className="store-lede tight">
-          Engineering listings with an OpenShell agent run interactively in a
-          real sandbox provisioned by the in-cluster Agent Sandbox Service —
-          the console never runs the openshell CLI or a terminal bridge
-          itself, it only calls this service's REST + WebSocket API.
-        </p>
-        <div className="store-admin-table">
-          <div className="store-admin-row">
-            <div>
-              <strong>Agent Sandbox Service</strong>
-              <span>{platform.openshellService.configured ? platform.settings.openshellServiceUrl : "Not configured"}</span>
-            </div>
-            <span className={`store-pill ${platform.openshellService.connected ? "is-live" : ""}`}>
-              {platform.openshellService.connected ? "Connected" : platform.openshellService.error ?? "Disconnected"}
-            </span>
-          </div>
-        </div>
-        <div className="store-resource-input-row">
-          <label className="store-field-mini">
-            <span>Service URL</span>
-            <input
-              value={serviceUrlDraft}
-              placeholder="https://agent-sandbox-service-agent-workloads.apps.example.com"
-              onChange={(e) => setServiceUrlDraft(e.target.value)}
-            />
-          </label>
-          <button type="button" className="store-btn-primary" disabled={saving} onClick={() => void saveServiceUrl()}>
-            {saving ? "Saving…" : "Save & test"}
-          </button>
-        </div>
-        <p className="store-lede tight">
-          Service configured: <strong>{settings.openshellServiceConfigured ? "Yes" : "No"}</strong> (needs both this
-          URL and the token below)
-        </p>
-        {serviceToken && <SecretField secret={serviceToken} onChange={loadSecrets} />}
-        {gitPat && <SecretField secret={gitPat} onChange={loadSecrets} />}
-      </div>
-
-      <div className="store-panel">
-        <h3 className="store-panel-title">Listings wired to OpenShell</h3>
-        {wired.length === 0 ? (
-          <p className="store-lede tight">
-            No listing has an OpenShell agent configured yet.
-          </p>
-        ) : (
-          <div className="store-admin-table">
-            {wired.map((listing) => (
-              <div className="store-admin-row" key={listing.id}>
-                <div>
-                  <strong>{listing.name}</strong>
-                  <span>{departmentLabel(listing.department)}</span>
-                </div>
-                <span>{listing.openshellAgent}</span>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
+      <FlexItem>
+        <Card>
+          <CardTitle>Listings wired to OpenShell</CardTitle>
+          <CardBody>
+            {wired.length === 0 ? (
+              <Content component={ContentVariants.small}>No listing has an OpenShell agent configured yet.</Content>
+            ) : (
+              <Table aria-label="Listings wired to OpenShell" variant="compact">
+                <Thead>
+                  <Tr>
+                    <Th>Listing</Th>
+                    <Th>Department</Th>
+                    <Th>OpenShell agent</Th>
+                  </Tr>
+                </Thead>
+                <Tbody>
+                  {wired.map((listing) => (
+                    <Tr key={listing.id}>
+                      <Td dataLabel="Listing">
+                        <strong>{listing.name}</strong>
+                      </Td>
+                      <Td dataLabel="Department">{departmentLabel(listing.department)}</Td>
+                      <Td dataLabel="OpenShell agent">{listing.openshellAgent}</Td>
+                    </Tr>
+                  ))}
+                </Tbody>
+              </Table>
+            )}
+          </CardBody>
+        </Card>
+      </FlexItem>
+    </Flex>
   );
 }
 
@@ -1588,30 +1776,42 @@ function ProvidersPanel() {
 
   useEffect(load, []);
 
-  if (error) return <p className="store-empty">{error}</p>;
-  if (!providers) return <div className="store-loading">Loading providers…</div>;
+  if (error) return <Alert variant="danger" isInline title={error} />;
+  if (!providers) {
+    return (
+      <Bullseye>
+        <Spinner aria-label="Loading providers" />
+      </Bullseye>
+    );
+  }
 
   return (
-    <div className="store-admin-section">
-      <div className="store-panel">
-        <h3 className="store-panel-title">Model providers</h3>
-        <p className="store-lede tight">
+    <Card>
+      <CardTitle>Model providers</CardTitle>
+      <CardBody>
+        <Content component={ContentVariants.small}>
           Add a real API key for a provider, test the connection, and mark
           one provider active. The active provider is used to generate real
           drafts for Autonomous-mode tasks, replacing the simulated text.
-        </p>
+        </Content>
 
         {providers.length === 0 && (
-          <p className="store-resource-empty">No providers configured yet.</p>
+          <Content component={ContentVariants.small}>No providers configured yet.</Content>
         )}
 
-        <div className="store-resource-list">
+        <Flex direction={{ default: "column" }} spaceItems={{ default: "spaceItemsMd" }} style={{ marginTop: "1rem" }}>
           {providers.map((provider) => (
-            <ProviderRow key={provider.id} provider={provider} onChange={load} />
+            <FlexItem key={provider.id}>
+              <ProviderRow provider={provider} onChange={load} />
+            </FlexItem>
           ))}
-        </div>
+        </Flex>
 
-        {showAdd ? (
+        <Button variant="secondary" style={{ marginTop: "1rem" }} onClick={() => setShowAdd(true)}>
+          + Add provider
+        </Button>
+
+        {showAdd && (
           <AddProviderForm
             onDone={() => {
               setShowAdd(false);
@@ -1619,17 +1819,9 @@ function ProvidersPanel() {
             }}
             onCancel={() => setShowAdd(false)}
           />
-        ) : (
-          <button
-            type="button"
-            className="store-btn-ghost"
-            onClick={() => setShowAdd(true)}
-          >
-            + Add provider
-          </button>
         )}
-      </div>
-    </div>
+      </CardBody>
+    </Card>
   );
 }
 
@@ -1676,59 +1868,75 @@ function AddProviderForm({
   }
 
   return (
-    <div className="store-resource-add">
-      {err && <p className="store-banner is-error">{err}</p>}
-      <p className="store-lede tight">
-        Quick preset:{" "}
-        <button type="button" className="store-btn-ghost" onClick={applyMaasPreset}>
-          OpenShift AI — Model as a Service
-        </button>{" "}
-        — points an OpenAI-compatible provider at a vLLM endpoint served by
-        Red Hat OpenShift AI's Model as a Service (KServe/vLLM); no API key
-        required for a locally self-hosted one.
-      </p>
-      <div className="store-resource-input-row">
-        <select value={kind} onChange={(e) => setKind(e.target.value as ProviderKind)}>
-          {PROVIDER_KINDS.map((k) => (
-            <option key={k.id} value={k.id}>
-              {k.label}
-            </option>
-          ))}
-        </select>
-        <input
-          placeholder="Label, e.g. Anthropic (prod)"
-          value={label}
-          onChange={(e) => setLabel(e.target.value)}
-        />
-        {kind === "openai-compatible" && (
-          <input
-            placeholder="Base URL, e.g. http://localhost:8000/v1"
-            value={baseUrl}
-            onChange={(e) => setBaseUrl(e.target.value)}
-          />
-        )}
-      </div>
-      {kind === "openai-compatible" && (
-        <p className="store-resource-empty">
-          No API key needed for a self-hosted server with no auth configured
-          — leave the key blank after adding and just hit &quot;Test
-          connection&quot;.
-        </p>
-      )}
-      <div className="store-resource-actions">
-        <button
-          type="button"
-          className="store-btn-primary"
-          onClick={() => void save()}
-          disabled={saving}
-        >
+    <Modal variant="medium" isOpen onClose={onCancel} aria-label="Add provider">
+      <ModalHeader title="Add provider" />
+      <ModalBody>
+        <Flex direction={{ default: "column" }} spaceItems={{ default: "spaceItemsMd" }}>
+          {err && (
+            <FlexItem>
+              <Alert variant="danger" isInline title={err} />
+            </FlexItem>
+          )}
+          <FlexItem>
+            <Content component={ContentVariants.small}>
+              Quick preset:{" "}
+              <Button variant="link" isInline onClick={applyMaasPreset}>
+                OpenShift AI — Model as a Service
+              </Button>{" "}
+              — points an OpenAI-compatible provider at a vLLM endpoint served by
+              Red Hat OpenShift AI&apos;s Model as a Service (KServe/vLLM); no API key
+              required for a locally self-hosted one.
+            </Content>
+          </FlexItem>
+          <FlexItem>
+            <Form>
+              <FormGroup label="Kind" fieldId="add-provider-kind">
+                <FormSelect id="add-provider-kind" value={kind} onChange={(_e, v) => setKind(v as ProviderKind)}>
+                  {PROVIDER_KINDS.map((k) => (
+                    <FormSelectOption key={k.id} value={k.id} label={k.label} />
+                  ))}
+                </FormSelect>
+              </FormGroup>
+              <FormGroup label="Label" isRequired fieldId="add-provider-label">
+                <TextInput
+                  id="add-provider-label"
+                  placeholder="Label, e.g. Anthropic (prod)"
+                  value={label}
+                  onChange={(_e, v) => setLabel(v)}
+                />
+              </FormGroup>
+              {kind === "openai-compatible" && (
+                <FormGroup label="Base URL" fieldId="add-provider-base-url">
+                  <TextInput
+                    id="add-provider-base-url"
+                    placeholder="Base URL, e.g. http://localhost:8000/v1"
+                    value={baseUrl}
+                    onChange={(_e, v) => setBaseUrl(v)}
+                  />
+                </FormGroup>
+              )}
+            </Form>
+          </FlexItem>
+          {kind === "openai-compatible" && (
+            <FlexItem>
+              <Content component={ContentVariants.small}>
+                No API key needed for a self-hosted server with no auth configured
+                — leave the key blank after adding and just hit &quot;Test
+                connection&quot;.
+              </Content>
+            </FlexItem>
+          )}
+        </Flex>
+      </ModalBody>
+      <ModalFooter>
+        <Button variant="primary" onClick={() => void save()} isDisabled={saving}>
           {saving ? "Adding…" : "Add provider"}
-        </button>
-        <button type="button" className="store-btn-ghost" onClick={onCancel}>
+        </Button>
+        <Button variant="link" onClick={onCancel}>
           Cancel
-        </button>
-      </div>
-    </div>
+        </Button>
+      </ModalFooter>
+    </Modal>
   );
 }
 
@@ -1794,85 +2002,110 @@ function ProviderRow({
   }
 
   return (
-    <div className="store-resource-card">
-      <div className="store-resource-head">
-        <div className="store-resource-title">
-          <strong>{provider.label}</strong>
-          <span>{PROVIDER_KINDS.find((k) => k.id === provider.kind)?.label ?? provider.kind}</span>
-        </div>
-        <div className="store-resource-badges">
-          <span className={`store-phase is-${provider.active ? "ok" : "muted"}`}>
-            {provider.active ? "Active" : "Inactive"}
-          </span>
-          <span
-            className={`store-phase is-${
-              provider.hasKey ? "ok" : provider.kind === "openai-compatible" ? "muted" : "warn"
-            }`}
+    <Card isCompact>
+      <CardBody>
+        <Flex justifyContent={{ default: "justifyContentSpaceBetween" }} alignItems={{ default: "alignItemsFlexStart" }}>
+          <FlexItem>
+            <strong>{provider.label}</strong>
+            <Content component={ContentVariants.small}>
+              {PROVIDER_KINDS.find((k) => k.id === provider.kind)?.label ?? provider.kind}
+            </Content>
+          </FlexItem>
+          <FlexItem>
+            <Flex spaceItems={{ default: "spaceItemsSm" }}>
+              <FlexItem>
+                <Label color={provider.active ? "green" : "grey"} isCompact>
+                  {provider.active ? "Active" : "Inactive"}
+                </Label>
+              </FlexItem>
+              <FlexItem>
+                <Label
+                  color={provider.hasKey ? "green" : provider.kind === "openai-compatible" ? "grey" : "orange"}
+                  isCompact
+                >
+                  {provider.hasKey
+                    ? `Key set (${provider.keyPreview})`
+                    : provider.kind === "openai-compatible"
+                      ? "No key (optional for self-hosted servers)"
+                      : "No key"}
+                </Label>
+              </FlexItem>
+              {provider.lastError && (
+                <FlexItem>
+                  <Label color="red" isCompact>
+                    Test failed
+                  </Label>
+                </FlexItem>
+              )}
+              {provider.lastChecked && !provider.lastError && (
+                <FlexItem>
+                  <Label color="blue" isCompact>
+                    Tested OK
+                  </Label>
+                </FlexItem>
+              )}
+            </Flex>
+          </FlexItem>
+        </Flex>
+
+        <InputGroup style={{ marginTop: "0.75rem" }}>
+          <InputGroupItem isFill>
+            <TextInput
+              type="password"
+              aria-label={`API key for ${provider.label}`}
+              placeholder="Paste API key"
+              value={keyInput}
+              onChange={(_e, v) => setKeyInput(v)}
+            />
+          </InputGroupItem>
+          <InputGroupItem>
+            <Button variant="secondary" onClick={saveKey} isDisabled={savingKey || !keyInput.trim()}>
+              {savingKey ? "Saving…" : "Save key"}
+            </Button>
+          </InputGroupItem>
+          <InputGroupItem>
+            <Button
+              variant="secondary"
+              onClick={test}
+              isDisabled={testing || (!provider.hasKey && provider.kind !== "openai-compatible")}
+            >
+              {testing ? "Testing…" : "Test connection"}
+            </Button>
+          </InputGroupItem>
+        </InputGroup>
+
+        {provider.lastError && <Alert variant="danger" isInline title={provider.lastError} style={{ marginTop: "0.5rem" }} />}
+
+        {provider.models && provider.models.length > 0 && (
+          <FormSelect
+            aria-label={`Default model for ${provider.label}`}
+            value={model}
+            onChange={(_e, v) => saveModel(v)}
+            style={{ marginTop: "0.75rem" }}
           >
-            {provider.hasKey
-              ? `Key set (${provider.keyPreview})`
-              : provider.kind === "openai-compatible"
-                ? "No key (optional for self-hosted servers)"
-                : "No key"}
-          </span>
-          {provider.lastError && <span className="store-phase is-bad">Test failed</span>}
-          {provider.lastChecked && !provider.lastError && (
-            <span className="store-phase is-info">Tested OK</span>
-          )}
-        </div>
-      </div>
-
-      <div className="store-resource-input-row">
-        <input
-          type="password"
-          placeholder="Paste API key"
-          value={keyInput}
-          onChange={(e) => setKeyInput(e.target.value)}
-        />
-        <button
-          type="button"
-          className="store-btn-ghost"
-          onClick={saveKey}
-          disabled={savingKey || !keyInput.trim()}
-        >
-          {savingKey ? "Saving…" : "Save key"}
-        </button>
-        <button
-          type="button"
-          className="store-btn-ghost"
-          onClick={test}
-          disabled={testing || (!provider.hasKey && provider.kind !== "openai-compatible")}
-        >
-          {testing ? "Testing…" : "Test connection"}
-        </button>
-      </div>
-
-      {provider.lastError && <p className="store-banner is-error">{provider.lastError}</p>}
-
-      {provider.models && provider.models.length > 0 && (
-        <div className="store-resource-input-row">
-          <select value={model} onChange={(e) => saveModel(e.target.value)}>
-            <option value="">Default model…</option>
+            <FormSelectOption value="" label="Default model…" />
             {provider.models.map((m) => (
-              <option key={m} value={m}>
-                {m}
-              </option>
+              <FormSelectOption key={m} value={m} label={m} />
             ))}
-          </select>
-        </div>
-      )}
-
-      <div className="store-resource-actions">
-        {!provider.active && (
-          <button type="button" className="store-btn-ghost" onClick={activate} disabled={busy}>
-            Make active
-          </button>
+          </FormSelect>
         )}
-        <button type="button" className="store-btn-ghost" onClick={remove} disabled={busy}>
-          Remove
-        </button>
-      </div>
-    </div>
+
+        <Flex spaceItems={{ default: "spaceItemsSm" }} style={{ marginTop: "0.75rem" }}>
+          {!provider.active && (
+            <FlexItem>
+              <Button variant="secondary" onClick={activate} isDisabled={busy}>
+                Make active
+              </Button>
+            </FlexItem>
+          )}
+          <FlexItem>
+            <Button variant="danger" onClick={remove} isDisabled={busy}>
+              Remove
+            </Button>
+          </FlexItem>
+        </Flex>
+      </CardBody>
+    </Card>
   );
 }
 
@@ -1895,31 +2128,43 @@ function McpPanel() {
 
   useEffect(load, []);
 
-  if (error) return <p className="store-empty">{error}</p>;
-  if (!servers) return <div className="store-loading">Loading MCP servers…</div>;
+  if (error) return <Alert variant="danger" isInline title={error} />;
+  if (!servers) {
+    return (
+      <Bullseye>
+        <Spinner aria-label="Loading MCP servers" />
+      </Bullseye>
+    );
+  }
 
   return (
-    <div className="store-admin-section">
-      <div className="store-panel">
-        <h3 className="store-panel-title">MCP servers &amp; tools</h3>
-        <p className="store-lede tight">
+    <Card>
+      <CardTitle>MCP servers &amp; tools</CardTitle>
+      <CardBody>
+        <Content component={ContentVariants.small}>
           Connect a real MCP server, then enable individual tools you want
           Autonomous-mode drafting to be able to call.{" "}
           <strong>stdio servers run a local command you specify — only
           connect servers you trust.</strong>
-        </p>
+        </Content>
 
         {servers.length === 0 && (
-          <p className="store-resource-empty">No MCP servers registered yet.</p>
+          <Content component={ContentVariants.small}>No MCP servers registered yet.</Content>
         )}
 
-        <div className="store-resource-list">
+        <Flex direction={{ default: "column" }} spaceItems={{ default: "spaceItemsMd" }} style={{ marginTop: "1rem" }}>
           {servers.map((server) => (
-            <McpServerRow key={server.id} server={server} onChange={load} />
+            <FlexItem key={server.id}>
+              <McpServerRow server={server} onChange={load} />
+            </FlexItem>
           ))}
-        </div>
+        </Flex>
 
-        {showAdd ? (
+        <Button variant="secondary" style={{ marginTop: "1rem" }} onClick={() => setShowAdd(true)}>
+          + Add MCP server
+        </Button>
+
+        {showAdd && (
           <AddMcpServerForm
             onDone={() => {
               setShowAdd(false);
@@ -1927,13 +2172,9 @@ function McpPanel() {
             }}
             onCancel={() => setShowAdd(false)}
           />
-        ) : (
-          <button type="button" className="store-btn-ghost" onClick={() => setShowAdd(true)}>
-            + Add MCP server
-          </button>
         )}
-      </div>
-    </div>
+      </CardBody>
+    </Card>
   );
 }
 
@@ -1978,49 +2219,61 @@ function AddMcpServerForm({
   }
 
   return (
-    <div className="store-resource-add">
-      {err && <p className="store-banner is-error">{err}</p>}
-      <div className="store-resource-input-row">
-        <select value={transport} onChange={(e) => setTransport(e.target.value as McpTransport)}>
-          {MCP_TRANSPORTS.map((t) => (
-            <option key={t.id} value={t.id}>
-              {t.label}
-            </option>
-          ))}
-        </select>
-        <input placeholder="Name" value={name} onChange={(e) => setName(e.target.value)} />
-      </div>
-      {transport === "stdio" ? (
-        <div className="store-resource-input-row">
-          <input
-            placeholder="Command, e.g. npx"
-            value={command}
-            onChange={(e) => setCommand(e.target.value)}
-          />
-          <input
-            placeholder="Args, space separated"
-            value={args}
-            onChange={(e) => setArgs(e.target.value)}
-          />
-        </div>
-      ) : (
-        <div className="store-resource-input-row">
-          <input
-            placeholder="Server URL, e.g. https://host/mcp"
-            value={url}
-            onChange={(e) => setUrl(e.target.value)}
-          />
-        </div>
-      )}
-      <div className="store-resource-actions">
-        <button type="button" className="store-btn-primary" onClick={save} disabled={saving}>
+    <Modal variant="medium" isOpen onClose={onCancel} aria-label="Add MCP server">
+      <ModalHeader title="Add MCP server" />
+      <ModalBody>
+        <Form>
+          {err && <Alert variant="danger" isInline title={err} />}
+          <FormGroup label="Transport" fieldId="add-mcp-transport">
+            <FormSelect id="add-mcp-transport" value={transport} onChange={(_e, v) => setTransport(v as McpTransport)}>
+              {MCP_TRANSPORTS.map((t) => (
+                <FormSelectOption key={t.id} value={t.id} label={t.label} />
+              ))}
+            </FormSelect>
+          </FormGroup>
+          <FormGroup label="Name" isRequired fieldId="add-mcp-name">
+            <TextInput id="add-mcp-name" placeholder="Name" value={name} onChange={(_e, v) => setName(v)} />
+          </FormGroup>
+          {transport === "stdio" ? (
+            <>
+              <FormGroup label="Command" fieldId="add-mcp-command">
+                <TextInput
+                  id="add-mcp-command"
+                  placeholder="Command, e.g. npx"
+                  value={command}
+                  onChange={(_e, v) => setCommand(v)}
+                />
+              </FormGroup>
+              <FormGroup label="Args" fieldId="add-mcp-args">
+                <TextInput
+                  id="add-mcp-args"
+                  placeholder="Args, space separated"
+                  value={args}
+                  onChange={(_e, v) => setArgs(v)}
+                />
+              </FormGroup>
+            </>
+          ) : (
+            <FormGroup label="Server URL" fieldId="add-mcp-url">
+              <TextInput
+                id="add-mcp-url"
+                placeholder="Server URL, e.g. https://host/mcp"
+                value={url}
+                onChange={(_e, v) => setUrl(v)}
+              />
+            </FormGroup>
+          )}
+        </Form>
+      </ModalBody>
+      <ModalFooter>
+        <Button variant="primary" onClick={() => void save()} isDisabled={saving}>
           {saving ? "Adding…" : "Add server"}
-        </button>
-        <button type="button" className="store-btn-ghost" onClick={onCancel}>
+        </Button>
+        <Button variant="link" onClick={onCancel}>
           Cancel
-        </button>
-      </div>
-    </div>
+        </Button>
+      </ModalFooter>
+    </Modal>
   );
 }
 
@@ -2082,87 +2335,97 @@ function McpServerRow({
     onChange();
   }
 
-  const stateTone =
-    server.connectionState === "connected"
-      ? "ok"
-      : server.connectionState === "error"
-        ? "bad"
-        : "muted";
+  const stateColor: "green" | "red" | "grey" =
+    server.connectionState === "connected" ? "green" : server.connectionState === "error" ? "red" : "grey";
 
   return (
-    <div className="store-resource-card">
-      <div className="store-resource-head">
-        <div className="store-resource-title">
-          <strong>{server.name}</strong>
-          <span>
-            {MCP_TRANSPORTS.find((t) => t.id === server.transport)?.label ?? server.transport} ·{" "}
-            {server.transport === "stdio" ? server.command : server.url}
-          </span>
-        </div>
-        <div className="store-resource-badges">
-          <span className={`store-phase is-${stateTone}`}>{server.connectionState}</span>
-        </div>
-      </div>
+    <Card isCompact>
+      <CardBody>
+        <Flex justifyContent={{ default: "justifyContentSpaceBetween" }} alignItems={{ default: "alignItemsFlexStart" }}>
+          <FlexItem>
+            <strong>{server.name}</strong>
+            <Content component={ContentVariants.small}>
+              {MCP_TRANSPORTS.find((t) => t.id === server.transport)?.label ?? server.transport} ·{" "}
+              {server.transport === "stdio" ? server.command : server.url}
+            </Content>
+          </FlexItem>
+          <FlexItem>
+            <Label color={stateColor} isCompact>
+              {server.connectionState}
+            </Label>
+          </FlexItem>
+        </Flex>
 
-      {server.lastError && <p className="store-banner is-error">{server.lastError}</p>}
+        {server.lastError && <Alert variant="danger" isInline title={server.lastError} style={{ marginTop: "0.5rem" }} />}
 
-      {server.transport !== "stdio" && (
-        <div className="store-resource-input-row">
-          <input
-            type="password"
-            placeholder={server.hasAuthToken ? "Auth token set — enter to replace" : "Bearer auth token (optional)"}
-            value={tokenInput}
-            onChange={(e) => setTokenInput(e.target.value)}
-          />
-          <button
-            type="button"
-            className="store-btn-ghost"
-            onClick={saveToken}
-            disabled={busy || !tokenInput.trim()}
-          >
-            Save token
-          </button>
-        </div>
-      )}
-
-      <div className="store-resource-actions">
-        <button type="button" className="store-btn-ghost" onClick={connect} disabled={connecting}>
-          {connecting ? "Connecting…" : server.connectionState === "connected" ? "Reconnect" : "Connect"}
-        </button>
-        {server.connectionState === "connected" && (
-          <button type="button" className="store-btn-ghost" onClick={disconnect} disabled={busy}>
-            Disconnect
-          </button>
+        {server.transport !== "stdio" && (
+          <InputGroup style={{ marginTop: "0.75rem" }}>
+            <InputGroupItem isFill>
+              <TextInput
+                type="password"
+                aria-label={`Auth token for ${server.name}`}
+                placeholder={server.hasAuthToken ? "Auth token set — enter to replace" : "Bearer auth token (optional)"}
+                value={tokenInput}
+                onChange={(_e, v) => setTokenInput(v)}
+              />
+            </InputGroupItem>
+            <InputGroupItem>
+              <Button variant="secondary" onClick={saveToken} isDisabled={busy || !tokenInput.trim()}>
+                Save token
+              </Button>
+            </InputGroupItem>
+          </InputGroup>
         )}
-        <button type="button" className="store-btn-ghost" onClick={remove} disabled={busy}>
-          Remove
-        </button>
-      </div>
 
-      {server.connectionState === "connected" && (
-        <div className="store-resource-tools">
-          {server.tools.length === 0 ? (
-            <p className="store-resource-empty">This server did not advertise any tools.</p>
-          ) : (
-            server.tools.map((tool) => (
-              <label key={tool.name} className="store-resource-tool">
-                <span>
-                  {tool.name}
-                  {tool.description && (
-                    <span className="store-resource-tool-desc">{tool.description}</span>
-                  )}
-                </span>
-                <input
-                  type="checkbox"
-                  checked={tool.enabled}
-                  onChange={(e) => toggleTool(tool.name, e.target.checked)}
-                />
-              </label>
-            ))
+        <Flex spaceItems={{ default: "spaceItemsSm" }} style={{ marginTop: "0.75rem" }}>
+          <FlexItem>
+            <Button variant="secondary" onClick={connect} isDisabled={connecting}>
+              {connecting ? "Connecting…" : server.connectionState === "connected" ? "Reconnect" : "Connect"}
+            </Button>
+          </FlexItem>
+          {server.connectionState === "connected" && (
+            <FlexItem>
+              <Button variant="secondary" onClick={disconnect} isDisabled={busy}>
+                Disconnect
+              </Button>
+            </FlexItem>
           )}
-        </div>
-      )}
-    </div>
+          <FlexItem>
+            <Button variant="danger" onClick={remove} isDisabled={busy}>
+              Remove
+            </Button>
+          </FlexItem>
+        </Flex>
+
+        {server.connectionState === "connected" && (
+          <Flex direction={{ default: "column" }} spaceItems={{ default: "spaceItemsXs" }} style={{ marginTop: "0.75rem" }}>
+            {server.tools.length === 0 ? (
+              <FlexItem>
+                <Content component={ContentVariants.small}>This server did not advertise any tools.</Content>
+              </FlexItem>
+            ) : (
+              server.tools.map((tool) => (
+                <FlexItem key={tool.name}>
+                  <Checkbox
+                    id={`mcp-tool-${server.id}-${tool.name}`}
+                    isChecked={tool.enabled}
+                    onChange={(_e, checked) => toggleTool(tool.name, checked)}
+                    label={
+                      <>
+                        {tool.name}
+                        {tool.description && (
+                          <Content component={ContentVariants.small}>{tool.description}</Content>
+                        )}
+                      </>
+                    }
+                  />
+                </FlexItem>
+              ))
+            )}
+          </Flex>
+        )}
+      </CardBody>
+    </Card>
   );
 }
 
@@ -2246,8 +2509,14 @@ function SkillsPanel() {
     }
   }, [seeded, skills]);
 
-  if (error) return <p className="store-empty">{error}</p>;
-  if (!skills) return <div className="store-loading">Loading skills…</div>;
+  if (error) return <Alert variant="danger" isInline title={error} />;
+  if (!skills) {
+    return (
+      <Bullseye>
+        <Spinner aria-label="Loading skills" />
+      </Bullseye>
+    );
+  }
 
   const groups = groupSkillsByPack(skills);
 
@@ -2275,10 +2544,10 @@ function SkillsPanel() {
     .filter((group) => group.skills.length > 0);
 
   return (
-    <div className="store-admin-section">
-      <div className="store-panel">
-        <h3 className="store-panel-title">Skills library</h3>
-        <p className="store-lede tight">
+    <Card>
+      <CardTitle>Skills library</CardTitle>
+      <CardBody>
+        <Content component={ContentVariants.small}>
           Author reusable instruction bundles once, then attach one or more
           to any agent (from the Catalog tab or the onboarding wizard). A
           skill&apos;s instructions are merged into that agent&apos;s system
@@ -2286,66 +2555,75 @@ function SkillsPanel() {
           calls <code>load_skill</code> for the ones it needs. Red Hat pack
           skills below are imported and read-only; author your own with
           &quot;+ Add skill&quot;.
-        </p>
+        </Content>
 
-        <div className="store-resource-card is-subtle">
-          <div className="store-resource-head">
-            <div className="store-resource-title">
-              <strong>Sync Red Hat skill packs</strong>
-              <span>
-                Pulls the latest {RED_HAT_SKILL_PACK_LABELS.join(", ")} packs from{" "}
-                <code>github.com/RHEcosystemAppEng/agentic-plugins</code> and refreshes
-                them below — no restart needed.
-              </span>
-            </div>
-            <div className="store-resource-actions">
-              <button type="button" className="store-btn-ghost" onClick={runImport} disabled={importing}>
-                {importing ? "Syncing…" : "Sync now"}
-              </button>
-            </div>
-          </div>
-          {importMsg && <p className="store-lede tight">{importMsg}</p>}
-        </div>
+        <Card isCompact style={{ marginTop: "1rem" }}>
+          <CardBody>
+            <Flex justifyContent={{ default: "justifyContentSpaceBetween" }} alignItems={{ default: "alignItemsCenter" }}>
+              <FlexItem>
+                <strong>Sync Red Hat skill packs</strong>
+                <Content component={ContentVariants.small}>
+                  Pulls the latest {RED_HAT_SKILL_PACK_LABELS.join(", ")} packs from{" "}
+                  <code>github.com/RHEcosystemAppEng/agentic-plugins</code> and refreshes
+                  them below — no restart needed.
+                </Content>
+              </FlexItem>
+              <FlexItem>
+                <Button variant="secondary" onClick={runImport} isDisabled={importing}>
+                  {importing ? "Syncing…" : "Sync now"}
+                </Button>
+              </FlexItem>
+            </Flex>
+            {importMsg && (
+              <Content component={ContentVariants.small} style={{ marginTop: "0.5rem" }}>
+                {importMsg}
+              </Content>
+            )}
+          </CardBody>
+        </Card>
 
-        <div className="store-skill-search">
-          <SearchIcon aria-hidden="true" />
-          <input
-            type="text"
+        <div style={{ marginTop: "1rem" }}>
+          <SearchInput
+            aria-label="Search skills"
             placeholder={`Search ${skills.length} skills by name or description…`}
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(_e, v) => setQuery(v)}
+            onClear={() => setQuery("")}
           />
         </div>
 
         {filteredGroups.length === 0 && (
-          <p className="store-resource-empty">No skills match &quot;{query}&quot;.</p>
+          <Content component={ContentVariants.small}>No skills match &quot;{query}&quot;.</Content>
         )}
 
-        {filteredGroups.map((group) => {
-          const isOpen = trimmedQuery.length > 0 || openGroups.has(group.key);
-          return (
-            <CollapsibleGroup
-              key={group.key}
-              label={group.label}
-              badge={`${group.skills.length}`}
-              open={isOpen}
-              onToggle={() => toggleGroup(group.key)}
-            >
-              <div className="store-resource-list">
-                {group.skills.map((skill) => (
-                  <SkillRow
-                    key={skill.id}
-                    skill={skill}
-                    usedBy={usedByMap.get(skill.id) ?? []}
-                    onChange={load}
-                  />
-                ))}
-              </div>
-            </CollapsibleGroup>
-          );
-        })}
+        <Flex direction={{ default: "column" }} spaceItems={{ default: "spaceItemsMd" }} style={{ marginTop: "1rem" }}>
+          {filteredGroups.map((group) => {
+            const isOpen = trimmedQuery.length > 0 || openGroups.has(group.key);
+            return (
+              <FlexItem key={group.key}>
+                <ExpandableSection
+                  toggleContent={skillGroupToggle(group.label, `${group.skills.length}`)}
+                  isExpanded={isOpen}
+                  onToggle={() => toggleGroup(group.key)}
+                >
+                  <Flex direction={{ default: "column" }} spaceItems={{ default: "spaceItemsMd" }}>
+                    {group.skills.map((skill) => (
+                      <FlexItem key={skill.id}>
+                        <SkillRow skill={skill} usedBy={usedByMap.get(skill.id) ?? []} onChange={load} />
+                      </FlexItem>
+                    ))}
+                  </Flex>
+                </ExpandableSection>
+              </FlexItem>
+            );
+          })}
+        </Flex>
 
-        {showAdd ? (
+        <Button variant="secondary" style={{ marginTop: "1rem" }} onClick={() => setShowAdd(true)}>
+          + Add skill
+        </Button>
+
+        {showAdd && (
           <AddSkillForm
             onDone={() => {
               setShowAdd(false);
@@ -2353,13 +2631,9 @@ function SkillsPanel() {
             }}
             onCancel={() => setShowAdd(false)}
           />
-        ) : (
-          <button type="button" className="store-btn-ghost" onClick={() => setShowAdd(true)}>
-            + Add skill
-          </button>
         )}
-      </div>
-    </div>
+      </CardBody>
+    </Card>
   );
 }
 
@@ -2399,32 +2673,47 @@ function AddSkillForm({
   }
 
   return (
-    <div className="store-resource-add">
-      {err && <p className="store-banner is-error">{err}</p>}
-      <div className="store-resource-input-row">
-        <input placeholder="Name, e.g. Billing tone guide" value={name} onChange={(e) => setName(e.target.value)} />
-        <input
-          placeholder="Short description (optional)"
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-        />
-      </div>
-      <textarea
-        rows={4}
-        placeholder="Instructions to merge into the agent's system prompt…"
-        value={instructions}
-        onChange={(e) => setInstructions(e.target.value)}
-        className="store-textarea"
-      />
-      <div className="store-resource-actions">
-        <button type="button" className="store-btn-primary" onClick={save} disabled={saving}>
+    <Modal variant="large" isOpen onClose={onCancel} aria-label="Add skill">
+      <ModalHeader title="Add skill" />
+      <ModalBody>
+        <Form>
+          {err && <Alert variant="danger" isInline title={err} />}
+          <FormGroup label="Name" isRequired fieldId="add-skill-name">
+            <TextInput
+              id="add-skill-name"
+              placeholder="Name, e.g. Billing tone guide"
+              value={name}
+              onChange={(_e, v) => setName(v)}
+            />
+          </FormGroup>
+          <FormGroup label="Description" fieldId="add-skill-description">
+            <TextInput
+              id="add-skill-description"
+              placeholder="Short description (optional)"
+              value={description}
+              onChange={(_e, v) => setDescription(v)}
+            />
+          </FormGroup>
+          <FormGroup label="Instructions" isRequired fieldId="add-skill-instructions">
+            <TextArea
+              id="add-skill-instructions"
+              rows={8}
+              placeholder="Instructions to merge into the agent's system prompt…"
+              value={instructions}
+              onChange={(_e, v) => setInstructions(v)}
+            />
+          </FormGroup>
+        </Form>
+      </ModalBody>
+      <ModalFooter>
+        <Button variant="primary" onClick={() => void save()} isDisabled={saving}>
           {saving ? "Adding…" : "Add skill"}
-        </button>
-        <button type="button" className="store-btn-ghost" onClick={onCancel}>
+        </Button>
+        <Button variant="link" onClick={onCancel}>
           Cancel
-        </button>
-      </div>
-    </div>
+        </Button>
+      </ModalFooter>
+    </Modal>
   );
 }
 
@@ -2469,73 +2758,103 @@ function SkillRow({
   const isBuiltin = skill.source === "built-in";
 
   return (
-    <div className="store-resource-card">
-      <div className="store-resource-head">
-        <div className="store-resource-title">
-          <strong>{skill.name}</strong>
-          {skill.pack && <span className="store-pill is-muted">{skill.pack}</span>}
-          {skill.description && <span>{skill.description}</span>}
-        </div>
-        <div className="store-resource-actions">
-          <button
-            type="button"
-            className="store-pill is-clickable"
-            onClick={() => setShowUsedBy((v) => !v)}
-            disabled={usedBy.length === 0}
-            title={usedBy.length === 0 ? "Not attached to any listing yet" : "Show which listings use this skill"}
-          >
-            Used by {usedBy.length} listing{usedBy.length === 1 ? "" : "s"}
-          </button>
-          {isBuiltin ? (
-            <span className="store-pill is-muted">Built-in (read-only)</span>
-          ) : (
-            <>
-              <button type="button" className="store-btn-ghost" onClick={() => setEditing((v) => !v)}>
-                {editing ? "Close" : "Edit"}
-              </button>
-              <button type="button" className="store-btn-ghost" onClick={remove} disabled={busy}>
-                Remove
-              </button>
-            </>
-          )}
-        </div>
-      </div>
+    <Card isCompact>
+      <CardBody>
+        <Flex justifyContent={{ default: "justifyContentSpaceBetween" }} alignItems={{ default: "alignItemsFlexStart" }}>
+          <FlexItem>
+            <strong>{skill.name}</strong>{" "}
+            {skill.pack && (
+              <Label isCompact color="grey">
+                {skill.pack}
+              </Label>
+            )}
+            {skill.description && <Content component={ContentVariants.small}>{skill.description}</Content>}
+          </FlexItem>
+          <FlexItem>
+            <Flex spaceItems={{ default: "spaceItemsSm" }}>
+              <FlexItem>
+                <Button
+                  variant="link"
+                  isInline
+                  onClick={() => setShowUsedBy((v) => !v)}
+                  isDisabled={usedBy.length === 0}
+                  title={usedBy.length === 0 ? "Not attached to any listing yet" : "Show which listings use this skill"}
+                >
+                  Used by {usedBy.length} listing{usedBy.length === 1 ? "" : "s"}
+                </Button>
+              </FlexItem>
+              {isBuiltin ? (
+                <FlexItem>
+                  <Label isCompact color="grey">
+                    Built-in (read-only)
+                  </Label>
+                </FlexItem>
+              ) : (
+                <>
+                  <FlexItem>
+                    <Button variant="secondary" onClick={() => setEditing((v) => !v)}>
+                      {editing ? "Close" : "Edit"}
+                    </Button>
+                  </FlexItem>
+                  <FlexItem>
+                    <Button variant="danger" onClick={remove} isDisabled={busy}>
+                      Remove
+                    </Button>
+                  </FlexItem>
+                </>
+              )}
+            </Flex>
+          </FlexItem>
+        </Flex>
 
-      {showUsedBy && usedBy.length > 0 && (
-        <ul className="store-skill-usedby-list">
-          {usedBy.map((listing) => (
-            <li key={listing.id}>{listing.name}</li>
-          ))}
-        </ul>
-      )}
+        {showUsedBy && usedBy.length > 0 && (
+          <ul style={{ marginTop: "0.5rem" }}>
+            {usedBy.map((listing) => (
+              <li key={listing.id}>{listing.name}</li>
+            ))}
+          </ul>
+        )}
 
-      {!isBuiltin && editing ? (
-        <>
-          <div className="store-resource-input-row">
-            <input value={name} onChange={(e) => setName(e.target.value)} />
-            <input value={description} onChange={(e) => setDescription(e.target.value)} />
-          </div>
-          <textarea
-            rows={4}
-            value={instructions}
-            onChange={(e) => setInstructions(e.target.value)}
-            className="store-textarea"
-          />
-          <div className="store-resource-actions">
-            <button type="button" className="store-btn-primary" onClick={save} disabled={busy}>
+        {!isBuiltin && editing ? (
+          <Form style={{ marginTop: "0.75rem" }}>
+            <Flex spaceItems={{ default: "spaceItemsMd" }}>
+              <FlexItem flex={{ default: "flex_1" }}>
+                <FormGroup label="Name" fieldId={`skill-${skill.id}-name`}>
+                  <TextInput id={`skill-${skill.id}-name`} value={name} onChange={(_e, v) => setName(v)} />
+                </FormGroup>
+              </FlexItem>
+              <FlexItem flex={{ default: "flex_1" }}>
+                <FormGroup label="Description" fieldId={`skill-${skill.id}-description`}>
+                  <TextInput
+                    id={`skill-${skill.id}-description`}
+                    value={description}
+                    onChange={(_e, v) => setDescription(v)}
+                  />
+                </FormGroup>
+              </FlexItem>
+            </Flex>
+            <FormGroup label="Instructions" fieldId={`skill-${skill.id}-instructions`}>
+              <TextArea
+                id={`skill-${skill.id}-instructions`}
+                rows={4}
+                value={instructions}
+                onChange={(_e, v) => setInstructions(v)}
+              />
+            </FormGroup>
+            <Button variant="primary" onClick={() => void save()} isDisabled={busy}>
               {busy ? "Saving…" : "Save"}
-            </button>
+            </Button>
+          </Form>
+        ) : (
+          <div style={{ marginTop: "0.5rem" }}>
+            <Button variant="link" isInline onClick={() => setShowInstructions((v) => !v)}>
+              {showInstructions ? "Hide instructions" : "Show instructions"}
+            </Button>
+            {showInstructions && <Markdown>{skill.instructions}</Markdown>}
           </div>
-        </>
-      ) : (
-        <>
-          <button type="button" className="store-btn-ghost" onClick={() => setShowInstructions((v) => !v)}>
-            {showInstructions ? "Hide instructions" : "Show instructions"}
-          </button>
-          {showInstructions && <Markdown>{skill.instructions}</Markdown>}
-        </>
-      )}
-    </div>
+        )}
+      </CardBody>
+    </Card>
   );
 }
 
@@ -2553,32 +2872,46 @@ function AuditLog() {
     return () => clearInterval(timer);
   }, []);
 
-  if (error) return <p className="store-empty">{error}</p>;
-  if (!tasks) return <div className="store-loading">Loading tasks…</div>;
+  if (error) return <Alert variant="danger" isInline title={error} />;
+  if (!tasks) {
+    return (
+      <Bullseye>
+        <Spinner aria-label="Loading tasks" />
+      </Bullseye>
+    );
+  }
   if (tasks.length === 0) {
-    return <p className="store-empty">No tasks have been launched yet.</p>;
+    return <Content component={ContentVariants.small}>No tasks have been launched yet.</Content>;
   }
 
   return (
-    <div className="store-audit-table">
-      <div className="store-audit-row store-audit-row-head">
-        <span>Listing</span>
-        <span>Department</span>
-        <span>Mode</span>
-        <span>Phase</span>
-        <span>Engine</span>
-        <span>Cost</span>
-      </div>
-      {tasks.map((task) => (
-        <div className="store-audit-row" key={task.id}>
-          <strong>{task.listingName}</strong>
-          <span>{departmentLabel(task.department)}</span>
-          <span>{modeLabel(task.mode)}</span>
-          <PhaseLabel phase={task.status.phase} />
-          <span>{task.status.live ? "Live" : "Simulated"}</span>
-          <span>{formatUsd(task.status.costEstimate ?? 0)}</span>
-        </div>
-      ))}
-    </div>
+    <Table aria-label="Tasks and usage">
+      <Thead>
+        <Tr>
+          <Th>Listing</Th>
+          <Th>Department</Th>
+          <Th>Mode</Th>
+          <Th>Phase</Th>
+          <Th>Engine</Th>
+          <Th>Cost</Th>
+        </Tr>
+      </Thead>
+      <Tbody>
+        {tasks.map((task) => (
+          <Tr key={task.id}>
+            <Td dataLabel="Listing">
+              <strong>{task.listingName}</strong>
+            </Td>
+            <Td dataLabel="Department">{departmentLabel(task.department)}</Td>
+            <Td dataLabel="Mode">{modeLabel(task.mode)}</Td>
+            <Td dataLabel="Phase">
+              <PhaseLabel phase={task.status.phase} />
+            </Td>
+            <Td dataLabel="Engine">{task.status.live ? "Live" : "Simulated"}</Td>
+            <Td dataLabel="Cost">{formatUsd(task.status.costEstimate ?? 0)}</Td>
+          </Tr>
+        ))}
+      </Tbody>
+    </Table>
   );
 }
