@@ -35,6 +35,18 @@ export interface AgentDeployment {
 
 export type AgentMode = "work-with-me" | "do-this-for-me";
 
+/** Single source of truth for the UI-facing Autonomous/Collaborative split.
+ * `AgentMode` is no longer independently configurable per listing — it's a
+ * strict 1:1 function of `EngineType`, so the two can never drift apart:
+ * `self-hosted-sandbox` (the OpenShell sandbox engine, e.g. `opencode`) is
+ * always Collaborative/`work-with-me`; every other engine (the minimalist
+ * Skills-Agent engine, whether delivered as a one-shot draft or a persistent
+ * chat) is always Autonomous/`do-this-for-me`. See `modeLabel()` in
+ * apps/web/src/lib/format.ts for the human-facing text. */
+export function deriveAgentMode(engineType: EngineType): AgentMode {
+  return engineType === "self-hosted-sandbox" ? "work-with-me" : "do-this-for-me";
+}
+
 export type RiskTier = "low" | "medium" | "high";
 
 export type ReviewStatus = "draft" | "in-review" | "published" | "deprecated";
@@ -66,7 +78,10 @@ export interface Listing {
   description: string;
   icon: string;
   engineType: EngineType;
-  supportedModes: AgentMode[];
+  /** Computed by catalog.ts at load time via `deriveAgentMode(engineType)` —
+   * not part of the YAML source, same pattern as `source` below. Never set
+   * this directly; it always follows `engineType` 1:1. */
+  mode: AgentMode;
   riskTier: RiskTier;
   reviewStatus: ReviewStatus;
   /** What this agent costs to run. Falls back to a mode-based default
@@ -146,7 +161,6 @@ export interface ListingCreateInput {
   description: string;
   icon: string;
   engineType: EngineType;
-  supportedModes: AgentMode[];
   riskTier: RiskTier;
   pricing?: Pricing;
   openshellAgent?: string;
@@ -244,6 +258,19 @@ export interface TaskSpec {
   openshellModel?: OpenShellModelConfig;
   openshellMcpServers?: OpenShellMcpServerConfig[];
   aapJobTemplateId?: number;
+  /** Resolved provider credentials for the Skills Agent's one-shot draft
+   * shape (engine-ansible's extraVars()) — same resolution as
+   * `openshellModel` above, just under an engine-agnostic name since
+   * there's nothing OpenShell-specific about a one-shot Job's model. */
+  providerConfig?: OpenShellModelConfig;
+  /** Full Skill objects (with instructions) for the one-shot Job's mounted
+   * config.json — same shape drafting.ts's fallback and the persistent-chat
+   * shape already use, so the live AAP path gets real Skills too. */
+  skills?: Skill[];
+  /** Persona lines for the one-shot Job's mounted config.json — same
+   * wording drafting.ts's introLinesFor() uses for the simulated/fallback
+   * path, so the live AAP path frames the agent identically. */
+  introLines?: string[];
 }
 
 export interface EngineAdapter {
@@ -343,6 +370,58 @@ export interface PlatformSettings {
   /** Agent Sandbox Service's externally-reachable Route base URL — see
    * packages/engine-openshell. Token lives in the vault (OPENSHELL_SERVICE_TOKEN). */
   openshellServiceUrl: string;
+  /** Admin-supplied Helm chart reference for the OpenShell gateway itself —
+   * a different thing from the Agent Sandbox Service above: this is
+   * NVIDIA's actual sandboxing runtime the Service's `openshell` CLI talks
+   * to. Defaults to the real published chart
+   * (docs.nvidia.com/openshell/kubernetes/openshift), left editable for a
+   * private mirror or pinned dev build. */
+  openshellGatewayChartRef: string;
+  /** Empty string means "whatever `helm upgrade --install` resolves as
+   * latest for an OCI chart with no explicit --version". */
+  openshellGatewayChartVersion: string;
+  /** Distinct from `openshiftNamespace` above (that one's for AAP's own
+   * agent Jobs/Deployments) — the gateway + its Agent Sandbox controller
+   * CRDs conventionally live in their own namespace. */
+  openshellGatewayNamespace: string;
+  openshellGatewayWorkloadKind: GatewayWorkloadKind;
+  /** AAP Job Template pointing at provision-openshell-gateway.yml. */
+  openshellGatewayJobTemplateId: number | "";
+  /** Progress/result of the one-time "install the gateway" admin action,
+   * once ever started — see OpenShellGatewayDeployment below. */
+  openshellGatewayDeployment?: OpenShellGatewayDeployment;
+}
+
+/** The OpenShell chart's workload kind for its main server: a
+ * `statefulset` (default, SQLite-backed, single replica — what a demo/eval
+ * cluster wants) or a `deployment` (external Postgres, for HA) — see
+ * docs.nvidia.com/openshell/kubernetes/openshift. Readiness must be
+ * checked differently for each. */
+export type GatewayWorkloadKind = "statefulset" | "deployment";
+
+/** Progress/result of the one-time "install the OpenShell gateway Helm
+ * chart via AAP" admin action — same status/aapJobId/error/updatedAt
+ * shape as AgentDeployment, but platform-scoped (one gateway per
+ * cluster/namespace) rather than per-listing, so it lives on
+ * PlatformSettings instead of a Listing. Populated by apps/web's
+ * gateway.ts (mirrors deployments.ts). */
+export interface OpenShellGatewayDeployment {
+  status: AgentDeploymentStatus;
+  aapJobId?: string;
+  aapJobUrl?: string;
+  releaseName?: string;
+  namespace?: string;
+  chartRef?: string;
+  chartVersion?: string;
+  workloadKind?: GatewayWorkloadKind;
+  /** In-cluster URL (e.g. `http://openshell.openshell.svc:8443`) once
+   * status is "running" — what the Agent Sandbox Service's non-interactive
+   * `openshell gateway add --url ...` bootstrap step should target. Not
+   * the same as `openshellServiceUrl` above, which is this repo's own
+   * microservice's externally-reachable Route. */
+  gatewayUrl?: string;
+  error?: string;
+  updatedAt?: string;
 }
 
 export interface AapJobTemplate {
@@ -535,6 +614,34 @@ export const DEPARTMENTS: { id: DepartmentId | "all"; name: string }[] = [
 ];
 
 export const DEMO_USER = "Demo";
+
+// --- Skills-used footer (Skills Agent one-shot draft shape) --------------
+
+/** Marker both the live AAP path (apps/agent-runtime's runOnce.ts) and the
+ * simulated/disconnected fallback (apps/web/src/server/drafting.ts) append
+ * to a one-shot draft when at least one Skill got loaded mid-turn, so
+ * TaskDetailPage.tsx can render "Skills used" as its own line instead of
+ * leaving it buried in the draft text — the one-shot shape has no chat
+ * transcript to show a loaded-skill chip in, unlike the persistent-chat
+ * shape (see chatPage.ts). */
+const SKILLS_USED_MARKER = "\n\n— Skills used: ";
+
+export function appendSkillsFooter(text: string, skillIds: string[]): string {
+  return skillIds.length > 0 ? `${text}${SKILLS_USED_MARKER}${skillIds.join(", ")}` : text;
+}
+
+/** Splits a draft produced by `appendSkillsFooter` back into its main text
+ * and the loaded skill ids, if any. */
+export function splitSkillsFooter(text: string): { draft: string; skillIds: string[] } {
+  const idx = text.lastIndexOf(SKILLS_USED_MARKER);
+  if (idx === -1) return { draft: text, skillIds: [] };
+  const skillIds = text
+    .slice(idx + SKILLS_USED_MARKER.length)
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  return { draft: text.slice(0, idx), skillIds };
+}
 
 export function departmentLabel(id: DepartmentId | "all"): string {
   return DEPARTMENTS.find((d) => d.id === id)?.name ?? id;

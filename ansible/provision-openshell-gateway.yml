@@ -1,0 +1,152 @@
+---
+# AAP Project playbook for the OpenShell gateway's "install once" admin
+# action (apps/web/src/server/gateway.ts) — a live `helm upgrade --install`
+# against an admin-supplied chart reference, defaulting to NVIDIA's real
+# published chart at `oci://ghcr.io/nvidia/openshell/helm-chart` (see
+# docs.nvidia.com/openshell/kubernetes/openshift), plus a readiness wait
+# and a ConfigMap read-back, same shape as provision-generic-agent.yml's
+# deploy-once flow.
+#
+# Extra vars come from packages/engine-ansible's gatewayDeploy.ts:
+#   release_name, namespace, chart_ref, chart_version (optional), workload_kind
+#
+# Requires the `kubernetes.core` collection (for both `k8s`/`k8s_info` and
+# `helm`) plus a `helm` binary on the AAP execution environment — neither is
+# guaranteed present on the default EE image, so build/select one that has
+# them (`ansible-builder` with `kubernetes.core` + `community.general` and
+# the `helm` CLI baked in, or use AAP's bundled Kubernetes EE if it already
+# ships Helm).
+#
+# What this playbook deliberately does NOT do: install the cluster-scoped
+# Agent Sandbox controller/CRDs the OpenShell chart depends on. That's a
+# one-time, elevated-privilege, per-cluster bootstrap
+# (`kubectl apply -f https://github.com/kubernetes-sigs/agent-sandbox/
+# releases/latest/download/sandbox.yaml`) — see deploy/openshift/README.md.
+# Keeping it out of this job means the AAP Kubernetes credential for THIS
+# template only needs Helm-install-shaped permissions (namespace create,
+# Role/RoleBinding/ServiceAccount/Secret/Service in the gateway namespace),
+# not cluster-admin.
+- name: Install the OpenShell gateway via its real Helm chart
+  hosts: localhost
+  gather_facts: false
+  vars:
+    release_name: "{{ release_name | default('openshell') }}"
+    namespace: "{{ namespace | default('openshell') }}"
+    # Real, published OCI chart — see the module docstring above. Admin can
+    # override this to a private mirror or pinned build.
+    chart_ref: "{{ chart_ref | default('oci://ghcr.io/nvidia/openshell/helm-chart') }}"
+    chart_version: "{{ chart_version | default('') }}"
+    # "statefulset" (SQLite, single replica — the demo/eval default) or
+    # "deployment" (external Postgres, for HA). Determines which workload
+    # kind we wait on below.
+    workload_kind: "{{ workload_kind | default('statefulset') }}"
+    values_file: "{{ playbook_dir }}/../deploy/openshift/openshell-values.yaml"
+  tasks:
+    - name: Ensure the gateway namespace exists
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Namespace
+          metadata:
+            name: "{{ namespace }}"
+            labels:
+              app.kubernetes.io/managed-by: agentstore
+
+    - name: helm upgrade --install the OpenShell gateway chart
+      kubernetes.core.helm:
+        name: "{{ release_name }}"
+        chart_ref: "{{ chart_ref }}"
+        chart_version: "{{ chart_version | default(omit) }}"
+        release_namespace: "{{ namespace }}"
+        create_namespace: false
+        values_files:
+          - "{{ values_file }}"
+        wait: false # we do our own workload-kind-aware wait below
+
+    # --- Readiness -----------------------------------------------------
+    # Gap: the chart's actual StatefulSet/Deployment name is assumed to
+    # equal `release_name` (Helm's common "fullname == release name when
+    # release name already contains the chart name" convention) — verify
+    # this against the real chart once you have cluster access, and adjust
+    # the `name:` below to whatever `helm template` actually produces if
+    # it differs.
+    - name: Wait for the gateway StatefulSet to have a ready replica
+      kubernetes.core.k8s_info:
+        kind: StatefulSet
+        api_version: apps/v1
+        name: "{{ release_name }}"
+        namespace: "{{ namespace }}"
+      register: sts_info
+      until: (sts_info.resources | length > 0) and ((sts_info.resources[0].status.readyReplicas | default(0)) > 0)
+      retries: 60
+      delay: 5
+      when: workload_kind == "statefulset"
+      ignore_errors: true
+
+    - name: Wait for the gateway Deployment to have an available replica
+      kubernetes.core.k8s_info:
+        kind: Deployment
+        api_version: apps/v1
+        name: "{{ release_name }}"
+        namespace: "{{ namespace }}"
+      register: deploy_info
+      until: (deploy_info.resources | length > 0) and ((deploy_info.resources[0].status.availableReplicas | default(0)) > 0)
+      retries: 60
+      delay: 5
+      when: workload_kind == "deployment"
+      ignore_errors: true
+
+    - name: Determine whether the workload became ready
+      set_fact:
+        workload_ready: >-
+          {{
+            (workload_kind == "statefulset" and sts_info is defined and sts_info is not failed
+              and (sts_info.resources | default([]) | length > 0)
+              and ((sts_info.resources[0].status.readyReplicas | default(0)) > 0))
+            or
+            (workload_kind == "deployment" and deploy_info is defined and deploy_info is not failed
+              and (deploy_info.resources | default([]) | length > 0)
+              and ((deploy_info.resources[0].status.availableReplicas | default(0)) > 0))
+          }}
+
+    # --- Gateway URL read-back ------------------------------------------
+    # Finds the Service the chart created via Helm's standard instance
+    # label rather than guessing its name, so a chart-internal rename
+    # doesn't break this. Picks the first Service + first port found —
+    # good enough for a single-gateway-per-namespace demo setup.
+    - name: Find the gateway Service by Helm instance label
+      kubernetes.core.k8s_info:
+        kind: Service
+        api_version: v1
+        namespace: "{{ namespace }}"
+        label_selectors:
+          - "app.kubernetes.io/instance={{ release_name }}"
+      register: gateway_services
+      when: workload_ready
+
+    - name: Compute the in-cluster gateway URL
+      set_fact:
+        gateway_url: >-
+          {{
+            ('http://' + gateway_services.resources[0].metadata.name + '.' + namespace + '.svc:' + (gateway_services.resources[0].spec.ports[0].port | string))
+            if (workload_ready and (gateway_services.resources | default([]) | length > 0))
+            else ''
+          }}
+
+    - name: Publish the gateway install result ConfigMap
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: ConfigMap
+          metadata:
+            name: "{{ release_name }}-gateway-result"
+            namespace: "{{ namespace }}"
+            labels:
+              app.kubernetes.io/managed-by: agentstore
+          data:
+            status: "{{ 'running' if workload_ready else 'failed' }}"
+            gatewayUrl: "{{ gateway_url }}"
+            error: >-
+              {{ '' if workload_ready else 'Gateway ' + workload_kind + ' "' + release_name + '" did not become ready in time — check the AAP job log and confirm the chart creates a ' + workload_kind + ' named "' + release_name + '".' }}

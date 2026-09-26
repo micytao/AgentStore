@@ -8,6 +8,7 @@ import * as aap from "./aap";
 import {
   aapDefaultJobTemplateId,
   aapJobUrl,
+  agentRuntimeImage,
   isAapConfigured,
   isOpenshiftConfigured,
   openshiftJobConsoleUrl,
@@ -40,7 +41,14 @@ function jobNameFor(taskId: string): string {
   return `agent-${shortId(taskId)}`;
 }
 
+/** Extra vars for provision-agent.yml — the Skills Agent's one-shot Job
+ * shape. `agent_runtime_image`/`provider_*`/`skills`/`intro_lines` mirror
+ * genericAgentDeploy.ts's shape 1:1 (same agent-runtime image, same
+ * mounted config.json convention) so the one-shot Job is exactly as
+ * Skills-aware as the persistent-chat shape, instead of the retired
+ * runner.py's bare MaaS HTTP call. */
 function extraVars(spec: TaskSpec) {
+  const provider = spec.providerConfig;
   return {
     listing_id: spec.listingId,
     listing_name: spec.listingName,
@@ -50,6 +58,13 @@ function extraVars(spec: TaskSpec) {
     namespace: openshiftNamespace(),
     job_name: jobNameFor(spec.taskId),
     mode: spec.mode,
+    agent_runtime_image: agentRuntimeImage(),
+    provider_kind: provider?.kind ?? "openai-compatible",
+    provider_base_url: provider?.baseUrl ?? "",
+    provider_default_model: provider?.defaultModel ?? "",
+    provider_api_key: provider?.apiKey ?? "",
+    intro_lines: spec.introLines ?? [],
+    skills: spec.skills ?? [],
   };
 }
 
@@ -255,6 +270,12 @@ export {
   type GenericAgentDeployInput,
   type GenericAgentDeployStatus,
 } from "./genericAgentDeploy";
+export {
+  getGatewayDeployStatus,
+  launchGatewayDeploy,
+  type GatewayDeployInput,
+  type GatewayDeployStatus,
+} from "./gatewayDeploy";
 /** Exported so deployments.ts can derive a stable per-listing resource
  * name the same way this file's (private) jobNameFor() does for Tasks —
  * DNS-1123-safe (lowercase alphanumeric + "-", no leading/trailing "-"),

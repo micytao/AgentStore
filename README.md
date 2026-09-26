@@ -1,8 +1,15 @@
 # Agent Store (prototype)
 
 Internal catalog of governed AI agents. Browse by department, launch a task,
-and either work interactively (Collaborative / C) or approve a draft
-(Autonomous / A).
+and either work interactively in a live sandbox (Collaborative / C) or let
+a minimalist Skills-equipped agent work on its own (Autonomous / A) — either
+handing back a draft for you to approve, or as an always-on assistant you
+message directly. The two labels are a strict 1:1 mapping onto which engine
+actually runs the agent (see `deriveAgentMode()` in `packages/shared`):
+Autonomous is always the Skills Agent engine (`agent-core` + Skills, via
+AAP → OpenShift → MaaS/OpenShift AI); Collaborative is always the OpenShell
+sandbox engine. Mode is never picked independently — it always follows
+which engine a listing declares.
 
 AgentStore is a **lightweight console**. It does not need to run on OpenShift.
 When a user launches a business agent, **Ansible Automation Platform**
@@ -20,19 +27,32 @@ Open [http://localhost:3000](http://localhost:3000). There is no per-user
 login; every task is attributed to `Demo`. Click the **Demo** chip at the
 bottom of the sidebar to switch to **Admin**.
 
-### A — Autonomous Mode (business listings)
+### A — Autonomous Mode (Skills Agent, business listings)
 
-1. Catalog → Customer Support → **Ticket triage & routing**.
-2. Goal example: `Triage this week's open ticket queue and flag anything urgent`.
-3. Watch the task timeline: AAP job → OpenShift Job → draft.
-4. Approve or Reject.
+Same underlying `agent-core` + Skills engine (`apps/agent-runtime`) supports
+two delivery shapes. The bundled catalog currently ships only the
+**persistent chat** shape, built on real Red Hat Agentic Skill Packs
+(`redhat-sre-engineer`, `redhat-customer-support`,
+`redhat-openshift-virtualization`):
 
-Without AAP connected, the timeline is a **labeled simulated AAP job**. With
-Admin → Platform pointed at a real controller (and `AAP_TOKEN` in Secrets),
-launch calls `POST /api/v2/job_templates/{id}/launch/`. The playbook in
-`ansible/provision-agent.yml` creates the Job in `agent-workloads`.
+1. Admin → Catalog → deploy the listing once (AAP provisions a persistent
+   OpenShift Deployment + Route via `ansible/provision-generic-agent.yml`).
+2. Anyone opens the listing's link and chats with it directly, turn after
+   turn — no per-user launch, no approval step.
 
-### C — Collaborative Mode (Engineering)
+The engine also supports a **one-shot draft** shape — launch → AAP job →
+OpenShift Job → draft → Approve/Reject, running
+`apps/agent-runtime` in one-shot mode (`RUN_MODE=once`) via
+`ansible/provision-agent.yml` — but no example listing ships in the catalog
+today. Onboard a new `hosted-agent-api` listing without `runtime:
+generic-chat` (Admin → Catalog → **+ Onboard new agent**) to use it.
+
+Without AAP connected, either shape's timeline is a **labeled simulated
+AAP job**. With Admin → Platform pointed at a real controller (and
+`AAP_TOKEN` in Secrets), launch calls
+`POST /api/v2/job_templates/{id}/launch/` against the real cluster.
+
+### C — Collaborative Mode (OpenShell sandbox, Engineering)
 
 1. Catalog → Engineering → **OpenCode** → Launch.
 2. Wait until status is Running, then type in the terminal.
@@ -77,7 +97,7 @@ SSO — see `docs/DEFERRED.md`). Tabs:
 - `packages/engine-fake` — canned drafts
 - `packages/engine-openshell` — thin REST client against `apps/agent-sandbox-service`
 - `catalog/listings` — built-in YAML catalog
-- `ansible/` — AAP Project (playbook + UBI agent-runner image)
+- `ansible/` — AAP Project (one-shot draft + persistent chat playbooks, both against `apps/agent-runtime`)
 - `deploy/openshift` — `agent-workloads` namespace/RBAC, `agent-sandbox-service.yaml`, OpenShell gateway Helm values
 - `docs/DEMO.md` / `docs/DEFERRED.md`
 

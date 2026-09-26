@@ -29,13 +29,15 @@ See [ansible/README.md](../../ansible/README.md). The Kubernetes credential
 in AAP should use `aap-agent-provisioner` (or an equivalent token with Job
 create in `agent-workloads`).
 
-## 3. Agent runner image
+## 3. Agent runtime image
+
+The same `agent-runtime` image is used for every Skills Agent listing, in
+either run mode (one-shot draft Job or persistent chat Deployment — see
+[ansible/README.md](../../ansible/README.md)):
 
 ```bash
-podman build -t agent-runner:dev \
-  -f ansible/agent-runner/Containerfile \
-  ansible/agent-runner
-# push somewhere the cluster can pull, then set agent_runner_image on the template
+podman build -t agent-runtime:dev -f apps/agent-runtime/Containerfile .
+# push somewhere the cluster can pull, then set agent_runtime_image on both templates
 ```
 
 ## 4. The console itself
@@ -45,13 +47,82 @@ and OpenShift over their APIs. There are no console Deployment/Route/PVC
 manifests here — host the console however you host any other internal web
 app.
 
-## 5. Optional Engineering: the Agent Sandbox Service
+## 5. Optional Engineering: the OpenShell gateway + Agent Sandbox Service
 
-The OpenShell gateway (Helm values in `openshell-values.yaml`, still
-**eval-only** — privileged SCC, TLS off) needs the Kubernetes Agent Sandbox
-controller/CRDs installed first. On top of that, apply the Agent Sandbox
-Service — the in-cluster service that owns all `openshell` CLI / `node-pty`
-mechanics so the console never does:
+Two separate things run in-cluster for Engineering (OpenShell-mode)
+listings, in this order:
+
+1. **The OpenShell gateway itself** — NVIDIA's real sandboxing runtime (see
+   [docs.nvidia.com/openshell/kubernetes/openshift](https://docs.nvidia.com/openshell/kubernetes/openshift)).
+2. **The Agent Sandbox Service** (this repo's own microservice) — the
+   in-cluster service that owns all `openshell` CLI / `node-pty` mechanics
+   so the console never does. It talks to (1).
+
+### 5a. One-time, per-cluster prerequisite: the Agent Sandbox controller
+
+The OpenShell chart depends on Kubernetes SIG's Agent Sandbox
+controller/CRDs being installed first. This is a **cluster-scoped,
+elevated-privilege, one-time** bootstrap — treat it like installing
+OpenShift itself, not part of AgentStore's self-service AAP flow:
+
+```bash
+kubectl apply -f https://github.com/kubernetes-sigs/agent-sandbox/releases/latest/download/sandbox.yaml
+```
+
+A platform admin runs this once per cluster, outside AAP, before anyone
+uses **Admin → LLMs → OpenShell → "Install gateway"**.
+
+### 5b. Install the OpenShell gateway (self-service, via AAP)
+
+With the prerequisite above satisfied, **Admin → LLMs → OpenShell → Onboard
+the OpenShell gateway** launches `ansible/provision-openshell-gateway.yml`
+via AAP: a live `helm upgrade --install` against an admin-supplied chart
+reference (defaults to the real published chart,
+`oci://ghcr.io/nvidia/openshell/helm-chart`), namespace, and workload kind
+(StatefulSet/SQLite by default, or Deployment/Postgres for HA). See
+[ansible/README.md](../../ansible/README.md) for the extra vars and the
+`kubernetes.core` + `helm` execution-environment requirement.
+
+The AAP Kubernetes credential for *this* job template only needs
+Helm-install-shaped permissions scoped to the gateway's own namespace
+(namespace create, Role/RoleBinding/ServiceAccount/Secret/Service) — not
+cluster-admin, since the controller/CRD bootstrap above is separate.
+
+`openshell-values.yaml` (still **eval-only** — privileged SCC, TLS off) is
+passed as a values file by that playbook; don't use it as a production
+baseline. Production deployments should leave TLS enabled (the chart
+auto-generates an mTLS bundle via Helm hooks) and use OIDC (see below)
+instead of the plaintext quick-eval path.
+
+### 5c. OIDC credential (production, non-interactive gateway auth)
+
+The gateway's real production auth model is OIDC — issuer, audience, and
+RBAC role claims, not a browser login. The non-interactive identity the
+Agent Sandbox Service's `openshell` CLI needs (see 5d) is registered via
+that same OIDC client, so add a Credential Type in AAP (or just a Secret,
+for a first cut) holding:
+
+| Field | Purpose |
+| --- | --- |
+| OIDC issuer | The gateway's configured `server.oidc.issuer` |
+| OIDC audience | The gateway's configured `server.oidc.audience` (chart default `openshell-cli`) |
+| Client ID | Service-identity client id |
+| Client secret | Service-identity client secret |
+
+**Open gap** (flagging rather than guessing): the docs don't fully spell
+out whether a single non-interactive CLI command (something like
+`openshell gateway add --oidc-client-id ... --oidc-client-secret ...`)
+completes client-credentials auth headlessly, or whether every login path
+assumes a human browser flow. Verify this against a real gateway before
+wiring it into the Agent Sandbox Service's startup — see the two options
+already noted in
+[apps/agent-sandbox-service/README.md](../../apps/agent-sandbox-service/README.md).
+
+### 5d. Apply the Agent Sandbox Service
+
+Once the gateway is running, apply the Agent Sandbox Service — the
+in-cluster service that owns all `openshell` CLI / `node-pty` mechanics so
+the console never does:
 
 ```bash
 podman build -t agent-sandbox-service:dev \

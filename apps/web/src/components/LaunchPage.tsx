@@ -59,7 +59,7 @@ export function LaunchPage({ listingId }: { listingId: string }) {
   }
 
   const current = listing;
-  const mode: AgentMode = current.supportedModes[0];
+  const mode: AgentMode = current.mode;
   const interactive = mode === "work-with-me";
   const Icon = ICONS[current.icon] ?? CodeIcon;
   const accent = DEPARTMENT_ACCENT[current.department];

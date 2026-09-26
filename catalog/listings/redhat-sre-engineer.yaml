@@ -6,8 +6,6 @@ description: Chat agent for CVE impact analysis, remediation playbook generation
 icon: shield
 engineType: hosted-agent-api
 runtime: generic-chat
-supportedModes:
-  - work-with-me
 riskTier: medium
 reviewStatus: draft
 pricing:

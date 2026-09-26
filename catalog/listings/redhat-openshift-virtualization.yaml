@@ -6,8 +6,6 @@ description: Chat agent for VM lifecycle management, snapshots, cloning, and reb
 icon: server
 engineType: hosted-agent-api
 runtime: generic-chat
-supportedModes:
-  - work-with-me
 riskTier: high
 reviewStatus: draft
 pricing:

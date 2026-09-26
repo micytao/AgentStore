@@ -29,7 +29,7 @@ const ICONS: Record<string, ComponentType> = {
 export function ListingCard({ listing }: { listing: Listing }) {
   const Icon = ICONS[listing.icon] ?? CodeIcon;
   const accent = DEPARTMENT_ACCENT[listing.department];
-  const mode = listing.supportedModes[0];
+  const mode = listing.mode;
   const isRunningGenericChat = listing.runtime === "generic-chat" && listing.deployment?.status === "running";
 
   return (

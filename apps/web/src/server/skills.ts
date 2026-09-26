@@ -93,6 +93,14 @@ function writeConfigFile(): void {
   fs.writeFileSync(configFilePath(), JSON.stringify(persisted, null, 2));
 }
 
+/** Drops the cached built-in+custom skill store so the next read re-walks
+ * catalog/skills/** from disk — used by skillsImport.ts after a live pack
+ * import writes new files there, so the new skills show up immediately. */
+export function invalidateSkillsCache(): void {
+  const g = globalThis as typeof globalThis & { __agentStoreSkills?: SkillStore };
+  g.__agentStoreSkills = undefined;
+}
+
 export function listSkills(): Skill[] {
   return [...store().builtin, ...store().custom].sort((a, b) => a.name.localeCompare(b.name));
 }

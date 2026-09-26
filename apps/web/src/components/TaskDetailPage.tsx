@@ -1,6 +1,6 @@
 "use client";
 
-import { departmentLabel } from "@agentstore/shared";
+import { departmentLabel, splitSkillsFooter } from "@agentstore/shared";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { LiveTerminal } from "@/components/LiveTerminal";
@@ -232,7 +232,19 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
           {task.status.outputSummary ? (
             <>
               <h2 className="store-panel-title">Draft output</h2>
-              <pre className="store-draft">{task.status.outputSummary}</pre>
+              {(() => {
+                const { draft, skillIds } = splitSkillsFooter(task.status.outputSummary);
+                return (
+                  <>
+                    <pre className="store-draft">{draft}</pre>
+                    {skillIds.length > 0 ? (
+                      <p className="store-lede tight">
+                        <strong>Skills used:</strong> {skillIds.join(", ")}
+                      </p>
+                    ) : null}
+                  </>
+                );
+              })()}
             </>
           ) : null}
           {awaiting ? (

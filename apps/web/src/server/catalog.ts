@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import yaml from "js-yaml";
-import type { Listing, ListingCreateInput, ListingUpdate } from "@agentstore/shared";
+import { deriveAgentMode, type Listing, type ListingCreateInput, type ListingUpdate } from "@agentstore/shared";
 
 /**
  * Two catalog sources are merged:
@@ -118,6 +118,10 @@ function readYamlListings(dir: string, source: Listing["source"]): { listing: Li
     const raw = fs.readFileSync(filePath, "utf8");
     const listing = yaml.load(raw) as Listing;
     listing.source = source;
+    // `mode` is never read from YAML (see deriveAgentMode's doc comment) —
+    // compute it here so it can never drift from engineType, and so any
+    // leftover `supportedModes:` in older YAML files is silently ignored.
+    listing.mode = deriveAgentMode(listing.engineType);
     out.push({ listing, file: filePath });
   }
   return out;
@@ -246,9 +250,10 @@ function uniqueId(label: string): string {
 function writeCustomListingFile(filePath: string, listing: Listing): void {
   const dir = path.dirname(filePath);
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-  // `source` is derived at load time, not part of the persisted YAML.
+  // `source` and `mode` are both derived at load time, not part of the
+  // persisted YAML (mode always follows engineType — see deriveAgentMode).
   // skipInvalid drops undefined-valued optional fields instead of throwing.
-  const { source: _source, ...persisted } = listing;
+  const { source: _source, mode: _mode, ...persisted } = listing;
   fs.writeFileSync(filePath, yaml.dump(persisted, { skipInvalid: true }));
 }
 
@@ -266,7 +271,7 @@ export function createListing(input: ListingCreateInput): Listing {
     description: input.description,
     icon: input.icon,
     engineType: input.engineType,
-    supportedModes: input.supportedModes,
+    mode: deriveAgentMode(input.engineType),
     riskTier: input.riskTier,
     reviewStatus,
     pricing: input.pricing,

@@ -137,6 +137,21 @@ export function fetchPlatformStatus(): Promise<PlatformStatus> {
   return fetch("/api/admin/platform").then((r) => parse<PlatformStatus>(r));
 }
 
+/** Starts (or re-starts) the one-time "install the OpenShell gateway"
+ * AAP job. Returns the updated PlatformSettings (holding
+ * `openshellGatewayDeployment`), not the full PlatformStatus. */
+export function deployGateway(): Promise<PlatformSettings> {
+  return fetch("/api/admin/platform/gateway", { method: "POST" }).then((r) =>
+    parse<PlatformSettings>(r)
+  );
+}
+
+/** Polls the in-flight gateway install for progress; safe to call on an
+ * interval. */
+export function fetchGatewayStatus(): Promise<PlatformSettings> {
+  return fetch("/api/admin/platform/gateway").then((r) => parse<PlatformSettings>(r));
+}
+
 export function updatePlatformSettings(
   patch: Partial<PlatformSettings>
 ): Promise<PlatformStatus> {
@@ -311,6 +326,22 @@ export function deleteSkillConfig(id: string): Promise<void> {
   return fetch(`/api/admin/skills/${encodeURIComponent(id)}`, {
     method: "DELETE",
   }).then((r) => parse<{ ok: boolean }>(r)).then(() => undefined);
+}
+
+export interface SkillImportResult {
+  packs: string[];
+  written: number;
+  errors: { pack: string; error: string }[];
+}
+
+/** Live equivalent of `npm run import-redhat-skills` — pulls the given Red
+ * Hat Agentic Skill Pack(s) (or every pack, if omitted) from GitHub. */
+export function importRedHatSkills(packs?: string[]): Promise<SkillImportResult> {
+  return fetch("/api/admin/skills/import", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ packs }),
+  }).then((r) => parse<SkillImportResult>(r));
 }
 
 export type {

@@ -23,6 +23,13 @@ const DEFAULT_SETTINGS: PlatformSettings = {
   openshiftConsoleUrl: "",
   openshiftInsecureTls: true,
   openshellServiceUrl: "",
+  // Real, published chart — see docs.nvidia.com/openshell/kubernetes/openshift.
+  // Left editable for a private mirror or pinned dev build.
+  openshellGatewayChartRef: "oci://ghcr.io/nvidia/openshell/helm-chart",
+  openshellGatewayChartVersion: "",
+  openshellGatewayNamespace: "openshell",
+  openshellGatewayWorkloadKind: "statefulset",
+  openshellGatewayJobTemplateId: "",
 };
 
 function dataDir(): string {
@@ -60,6 +67,7 @@ export function getPlatformSettings(): PlatformSettings {
 export function savePlatformSettings(patch: Partial<PlatformSettings>): PlatformSettings {
   const next: PlatformSettings = { ...getPlatformSettings(), ...patch };
   if (next.openshiftNamespace.trim() === "") next.openshiftNamespace = "agent-workloads";
+  if (next.openshellGatewayNamespace.trim() === "") next.openshellGatewayNamespace = "openshell";
   const dir = dataDir();
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(settingsPath(), JSON.stringify(next, null, 2));

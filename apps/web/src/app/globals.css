@@ -751,6 +751,20 @@ a {
   border-color: rgba(255, 191, 107, 0.35);
 }
 
+.store-pill.is-clickable {
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.store-pill.is-clickable:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.store-pill.is-clickable:not(:disabled):hover {
+  background: rgba(255, 255, 255, 0.16);
+}
+
 .store-card-cta {
   margin-top: 0.35rem;
   font-size: 0.88rem;
@@ -1588,6 +1602,19 @@ a {
   border-radius: 1.05rem;
   border: 1px solid var(--line);
   background: var(--glass);
+}
+
+.store-resource-card.is-subtle {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.store-skill-usedby-list {
+  margin: 0;
+  padding-left: 1.2rem;
+  font-size: 0.82rem;
+  color: #c9cde0;
+  display: grid;
+  gap: 0.2rem;
 }
 
 .store-resource-head {

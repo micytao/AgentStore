@@ -15,10 +15,11 @@ import {
 } from "@agentstore/shared";
 import { getListing } from "./catalog";
 import { adapterFor, isLiveEngine } from "./engines";
-import { generateDraft, providerFor } from "./drafting";
+import { generateDraft, introLinesFor, providerFor } from "./drafting";
 import { apiKeyFor } from "./providers";
 import { getMcpAuthToken, getMcpServer, listMcpServers } from "./mcp";
 import { getSecret } from "./secrets";
+import { getSkillsByIds } from "./skills";
 
 const COST_BY_MODE: Record<AgentMode, number> = {
   "work-with-me": 2.4,
@@ -153,6 +154,13 @@ function specFrom(task: Task) {
     openshellModel: isOpenShell && listing ? openshellModelFor(listing) : undefined,
     openshellMcpServers: isOpenShell && listing ? mcpServersFor(listing) : undefined,
     aapJobTemplateId: listing?.agentConfig?.aapJobTemplateId,
+    // Resolved the same way for every listing (not gated by isOpenShell) —
+    // the Skills Agent's one-shot draft shape (engine-ansible's
+    // extraVars()) needs the same provider + Skills the persistent-chat
+    // shape already gets, so its live AAP path is Skills-aware too.
+    providerConfig: listing ? openshellModelFor(listing) : undefined,
+    skills: listing ? getSkillsByIds(listing.agentConfig?.skillIds) : undefined,
+    introLines: listing ? introLinesFor(listing) : undefined,
   };
 }
 
@@ -218,7 +226,7 @@ export async function createTask(input: {
   if (!listing) {
     throw new Error(`Unknown listing: ${input.listingId}`);
   }
-  if (!listing.supportedModes.includes(input.mode)) {
+  if (input.mode !== listing.mode) {
     throw new Error(`Listing does not support ${input.mode}`);
   }
 

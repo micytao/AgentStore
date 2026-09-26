@@ -17,11 +17,12 @@ import {
 import {
   DEPARTMENTS,
   departmentLabel,
+  deriveAgentMode,
   PROVIDER_KINDS,
-  type AgentMode,
   type AgentRuntime,
   type DepartmentId,
   type EngineType,
+  type GatewayWorkloadKind,
   type Listing,
   type ListingUpdate,
   type McpServerStatus,
@@ -49,10 +50,12 @@ import {
   deleteMcpServerConfig,
   deleteProviderConfig,
   deleteSkillConfig,
+  deployGateway,
   deployListingAdmin,
   disconnectMcpServerConfig,
   fetchDeploymentStatus,
   fetchEngineSettings,
+  fetchGatewayStatus,
   fetchListings,
   fetchMcpServers,
   fetchPlatformStatus,
@@ -60,6 +63,7 @@ import {
   fetchSecrets,
   fetchSkills,
   fetchTasks,
+  importRedHatSkills,
   setMcpAuthTokenValue,
   setMcpToolEnabledValue,
   setProviderKeyValue,
@@ -76,12 +80,13 @@ import {
 import { formatUsd, modeLabel } from "@/lib/format";
 import { useRole } from "@/lib/role";
 
-type Tab = "catalog" | "platform" | "llms" | "audit";
+type Tab = "catalog" | "platform" | "llms" | "skills" | "audit";
 
 const TABS: { id: Tab; label: string; icon: ComponentType }[] = [
   { id: "catalog", label: "Catalog", icon: ThLargeIcon },
   { id: "platform", label: "Platform", icon: CloudIcon },
   { id: "llms", label: "LLMs", icon: BrainIcon },
+  { id: "skills", label: "Skills", icon: BookIcon },
   { id: "audit", label: "Tasks & usage", icon: TasksIcon },
 ];
 
@@ -249,6 +254,7 @@ function AdminConsole() {
       {tab === "catalog" && <CatalogManager />}
       {tab === "platform" && <PlatformPanel />}
       {tab === "llms" && <LLMsPanel />}
+      {tab === "skills" && <SkillsPanel />}
       {tab === "audit" && <AuditLog />}
     </div>
   );
@@ -886,7 +892,6 @@ function OnboardAgentWizard({
   const [riskTier, setRiskTier] = useState<RiskTier>("medium");
   const [pricingUnit, setPricingUnit] = useState<PricingUnit>("per-task");
   const [pricingAmount, setPricingAmount] = useState("0.80");
-  const [supportedModes, setSupportedModes] = useState<AgentMode[]>(["do-this-for-me"]);
   const [runtime, setRuntime] = useState<AgentRuntime>("generic-chat");
   const [openshellAgent, setOpenshellAgent] = useState("");
   const [engineOverride, setEngineOverride] = useState<"auto" | "simulated" | "live">("auto");
@@ -902,10 +907,11 @@ function OnboardAgentWizard({
   // deployments.ts, not per-Task, so their engineType is effectively
   // unused, but the field is still required on ListingCreateInput.
   const engineType: EngineType = runtime === "openshell" ? "self-hosted-sandbox" : "hosted-agent-api";
+  // Mode is never picked independently — it's a strict 1:1 function of
+  // engineType (see deriveAgentMode), which itself follows the Runtime
+  // choice above. Shown read-only in step 1 so the relationship is visible.
+  const mode = deriveAgentMode(engineType);
 
-  function toggleMode(mode: AgentMode) {
-    setSupportedModes((prev) => (prev.includes(mode) ? prev.filter((m) => m !== mode) : [...prev, mode]));
-  }
   function toggleTool(serverId: string, tool: string) {
     setToolBindings((prev) =>
       prev.some((b) => b.serverId === serverId && b.tool === tool)
@@ -924,7 +930,6 @@ function OnboardAgentWizard({
       if (!description.trim()) return "Description is required";
     }
     if (step === 1) {
-      if (supportedModes.length === 0) return "Pick at least one mode";
       if (runtime === "openshell" && !openshellAgent.trim()) {
         return "OpenShell agent identifier is required for the OpenShell runtime";
       }
@@ -958,7 +963,6 @@ function OnboardAgentWizard({
         description: description.trim(),
         icon,
         engineType,
-        supportedModes,
         riskTier,
         pricing: { unit: pricingUnit, amount: Number(pricingAmount) || 0 },
         runtime,
@@ -988,7 +992,7 @@ function OnboardAgentWizard({
     icon,
     engineType,
     runtime,
-    supportedModes: supportedModes.length > 0 ? supportedModes : ["do-this-for-me"],
+    mode,
     riskTier,
     reviewStatus: "draft",
     pricing: { unit: pricingUnit, amount: Number(pricingAmount) || 0 },
@@ -1079,24 +1083,6 @@ function OnboardAgentWizard({
       {step === 1 && (
         <div className="store-wizard-body">
           <div className="store-resource-input-row">
-            <label className="store-admin-checkbox">
-              <input
-                type="checkbox"
-                checked={supportedModes.includes("do-this-for-me")}
-                onChange={() => toggleMode("do-this-for-me")}
-              />
-              Autonomous (do this for me)
-            </label>
-            <label className="store-admin-checkbox">
-              <input
-                type="checkbox"
-                checked={supportedModes.includes("work-with-me")}
-                onChange={() => toggleMode("work-with-me")}
-              />
-              Collaborative (work with me)
-            </label>
-          </div>
-          <div className="store-resource-input-row">
             <select value={runtime} onChange={(e) => setRuntime(e.target.value as AgentRuntime)}>
               <option value="generic-chat">Generic chat agent (persistent Deployment + Route)</option>
               <option value="openshell">OpenShell (interactive coding/engineering sandbox)</option>
@@ -1121,6 +1107,10 @@ function OnboardAgentWizard({
             {runtime === "generic-chat"
               ? "Provisioned once via AAP as a persistent OpenShift Deployment + Route. Every user opens the same running agent from its web link — pick this for chat/support/SRE personas."
               : "Provisioned per-task as an OpenShell sandbox session — pick this for collaborative coding/engineering agents that need a live terminal."}
+          </p>
+          <p className="store-lede tight">
+            This will be listed as <strong>{modeLabel(mode)}</strong> — mode follows the runtime you
+            picked above and isn&apos;t set independently.
           </p>
         </div>
       )}
@@ -1222,12 +1212,11 @@ function OnboardAgentWizard({
   );
 }
 
-type LLMsSubTab = "providers" | "mcp" | "skills" | "openshell";
+type LLMsSubTab = "providers" | "mcp" | "openshell";
 
 const LLMS_SUBTABS: { id: LLMsSubTab; label: string; icon: ComponentType }[] = [
   { id: "providers", label: "Providers", icon: PlugIcon },
   { id: "mcp", label: "MCP", icon: NetworkIcon },
-  { id: "skills", label: "Skills", icon: BookIcon },
   { id: "openshell", label: "OpenShell", icon: TerminalIcon },
 ];
 
@@ -1259,7 +1248,6 @@ function LLMsPanel() {
 
       {subTab === "providers" && <ProvidersPanel />}
       {subTab === "mcp" && <McpPanel />}
-      {subTab === "skills" && <SkillsPanel />}
       {subTab === "openshell" && <OpenShellPanel />}
     </div>
   );
@@ -1274,6 +1262,19 @@ function OpenShellPanel() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Onboard gateway card — admin-supplied Helm chart ref + install params,
+  // defaulting to NVIDIA's real published chart. Drafts mirror the
+  // corresponding PlatformSettings fields; saved via the same PATCH
+  // updatePlatformSettings() other Platform-tab fields use.
+  const [gatewayChartRef, setGatewayChartRef] = useState("");
+  const [gatewayChartVersion, setGatewayChartVersion] = useState("");
+  const [gatewayNamespace, setGatewayNamespace] = useState("");
+  const [gatewayWorkloadKind, setGatewayWorkloadKind] = useState<GatewayWorkloadKind>("statefulset");
+  const [gatewayJobTemplateId, setGatewayJobTemplateId] = useState("");
+  const [savingGateway, setSavingGateway] = useState(false);
+  const [deployingGateway, setDeployingGateway] = useState(false);
+  const [gatewayError, setGatewayError] = useState<string | null>(null);
+
   function loadSecrets() {
     fetchSecrets()
       .then(setSecrets)
@@ -1287,12 +1288,33 @@ function OpenShellPanel() {
         setListings(nextListings);
         setPlatform(nextPlatform);
         setServiceUrlDraft(nextPlatform.settings.openshellServiceUrl);
+        setGatewayChartRef(nextPlatform.settings.openshellGatewayChartRef);
+        setGatewayChartVersion(nextPlatform.settings.openshellGatewayChartVersion);
+        setGatewayNamespace(nextPlatform.settings.openshellGatewayNamespace);
+        setGatewayWorkloadKind(nextPlatform.settings.openshellGatewayWorkloadKind);
+        setGatewayJobTemplateId(String(nextPlatform.settings.openshellGatewayJobTemplateId || ""));
       })
       .catch((err: Error) => setError(err.message));
     loadSecrets();
   }
 
   useEffect(load, []);
+
+  const gatewayDeployment = platform?.settings.openshellGatewayDeployment;
+
+  // Poll while the gateway install is in flight — same interval-polling
+  // pattern ListingRow uses for the generic-chat deploy flow.
+  useEffect(() => {
+    if (gatewayDeployment?.status !== "deploying") return;
+    const timer = setInterval(() => {
+      fetchGatewayStatus()
+        .then((nextSettings) => {
+          setPlatform((prev) => (prev ? { ...prev, settings: nextSettings } : prev));
+        })
+        .catch((err: Error) => setGatewayError(err.message));
+    }, 4000);
+    return () => clearInterval(timer);
+  }, [gatewayDeployment?.status]);
 
   async function saveServiceUrl() {
     setSaving(true);
@@ -1307,6 +1329,39 @@ function OpenShellPanel() {
     }
   }
 
+  async function saveGatewaySettings() {
+    setSavingGateway(true);
+    setGatewayError(null);
+    try {
+      const next = await updatePlatformSettings({
+        openshellGatewayChartRef: gatewayChartRef,
+        openshellGatewayChartVersion: gatewayChartVersion,
+        openshellGatewayNamespace: gatewayNamespace,
+        openshellGatewayWorkloadKind: gatewayWorkloadKind,
+        openshellGatewayJobTemplateId: gatewayJobTemplateId.trim() ? Number(gatewayJobTemplateId) : "",
+      });
+      setPlatform(next);
+    } catch (err) {
+      setGatewayError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSavingGateway(false);
+    }
+  }
+
+  async function deployGatewayNow() {
+    setDeployingGateway(true);
+    setGatewayError(null);
+    try {
+      await saveGatewaySettings();
+      const nextSettings = await deployGateway();
+      setPlatform((prev) => (prev ? { ...prev, settings: nextSettings } : prev));
+    } catch (err) {
+      setGatewayError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setDeployingGateway(false);
+    }
+  }
+
   if (error) return <p className="store-empty">{error}</p>;
   if (!settings || !listings || !platform) {
     return <div className="store-loading">Loading OpenShell settings…</div>;
@@ -1318,6 +1373,135 @@ function OpenShellPanel() {
 
   return (
     <div className="store-admin-section">
+      <div className="store-panel">
+        <h3 className="store-panel-title">Onboard the OpenShell gateway</h3>
+        <p className="store-lede tight">
+          NVIDIA OpenShell is the real sandboxing runtime the Agent Sandbox
+          Service below talks to. Installing it is a live{" "}
+          <code>helm upgrade --install</code> against the chart reference
+          below, run once via AAP — the console never runs Helm itself. See{" "}
+          <a href="https://docs.nvidia.com/openshell/kubernetes/openshift" target="_blank" rel="noreferrer">
+            docs.nvidia.com/openshell/kubernetes/openshift
+          </a>
+          .
+        </p>
+        <p className="store-lede tight">
+          <strong>Before you deploy:</strong> the cluster-scoped Agent Sandbox
+          controller + CRDs are a separate, one-time, elevated-privilege
+          prerequisite this job intentionally does not install — a
+          platform admin applies those once per cluster, outside this
+          self-service flow. See{" "}
+          <em>deploy/openshift/README.md</em> for the exact command.
+        </p>
+
+        {gatewayDeployment && (
+          <div className="store-admin-table">
+            <div className="store-admin-row">
+              <div>
+                <strong>{gatewayDeployment.releaseName ?? "openshell"}</strong>
+                <span>
+                  {gatewayDeployment.namespace} · {gatewayDeployment.chartRef}
+                  {gatewayDeployment.chartVersion ? `@${gatewayDeployment.chartVersion}` : ""} ·{" "}
+                  {gatewayDeployment.workloadKind}
+                </span>
+              </div>
+              <span
+                className={`store-pill ${
+                  gatewayDeployment.status === "running"
+                    ? "is-live"
+                    : gatewayDeployment.status === "failed"
+                      ? "is-offline"
+                      : ""
+                }`}
+              >
+                {gatewayDeployment.status}
+              </span>
+            </div>
+            {gatewayDeployment.gatewayUrl && (
+              <p className="store-lede tight">
+                Gateway URL (in-cluster): <code>{gatewayDeployment.gatewayUrl}</code> — use this for the Agent
+                Sandbox Service's non-interactive <code>openshell gateway add --url</code> bootstrap.
+              </p>
+            )}
+            {gatewayDeployment.error && <p className="store-banner is-error">{gatewayDeployment.error}</p>}
+            {gatewayDeployment.aapJobUrl && (
+              <p className="store-lede tight">
+                <a href={gatewayDeployment.aapJobUrl} target="_blank" rel="noreferrer">
+                  View AAP job
+                </a>
+              </p>
+            )}
+          </div>
+        )}
+
+        <div className="store-resource-input-row">
+          <label className="store-field-mini">
+            <span>Helm chart reference</span>
+            <input value={gatewayChartRef} onChange={(e) => setGatewayChartRef(e.target.value)} />
+          </label>
+          <label className="store-field-mini">
+            <span>Chart version (optional)</span>
+            <input
+              value={gatewayChartVersion}
+              placeholder="latest"
+              onChange={(e) => setGatewayChartVersion(e.target.value)}
+            />
+          </label>
+        </div>
+        <div className="store-resource-input-row">
+          <label className="store-field-mini">
+            <span>Namespace</span>
+            <input value={gatewayNamespace} onChange={(e) => setGatewayNamespace(e.target.value)} />
+          </label>
+          <label className="store-field-mini">
+            <span>Workload kind</span>
+            <select
+              value={gatewayWorkloadKind}
+              onChange={(e) => setGatewayWorkloadKind(e.target.value as GatewayWorkloadKind)}
+            >
+              <option value="statefulset">StatefulSet (SQLite, default)</option>
+              <option value="deployment">Deployment (external Postgres, HA)</option>
+            </select>
+          </label>
+          <label className="store-field-mini">
+            <span>AAP job template id</span>
+            <input
+              value={gatewayJobTemplateId}
+              placeholder="e.g. 43"
+              onChange={(e) => setGatewayJobTemplateId(e.target.value)}
+            />
+          </label>
+        </div>
+        {platform.aap.jobTemplates.length > 0 && (
+          <p className="store-lede tight">
+            Templates: {platform.aap.jobTemplates.slice(0, 8).map((t) => `${t.name} (#${t.id})`).join(" · ")}
+          </p>
+        )}
+        {gatewayError && <p className="store-banner is-error">{gatewayError}</p>}
+        <div className="store-resource-actions">
+          <button
+            type="button"
+            className="store-btn-ghost"
+            disabled={savingGateway || deployingGateway}
+            onClick={() => void saveGatewaySettings()}
+          >
+            {savingGateway ? "Saving…" : "Save settings"}
+          </button>
+          <button
+            type="button"
+            className="store-btn-primary"
+            disabled={deployingGateway || gatewayDeployment?.status === "deploying"}
+            onClick={() => void deployGatewayNow()}
+          >
+            {deployingGateway || gatewayDeployment?.status === "deploying"
+              ? "Installing…"
+              : gatewayDeployment
+                ? "Re-install gateway"
+                : "Install gateway"}
+          </button>
+        </div>
+      </div>
+
       <div className="store-panel">
         <h3 className="store-panel-title">Agent Sandbox Service</h3>
         <p className="store-lede tight">
@@ -1462,9 +1646,9 @@ function AddProviderForm({
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
-  function applyVllmPreset() {
+  function applyMaasPreset() {
     setKind("openai-compatible");
-    setLabel((prev) => prev || "vLLM (local MaaS)");
+    setLabel((prev) => prev || "OpenShift AI (MaaS)");
     setBaseUrl((prev) => prev || "http://localhost:8000/v1");
   }
 
@@ -1496,11 +1680,12 @@ function AddProviderForm({
       {err && <p className="store-banner is-error">{err}</p>}
       <p className="store-lede tight">
         Quick preset:{" "}
-        <button type="button" className="store-btn-ghost" onClick={applyVllmPreset}>
-          Self-hosted / vLLM (MaaS)
+        <button type="button" className="store-btn-ghost" onClick={applyMaasPreset}>
+          OpenShift AI — Model as a Service
         </button>{" "}
-        — points an OpenAI-compatible provider at a local vLLM server; no API
-        key required.
+        — points an OpenAI-compatible provider at a vLLM endpoint served by
+        Red Hat OpenShift AI's Model as a Service (KServe/vLLM); no API key
+        required for a locally self-hosted one.
       </p>
       <div className="store-resource-input-row">
         <select value={kind} onChange={(e) => setKind(e.target.value as ProviderKind)}>
@@ -1981,8 +2166,23 @@ function McpServerRow({
   );
 }
 
+// Display-only mirror of skillsImport.ts's RED_HAT_SKILL_PACKS — kept as a
+// plain string list here (rather than importing the server module, which
+// pulls in `fs`/`fetch`-to-GitHub code that has no place in a client
+// bundle) so the panel can say which packs "Sync" will pull.
+const RED_HAT_SKILL_PACK_LABELS = [
+  "rh-basic",
+  "rh-sre",
+  "rh-developer",
+  "rh-virt",
+  "ocp-admin",
+  "rh-ai-engineer",
+  "rh-automation",
+];
+
 function SkillsPanel() {
   const [skills, setSkills] = useState<Skill[] | null>(null);
+  const [listings, setListings] = useState<Listing[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [showAdd, setShowAdd] = useState(false);
   const [query, setQuery] = useState("");
@@ -1990,14 +2190,53 @@ function SkillsPanel() {
   // Red Hat pack starts collapsed — seeded once skills first load.
   const [openGroups, setOpenGroups] = useState<Set<string>>(new Set());
   const [seeded, setSeeded] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [importMsg, setImportMsg] = useState<string | null>(null);
 
   function load() {
     fetchSkills()
       .then(setSkills)
       .catch((err: Error) => setError(err.message));
+    fetchListings()
+      .then(setListings)
+      .catch(() => setListings([]));
   }
 
   useEffect(load, []);
+
+  async function runImport() {
+    setImporting(true);
+    setImportMsg(null);
+    try {
+      const result = await importRedHatSkills();
+      const failed = result.errors.length;
+      const okPacks = result.packs.length - failed;
+      setImportMsg(
+        failed > 0
+          ? `Imported ${result.written} skills from ${okPacks}/${result.packs.length} packs — ${failed} pack(s) failed (${result.errors.map((e) => e.pack).join(", ")}); check server logs.`
+          : `Imported ${result.written} skills across ${result.packs.length} Red Hat packs.`
+      );
+      load();
+    } catch (e) {
+      setImportMsg(e instanceof Error ? e.message : String(e));
+    } finally {
+      setImporting(false);
+    }
+  }
+
+  // Which listings currently load each skill id, for the "used by" backlink
+  // on each SkillRow — computed from the catalog, not stored on the skill.
+  const usedByMap = useMemo(() => {
+    const map = new Map<string, Listing[]>();
+    for (const listing of listings) {
+      for (const skillId of listing.agentConfig?.skillIds ?? []) {
+        const list = map.get(skillId) ?? [];
+        list.push(listing);
+        map.set(skillId, list);
+      }
+    }
+    return map;
+  }, [listings]);
 
   useEffect(() => {
     if (seeded || !skills) return;
@@ -2049,6 +2288,25 @@ function SkillsPanel() {
           &quot;+ Add skill&quot;.
         </p>
 
+        <div className="store-resource-card is-subtle">
+          <div className="store-resource-head">
+            <div className="store-resource-title">
+              <strong>Sync Red Hat skill packs</strong>
+              <span>
+                Pulls the latest {RED_HAT_SKILL_PACK_LABELS.join(", ")} packs from{" "}
+                <code>github.com/RHEcosystemAppEng/agentic-plugins</code> and refreshes
+                them below — no restart needed.
+              </span>
+            </div>
+            <div className="store-resource-actions">
+              <button type="button" className="store-btn-ghost" onClick={runImport} disabled={importing}>
+                {importing ? "Syncing…" : "Sync now"}
+              </button>
+            </div>
+          </div>
+          {importMsg && <p className="store-lede tight">{importMsg}</p>}
+        </div>
+
         <div className="store-skill-search">
           <SearchIcon aria-hidden="true" />
           <input
@@ -2075,7 +2333,12 @@ function SkillsPanel() {
             >
               <div className="store-resource-list">
                 {group.skills.map((skill) => (
-                  <SkillRow key={skill.id} skill={skill} onChange={load} />
+                  <SkillRow
+                    key={skill.id}
+                    skill={skill}
+                    usedBy={usedByMap.get(skill.id) ?? []}
+                    onChange={load}
+                  />
                 ))}
               </div>
             </CollapsibleGroup>
@@ -2165,9 +2428,18 @@ function AddSkillForm({
   );
 }
 
-function SkillRow({ skill, onChange }: { skill: Skill; onChange: () => void }) {
+function SkillRow({
+  skill,
+  usedBy,
+  onChange,
+}: {
+  skill: Skill;
+  usedBy: Listing[];
+  onChange: () => void;
+}) {
   const [editing, setEditing] = useState(false);
   const [showInstructions, setShowInstructions] = useState(false);
+  const [showUsedBy, setShowUsedBy] = useState(false);
   const [name, setName] = useState(skill.name);
   const [description, setDescription] = useState(skill.description);
   const [instructions, setInstructions] = useState(skill.instructions);
@@ -2205,6 +2477,15 @@ function SkillRow({ skill, onChange }: { skill: Skill; onChange: () => void }) {
           {skill.description && <span>{skill.description}</span>}
         </div>
         <div className="store-resource-actions">
+          <button
+            type="button"
+            className="store-pill is-clickable"
+            onClick={() => setShowUsedBy((v) => !v)}
+            disabled={usedBy.length === 0}
+            title={usedBy.length === 0 ? "Not attached to any listing yet" : "Show which listings use this skill"}
+          >
+            Used by {usedBy.length} listing{usedBy.length === 1 ? "" : "s"}
+          </button>
           {isBuiltin ? (
             <span className="store-pill is-muted">Built-in (read-only)</span>
           ) : (
@@ -2219,6 +2500,14 @@ function SkillRow({ skill, onChange }: { skill: Skill; onChange: () => void }) {
           )}
         </div>
       </div>
+
+      {showUsedBy && usedBy.length > 0 && (
+        <ul className="store-skill-usedby-list">
+          {usedBy.map((listing) => (
+            <li key={listing.id}>{listing.name}</li>
+          ))}
+        </ul>
+      )}
 
       {!isBuiltin && editing ? (
         <>

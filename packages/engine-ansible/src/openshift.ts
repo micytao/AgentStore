@@ -133,6 +133,22 @@ export async function readDeploymentResult(
   return { status: body.data?.status, routeHost: body.data?.routeHost };
 }
 
+/** Read-back for provision-openshell-gateway.yml — same ConfigMap
+ * read-back pattern as readDeploymentResult(), just against a
+ * `<release_name>-gateway-result` ConfigMap in the *admin-supplied*
+ * gateway namespace (not the fixed OPENSHIFT_NAMESPACE every other
+ * function here uses), since the gateway conventionally lives in its own
+ * namespace, separate from AAP's agent Jobs/Deployments. */
+export async function readGatewayDeployResult(
+  releaseName: string,
+  namespace: string
+): Promise<{ status?: string; gatewayUrl?: string; error?: string } | undefined> {
+  const response = await ocpFetch(`/api/v1/namespaces/${namespace}/configmaps/${releaseName}-gateway-result`);
+  if (!response.ok) return undefined;
+  const body = (await response.json()) as { data?: Record<string, string> };
+  return { status: body.data?.status, gatewayUrl: body.data?.gatewayUrl, error: body.data?.error };
+}
+
 /** Best-effort teardown of everything provision-generic-agent.yml creates
  * for one listing, used when an admin re-deploys or removes a generic-chat
  * agent. Each resource is deleted independently so a 404 on one (already

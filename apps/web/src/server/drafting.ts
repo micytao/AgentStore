@@ -1,6 +1,6 @@
 import { draftFor } from "@agentstore/engine-fake";
 import type { Listing, TaskSpec } from "@agentstore/shared";
-import { departmentLabel } from "@agentstore/shared";
+import { appendSkillsFooter, departmentLabel } from "@agentstore/shared";
 import { createChatState, runTurn } from "@agentstore/agent-core";
 import { getActiveProvider, getProvider, callProvider } from "./providers";
 import { callTool, listEnabledToolsFor } from "./mcp";
@@ -10,7 +10,7 @@ import { getSkillsByIds } from "./skills";
  * appended by agent-core's buildSystemPrompt(), called from inside
  * runTurn(), so this only carries the parts that are specific to
  * drafting.ts's one-shot "produce a draft" framing. */
-function introLinesFor(listing: Listing): string[] {
+export function introLinesFor(listing: Listing): string[] {
   return [
     `You are the AI agent behind the "${listing.name}" listing in AgentStore's ${departmentLabel(listing.department)} department.`,
     listing.description,
@@ -56,7 +56,7 @@ export async function generateDraft(spec: TaskSpec, listing: Listing): Promise<s
       : `Goal: ${goal}`;
 
     const state = createChatState();
-    return await runTurn(
+    const reply = await runTurn(
       {
         callProvider: (opts) => callProvider(provider.id, opts),
         callTool: (serverId, name, args) => callTool(serverId, name, args),
@@ -67,6 +67,10 @@ export async function generateDraft(spec: TaskSpec, listing: Listing): Promise<s
       state,
       userMessage
     );
+    // Same footer convention as apps/agent-runtime's runOnce.ts (the live
+    // AAP path) — TaskDetailPage.tsx splits it back out to render loaded
+    // skills as their own line instead of leaving them buried in the text.
+    return appendSkillsFooter(reply, [...state.activeSkillIds]);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.warn(`[drafting] Falling back to canned draft for ${spec.listingId}: ${message}`);

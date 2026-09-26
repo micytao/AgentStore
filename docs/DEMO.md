@@ -15,18 +15,32 @@ Click **Demo** in the sidebar to become **Admin**.
 ## 1. Browse as a business user
 
 Catalog is department-first: Support, Finance & HR, Data, Security, then
-Engineering. Only **published** listings show (`GET /api/listings`).
+Engineering — though today only Support and Engineering have published
+listings (`GET /api/listings`).
 
-## 2. Launch a business agent (A)
+## 2. Launch a business agent (A — Autonomous / Skills Agent)
 
-1. Customer Support → **Ticket triage & routing** → Launch.
-2. Goal: `Triage this week's open ticket queue and flag anything urgent`.
-3. The task page shows an **AAP job** and an **OpenShift Job**
-   (`agent-<id>` in `agent-workloads`).
-4. Wait for **AwaitingApproval**, read the draft, Approve or Reject.
+Autonomous always means the same engine underneath — a minimalist
+`agent-core` + Skills agent, provisioned via AAP → OpenShift → MaaS/OpenShift
+AI. The bundled catalog's Autonomous listings are all real Red Hat Agentic
+Skill Packs, deployed once as a persistent chat:
 
-Disconnected laptop: the timeline is labeled **Simulated AAP**. Connected
-AAP: the same UI shows the real job id and deep-links.
+1. Engineering → **Red Hat SRE Engineer** (or **Red Hat Customer Support**,
+   **Red Hat OpenShift Virtualization**) → Admin deploys the listing once
+   (AAP provisions a persistent OpenShift Deployment + Route).
+2. Anyone opens the listing's link and chats with it directly, turn after
+   turn — no per-launch approval step, but the same Skills engine, with its
+   real bound Skills and MCP tool bindings.
+
+Disconnected laptop: the deploy timeline is labeled **Simulated AAP**.
+Connected AAP: the same UI shows the real job id and deep-links, and the
+Deployment runs `apps/agent-runtime` with the listing's real bound Skills
+and provider — not a canned MaaS call.
+
+The Skills engine also supports a one-shot **launch → draft → Approve/Reject**
+shape (`RUN_MODE=once`) for listings that don't set `runtime: generic-chat` —
+see [README.md](../README.md#a--autonomous-mode-skills-agent-business-listings) —
+but no example of that shape ships in the catalog today.
 
 ## 3. Show the Red Hat products
 
@@ -46,8 +60,9 @@ With Platform connected:
 
 ## 5. Optional: real MaaS drafts
 
-**Admin → Providers → Self-hosted / vLLM (MaaS)**. Test connection (no API
-key). Activate. Autonomous drafts call that endpoint instead of canned text.
+**Admin → Providers → OpenShift AI — Model as a Service**. Test connection
+(no API key). Activate. Autonomous drafts call that endpoint instead of
+canned text.
 
 ## 6. Optional: Engineering / OpenShell
 
@@ -57,8 +72,11 @@ next to the OpenShell gateway) for a live, actually-typeable sandbox;
 otherwise simulated. Set its Route URL in Admin → LLMs → OpenShell and its
 token in Admin → Secrets. See
 [apps/agent-sandbox-service/README.md](../apps/agent-sandbox-service/README.md)
-for the deployment steps and [deploy/openshift/README.md](../deploy/openshift/README.md#5-optional-engineering--the-agent-sandbox-service)
-for the manifests.
+for the deployment steps and
+[deploy/openshift/README.md](../deploy/openshift/README.md#5-optional-engineering-the-openshell-gateway--agent-sandbox-service)
+for the manifests — including the new **Admin → LLMs → OpenShell → "Install
+gateway"** self-service step for the OpenShell gateway itself, which used
+to require a manual `helm install`.
 
 ## 7. Onboard a new hosted-agent-api agent
 

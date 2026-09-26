@@ -43,13 +43,13 @@ export function openshiftInsecureTls(): boolean {
   return process.env.OPENSHIFT_INSECURE_TLS === "true";
 }
 
-export function agentRunnerImage(): string {
-  return process.env.AGENT_RUNNER_IMAGE || "agent-runner:dev";
-}
-
-/** Image for the generic-chat runtime container (apps/agent-runtime),
- * reused across every generic-chat listing's Deployment — provision-
- * generic-agent.yml's `agent_runtime_image` extra var falls back to this. */
+/** Image for the agent-runtime container (apps/agent-runtime), reused for
+ * both the persistent-chat shape (provision-generic-agent.yml's
+ * `agent_runtime_image`, RUN_MODE unset) and the one-shot draft shape
+ * (provision-agent.yml's `agent_runtime_image`, RUN_MODE=once) — one
+ * image, one Skills engine, two run modes. Replaces the old, separate
+ * `agent-runner:dev` image built from the now-retired
+ * ansible/agent-runner/. */
 export function agentRuntimeImage(): string {
   return process.env.AGENT_RUNTIME_IMAGE || "agent-runtime:dev";
 }

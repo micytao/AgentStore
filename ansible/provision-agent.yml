@@ -1,13 +1,23 @@
 ---
-# AAP Project playbook. Extra vars come from AgentStore:
+# AAP Project playbook. Extra vars come from AgentStore (engine-ansible's
+# extraVars(), packages/engine-ansible/src/index.ts):
 #   listing_id, listing_name, task_id, goal, success_criteria,
-#   namespace, job_name, mode, agent_runner_image (optional)
+#   namespace, job_name, mode, agent_runtime_image (optional),
+#   provider_kind, provider_base_url, provider_default_model, provider_api_key,
+#   intro_lines (list of strings), skills (list of Skill objects)
+#
+# The Skills Agent's one-shot draft shape — same agent-runtime image and
+# same mounted config.json convention as provision-generic-agent.yml's
+# persistent-chat shape (RUN_MODE=once instead of unset), so this Job is
+# exactly as Skills-aware as a deployed chat agent, via a real
+# @agentstore/agent-core runTurn() instead of the retired, Skills-unaware
+# ansible/agent-runner/runner.py.
 #
 # Creates the agent Job, waits for it to finish, then publishes a
-# `<job_name>-result` ConfigMap with the pod's output so AgentStore's
+# `<job_name>-result` ConfigMap with the pod's stdout log so AgentStore's
 # readResultConfigMap() picks up the real draft instead of falling back to
 # a client-side placeholder.
-- name: Provision an AgentStore agent Job on OpenShift
+- name: Provision an AgentStore Skills Agent Job on OpenShift
   hosts: localhost
   gather_facts: false
   vars:
@@ -18,9 +28,20 @@
     task_id: "{{ task_id }}"
     goal: "{{ goal | default('') }}"
     success_criteria: "{{ success_criteria | default('') }}"
-    agent_runner_image: "{{ agent_runner_image | default('agent-runner:dev') }}"
-    maas_base_url: "{{ maas_base_url | default('') }}"
-    maas_model: "{{ maas_model | default('default') }}"
+    agent_runtime_image: "{{ agent_runtime_image | default('agent-runtime:dev') }}"
+    provider_kind: "{{ provider_kind | default('openai-compatible') }}"
+    provider_base_url: "{{ provider_base_url | default('') }}"
+    provider_default_model: "{{ provider_default_model | default('') }}"
+    provider_api_key: "{{ provider_api_key | default('') }}"
+    intro_lines: "{{ intro_lines | default([]) }}"
+    skills: "{{ skills | default([]) }}"
+    config_json: >-
+      {{ {
+        'listingName': listing_name,
+        'introLines': intro_lines,
+        'skills': skills,
+        'mcpServers': [],
+      } | to_json }}
   tasks:
     - name: Ensure agent-workloads namespace exists
       kubernetes.core.k8s:
@@ -33,6 +54,29 @@
             labels:
               app.kubernetes.io/managed-by: agentstore
 
+    - name: Create the Job's config Secret (env scalars + config.json)
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: "{{ job_name }}-config"
+            namespace: "{{ namespace }}"
+            labels:
+              app.kubernetes.io/managed-by: agentstore
+              app.kubernetes.io/name: agent-runtime
+              agentstore/task-id: "{{ task_id }}"
+              agentstore/listing-id: "{{ listing_id }}"
+          type: Opaque
+          stringData:
+            LISTING_NAME: "{{ listing_name }}"
+            PROVIDER_KIND: "{{ provider_kind }}"
+            PROVIDER_BASE_URL: "{{ provider_base_url }}"
+            PROVIDER_DEFAULT_MODEL: "{{ provider_default_model }}"
+            PROVIDER_API_KEY: "{{ provider_api_key }}"
+            config.json: "{{ config_json }}"
+
     - name: Create agent Job
       kubernetes.core.k8s:
         state: present
@@ -44,7 +88,7 @@
             namespace: "{{ namespace }}"
             labels:
               app.kubernetes.io/managed-by: agentstore
-              app.kubernetes.io/name: agent-runner
+              app.kubernetes.io/name: agent-runtime
               agentstore/task-id: "{{ task_id }}"
               agentstore/listing-id: "{{ listing_id }}"
           spec:
@@ -59,29 +103,35 @@
                 restartPolicy: Never
                 containers:
                   - name: agent
-                    image: "{{ agent_runner_image }}"
+                    image: "{{ agent_runtime_image }}"
                     imagePullPolicy: IfNotPresent
                     env:
-                      - name: LISTING_ID
-                        value: "{{ listing_id }}"
-                      - name: LISTING_NAME
-                        value: "{{ listing_name }}"
+                      - name: RUN_MODE
+                        value: once
                       - name: TASK_ID
                         value: "{{ task_id }}"
                       - name: GOAL
                         value: "{{ goal }}"
                       - name: SUCCESS_CRITERIA
                         value: "{{ success_criteria }}"
-                      - name: MAAS_BASE_URL
-                        value: "{{ maas_base_url }}"
-                      - name: MAAS_MODEL
-                        value: "{{ maas_model }}"
                       - name: RESULT_FILE
                         value: /output/draft.txt
+                    envFrom:
+                      - secretRef:
+                          name: "{{ job_name }}-config"
                     volumeMounts:
+                      - name: config
+                        mountPath: /etc/agent
+                        readOnly: true
                       - name: output
                         mountPath: /output
                 volumes:
+                  - name: config
+                    secret:
+                      secretName: "{{ job_name }}-config"
+                      items:
+                        - key: config.json
+                          path: config.json
                   - name: output
                     emptyDir: {}
 

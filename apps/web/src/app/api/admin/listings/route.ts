@@ -14,13 +14,6 @@ export async function POST(request: Request) {
       { status: 400 }
     );
   }
-  if (!body.supportedModes || body.supportedModes.length === 0) {
-    return NextResponse.json(
-      { error: "At least one supported mode is required" },
-      { status: 400 }
-    );
-  }
-
   try {
     return NextResponse.json(createListing(body));
   } catch (err) {
