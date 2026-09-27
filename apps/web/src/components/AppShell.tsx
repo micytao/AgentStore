@@ -147,7 +147,7 @@ function ThemeToggle() {
 }
 
 const ROLE_OPTIONS: { id: Role; label: string; initials: string }[] = [
-  { id: "user", label: "Demo", initials: "D" },
+  { id: "user", label: "User", initials: "U" },
   { id: "admin", label: "Admin", initials: "A" },
 ];
 
@@ -171,7 +171,7 @@ function RoleSwitcher() {
           variant="plain"
           onClick={() => setIsOpen((open) => !open)}
           isExpanded={isOpen}
-          aria-label="Switch between Demo and Admin"
+          aria-label="Switch between User and Admin"
         >
           <Avatar
             initials={current.initials}

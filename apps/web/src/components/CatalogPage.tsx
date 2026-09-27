@@ -40,9 +40,17 @@ export function CatalogPage() {
     <>
       <PageSection variant="secondary">
         <Content>
-          <Content component={ContentVariants.small}>
-            Self-service · governed · auditable
-          </Content>
+          <Label
+            color="red"
+            style={{
+              marginBottom: "0.6rem",
+              fontWeight: 700,
+              fontSize: "0.85rem",
+              letterSpacing: "0.02em",
+            }}
+          >
+            Self-service · Governed · Auditable
+          </Label>
           <Title headingLevel="h1" size="2xl">
             Pick a job. We stand the agent up.
           </Title>
