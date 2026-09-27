@@ -5,14 +5,14 @@ export type DepartmentId =
   | "data"
   | "finance";
 
-export type EngineType = "self-hosted-sandbox" | "hosted-agent-api";
-
-/** Which container/runtime a listing's agent actually runs as, independent of
- * `engineType`/`openshellAgent`. "generic-chat" is the new default: a small,
- * pre-built chat container (apps/agent-runtime) configured per-listing with
- * a provider, MCP servers, and skills, deployed once by AAP as a persistent
- * Deployment+Route. "openshell" is the existing, unchanged Engineering path
- * (Agent Sandbox Service + per-task sandbox), kept for coding agents. */
+/** Which container/runtime a listing's agent actually runs as. "generic-chat"
+ * is a small, pre-built chat container (apps/agent-runtime) configured
+ * per-listing with a provider, MCP servers, and skills, deployed once via
+ * AAP as a persistent Deployment+Route — the admin opens the resulting chat
+ * link directly. "openshell" is a persistent Agent Sandbox Service session
+ * (a real `opencode`-style CLI sandbox) — the admin opens a live terminal
+ * against it directly. Both are deployed once per listing; neither is
+ * provisioned per-launch. */
 export type AgentRuntime = "generic-chat" | "openshell";
 
 export type AgentDeploymentStatus = "not-deployed" | "deploying" | "running" | "failed";
@@ -33,18 +33,16 @@ export interface AgentDeployment {
   updatedAt?: string;
 }
 
-export type AgentMode = "work-with-me" | "do-this-for-me";
-
-/** Single source of truth for the UI-facing Autonomous/Collaborative split.
- * `AgentMode` is no longer independently configurable per listing — it's a
- * strict 1:1 function of `EngineType`, so the two can never drift apart:
- * `self-hosted-sandbox` (the OpenShell sandbox engine, e.g. `opencode`) is
- * always Collaborative/`work-with-me`; every other engine (the minimalist
- * Skills-Agent engine, whether delivered as a one-shot draft or a persistent
- * chat) is always Autonomous/`do-this-for-me`. See `modeLabel()` in
- * apps/web/src/lib/format.ts for the human-facing text. */
-export function deriveAgentMode(engineType: EngineType): AgentMode {
-  return engineType === "self-hosted-sandbox" ? "work-with-me" : "do-this-for-me";
+/** The OpenShell equivalent of `AgentDeployment` — state of the one-time
+ * "create a persistent Agent Sandbox Service session for this listing"
+ * admin action. Populated by openshellDeploy.ts. Unlike the old per-task
+ * flow, this session is created once and reused for every "Open terminal"
+ * click, instead of a fresh sandbox per launch. */
+export interface OpenShellSessionState {
+  status: AgentDeploymentStatus;
+  sandboxId?: string;
+  error?: string;
+  updatedAt?: string;
 }
 
 export type RiskTier = "low" | "medium" | "high";
@@ -61,15 +59,6 @@ export interface Pricing {
   amount: number;
 }
 
-export type TaskPhase =
-  | "Pending"
-  | "Provisioning"
-  | "Running"
-  | "AwaitingApproval"
-  | "Completed"
-  | "Failed"
-  | "Cancelled";
-
 export interface Listing {
   id: string;
   name: string;
@@ -77,27 +66,27 @@ export interface Listing {
   category: string;
   description: string;
   icon: string;
-  engineType: EngineType;
-  /** Computed by catalog.ts at load time via `deriveAgentMode(engineType)` —
-   * not part of the YAML source, same pattern as `source` below. Never set
-   * this directly; it always follows `engineType` 1:1. */
-  mode: AgentMode;
   riskTier: RiskTier;
   reviewStatus: ReviewStatus;
-  /** What this agent costs to run. Falls back to a mode-based default
-   * estimate (see orchestrator.ts COST_BY_MODE) when unset. */
+  /** What this agent costs to run — informational only; there is no
+   * per-launch metering anymore. */
   pricing?: Pricing;
-  /** Adapter-private. Only set on Engine 1 listings. */
+  /** Which OpenShell CLI agent (e.g. "opencode") this listing's sandbox
+   * runs, when `runtime === "openshell"`. */
   openshellAgent?: string;
   /** Which runtime container this agent runs as. Defaults to "generic-chat"
    * when unset (older listings created before this field existed). */
   runtime?: AgentRuntime;
-  /** Per-agent bindings configured by the admin (provider, tools, skills, engine override). */
+  /** Per-agent bindings configured by the admin (provider, tools, skills). */
   agentConfig?: AgentConfig;
   /** Set by deployments.ts for `runtime: "generic-chat"` listings once an
    * admin has run the one-time "Deploy to OpenShift" action. Not part of
    * the YAML source — persisted the same way `agentConfig` overrides are. */
   deployment?: AgentDeployment;
+  /** Set by openshellDeploy.ts for `runtime: "openshell"` listings once an
+   * admin has created the listing's persistent sandbox session. Same
+   * persistence convention as `deployment` above. */
+  openshellSession?: OpenShellSessionState;
   /**
    * Set by catalog.ts at load time based on which directory the listing was
    * loaded from; not present in the YAML source itself. "custom" listings
@@ -109,16 +98,18 @@ export interface Listing {
 }
 
 /** Per-agent configuration an admin binds to a listing: which model provider
- * drafts for it, which MCP tools it may call, which skills are attached, and
- * whether it should force simulated/live execution regardless of the global
- * engine setting. */
+ * drafts for it, which MCP tools it may call, and which skills are
+ * attached. */
 export interface AgentConfig {
   providerId?: string;
   mcpToolBindings?: { serverId: string; tool: string }[];
   skillIds?: string[];
-  engineOverride?: "auto" | "simulated" | "live";
-  /** AAP job template to launch for this listing. Falls back to the Platform default. */
+  /** AAP job template to launch for this listing's `generic-chat` deploy.
+   * Falls back to the Platform default. Unused for `openshell` listings. */
   aapJobTemplateId?: number;
+  /** Repository to clone once into an `openshell` listing's sandbox at
+   * deploy time. Unused for `generic-chat` listings. */
+  gitUrl?: string;
 }
 
 /** A reusable instruction bundle an admin can author once and attach to any
@@ -160,7 +151,6 @@ export interface ListingCreateInput {
   category: string;
   description: string;
   icon: string;
-  engineType: EngineType;
   riskTier: RiskTier;
   pricing?: Pricing;
   openshellAgent?: string;
@@ -170,39 +160,7 @@ export interface ListingCreateInput {
   publish?: boolean;
 }
 
-export interface TaskTarget {
-  goal: string;
-  successCriteria?: string;
-}
-
-export type EngineBackend = "aap" | "simulated" | "openshell" | "generic-chat" | "fake";
-
-export interface EngineHandle {
-  engineType: EngineType | "fake" | "ansible";
-  sandboxId: string;
-  backend?: EngineBackend;
-  aapJobId?: string;
-  openshiftJobName?: string;
-  namespace?: string;
-}
-
-export interface EngineStatus {
-  phase: TaskPhase;
-  outputSummary?: string;
-  interactive?: {
-    kind: "simulated" | "openshell" | "generic-chat";
-    attachHint?: string;
-  };
-  backend?: EngineBackend;
-  aapJobId?: string;
-  aapJobUrl?: string;
-  openshiftJobName?: string;
-  openshiftConsoleUrl?: string;
-  namespace?: string;
-  provisioningStep?: string;
-}
-
-/** Model/credential intent resolved by the console (drafting.ts's
+/** Model/credential intent resolved by the console (providers.ts's
  * providerFor()) and forwarded, as plain data, to the Agent Sandbox
  * Service's `POST /sessions` — the service is the only thing that knows
  * how to turn this into an agent-specific config file (e.g. opencode.json). */
@@ -236,94 +194,12 @@ export interface OpenShellMcpServerConfig {
  * go in as env vars instead; see ansible/provision-generic-agent.yml).
  * `introLines` + `skills` are fed straight into packages/agent-core's
  * buildSystemPrompt()/chatLoop so the container computes the same
- * progressive-disclosure system prompt drafting.ts does. */
+ * progressive-disclosure system prompt. */
 export interface GenericAgentRuntimeConfig {
   listingName: string;
   introLines: string[];
   skills: Skill[];
   mcpServers: OpenShellMcpServerConfig[];
-}
-
-export interface TaskSpec {
-  taskId: string;
-  listingId: string;
-  listingName: string;
-  mode: AgentMode;
-  target?: TaskTarget;
-  gitUrl?: string;
-  /** GIT_PAT from the vault, forwarded so the Agent Sandbox Service can
-   * clone inside the sandbox — the console never clones anything itself. */
-  gitToken?: string;
-  openshellAgent?: string;
-  openshellModel?: OpenShellModelConfig;
-  openshellMcpServers?: OpenShellMcpServerConfig[];
-  aapJobTemplateId?: number;
-  /** Resolved provider credentials for the Skills Agent's one-shot draft
-   * shape (engine-ansible's extraVars()) — same resolution as
-   * `openshellModel` above, just under an engine-agnostic name since
-   * there's nothing OpenShell-specific about a one-shot Job's model. */
-  providerConfig?: OpenShellModelConfig;
-  /** Full Skill objects (with instructions) for the one-shot Job's mounted
-   * config.json — same shape drafting.ts's fallback and the persistent-chat
-   * shape already use, so the live AAP path gets real Skills too. */
-  skills?: Skill[];
-  /** Persona lines for the one-shot Job's mounted config.json — same
-   * wording drafting.ts's introLinesFor() uses for the simulated/fallback
-   * path, so the live AAP path frames the agent identically. */
-  introLines?: string[];
-}
-
-export interface EngineAdapter {
-  provision(spec: TaskSpec): Promise<EngineHandle>;
-  getStatus(handle: EngineHandle, spec: TaskSpec): Promise<EngineStatus>;
-  exposeInteractiveEndpoint(
-    handle: EngineHandle
-  ): Promise<{ kind: "simulated" | "openshell" | "generic-chat"; url?: string } | null>;
-  terminate(handle: EngineHandle): Promise<void>;
-}
-
-export interface Task {
-  id: string;
-  listingRef: string;
-  listingName: string;
-  requestedBy: string;
-  department: DepartmentId;
-  mode: AgentMode;
-  target?: TaskTarget;
-  gitUrl?: string;
-  status: {
-    phase: TaskPhase;
-    engineRef?: EngineHandle;
-    outputSummary?: string;
-    costEstimate?: number;
-    error?: string;
-    live?: boolean;
-    backend?: EngineBackend;
-    aapJobId?: string;
-    aapJobUrl?: string;
-    openshiftJobName?: string;
-    openshiftConsoleUrl?: string;
-    namespace?: string;
-    provisioningStep?: string;
-    /** Set from EngineStatus.interactive by orchestrator.ts's refresh();
-     * tells the task page which terminal component to render. */
-    interactive?: {
-      kind: "simulated" | "openshell" | "generic-chat";
-    };
-  };
-  approvalDecision?: "approved" | "rejected";
-  decidedBy?: Role;
-  cancelledBy?: Role;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface UsageSnapshot {
-  totalTasks: number;
-  byDepartment: Partial<
-    Record<DepartmentId, { tasks: number; estimatedCost: number }>
-  >;
-  estimatedCost: number;
 }
 
 export type ListingUpdate = Partial<
@@ -337,12 +213,11 @@ export type ListingUpdate = Partial<
     | "agentConfig"
     | "runtime"
     | "deployment"
+    | "openshellSession"
   >
 >;
 
 export interface EngineSettings {
-  /** When true, all tasks run simulated even if AAP or OpenShell is configured. */
-  forceSimulated: boolean;
   /** Whether the Agent Sandbox Service URL + token are configured. Read-only. */
   openshellServiceConfigured: boolean;
   /** Whether an AAP controller URL and token are configured. Read-only. */
@@ -469,8 +344,6 @@ export interface PlatformStatus {
   openshellService: PlatformConnectionStatus;
 }
 
-export type Role = "user" | "admin";
-
 // --- Secrets vault -----------------------------------------------------
 
 export interface SecretSlot {
@@ -502,7 +375,7 @@ export const SECRET_SLOTS: SecretSlot[] = [
     key: "GIT_PAT",
     label: "Git personal access token",
     description:
-      "Used to clone the repo when a Collaborative task provides a git URL. Forwarded to the Agent Sandbox Service, which performs the clone inside the sandbox — the console never clones anything itself.",
+      "Used to clone the repo bound to an OpenShell listing's Agent config (Repository URL) when its sandbox session is deployed. Forwarded to the Agent Sandbox Service, which performs the clone inside the sandbox — the console never clones anything itself.",
     usedBy: "engine-openshell adapter (forwarded for git clone)",
     group: "tooling",
   },
@@ -612,36 +485,6 @@ export const DEPARTMENTS: { id: DepartmentId | "all"; name: string }[] = [
   { id: "security", name: "Security & Compliance" },
   { id: "engineering", name: "Engineering" },
 ];
-
-export const DEMO_USER = "Demo";
-
-// --- Skills-used footer (Skills Agent one-shot draft shape) --------------
-
-/** Marker both the live AAP path (apps/agent-runtime's runOnce.ts) and the
- * simulated/disconnected fallback (apps/web/src/server/drafting.ts) append
- * to a one-shot draft when at least one Skill got loaded mid-turn, so
- * TaskDetailPage.tsx can render "Skills used" as its own line instead of
- * leaving it buried in the draft text — the one-shot shape has no chat
- * transcript to show a loaded-skill chip in, unlike the persistent-chat
- * shape (see chatPage.ts). */
-const SKILLS_USED_MARKER = "\n\n— Skills used: ";
-
-export function appendSkillsFooter(text: string, skillIds: string[]): string {
-  return skillIds.length > 0 ? `${text}${SKILLS_USED_MARKER}${skillIds.join(", ")}` : text;
-}
-
-/** Splits a draft produced by `appendSkillsFooter` back into its main text
- * and the loaded skill ids, if any. */
-export function splitSkillsFooter(text: string): { draft: string; skillIds: string[] } {
-  const idx = text.lastIndexOf(SKILLS_USED_MARKER);
-  if (idx === -1) return { draft: text, skillIds: [] };
-  const skillIds = text
-    .slice(idx + SKILLS_USED_MARKER.length)
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean);
-  return { draft: text.slice(0, idx), skillIds };
-}
 
 export function departmentLabel(id: DepartmentId | "all"): string {
   return DEPARTMENTS.find((d) => d.id === id)?.name ?? id;

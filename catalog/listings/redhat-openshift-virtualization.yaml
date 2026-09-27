@@ -4,7 +4,6 @@ department: engineering
 category: Virtualization
 description: Chat agent for VM lifecycle management, snapshots, cloning, and rebalancing on OpenShift Virtualization, built on Red Hat's real `rh-virt` Agentic Skill Pack (10 skills). Deploy once, then share the link with your virtualization team.
 icon: server
-engineType: hosted-agent-api
 runtime: generic-chat
 riskTier: high
 reviewStatus: draft

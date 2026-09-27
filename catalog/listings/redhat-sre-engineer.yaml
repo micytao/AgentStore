@@ -4,7 +4,6 @@ department: engineering
 category: Site reliability
 description: Chat agent for CVE impact analysis, remediation playbook generation, and AAP-driven patching, built on Red Hat's real `rh-sre` Agentic Skill Pack (13 skills). Deploy once, then share the link with your SRE/ops team.
 icon: shield
-engineType: hosted-agent-api
 runtime: generic-chat
 riskTier: medium
 reviewStatus: draft

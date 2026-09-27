@@ -43,13 +43,9 @@ export function openshiftInsecureTls(): boolean {
   return process.env.OPENSHIFT_INSECURE_TLS === "true";
 }
 
-/** Image for the agent-runtime container (apps/agent-runtime), reused for
- * both the persistent-chat shape (provision-generic-agent.yml's
- * `agent_runtime_image`, RUN_MODE unset) and the one-shot draft shape
- * (provision-agent.yml's `agent_runtime_image`, RUN_MODE=once) — one
- * image, one Skills engine, two run modes. Replaces the old, separate
- * `agent-runner:dev` image built from the now-retired
- * ansible/agent-runner/. */
+/** Image for the agent-runtime container (apps/agent-runtime), deployed
+ * once per `generic-chat` listing as a persistent chat Deployment by
+ * provision-generic-agent.yml's `agent_runtime_image`. */
 export function agentRuntimeImage(): string {
   return process.env.AGENT_RUNTIME_IMAGE || "agent-runtime:dev";
 }

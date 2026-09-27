@@ -4,7 +4,6 @@ department: support
 category: Customer support
 description: Chat agent for CVE lookups, product lifecycle questions, and support-severity triage, built on Red Hat's real `rh-basic` Agentic Skill Pack. Deploy once, then share the link with your support team.
 icon: headset
-engineType: hosted-agent-api
 runtime: generic-chat
 riskTier: low
 reviewStatus: draft

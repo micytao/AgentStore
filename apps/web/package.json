@@ -10,7 +10,6 @@
   "dependencies": {
     "@agentstore/agent-core": "*",
     "@agentstore/engine-ansible": "*",
-    "@agentstore/engine-fake": "*",
     "@agentstore/engine-openshell": "*",
     "@agentstore/shared": "*",
     "@modelcontextprotocol/sdk": "^1.30.0",

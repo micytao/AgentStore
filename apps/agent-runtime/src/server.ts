@@ -2,10 +2,9 @@ import http, { type IncomingMessage, type ServerResponse } from "node:http";
 import { URL } from "node:url";
 import { callProvider, callProviderStream, HOP_LIMIT_FALLBACK_MESSAGE, runTurn, type TurnEvent } from "@agentstore/agent-core";
 import { chatPageHtml } from "./chatPage";
-import { loadConfig, port, runMode } from "./config";
+import { loadConfig, port } from "./config";
 import { logError, logInfo, logWarn } from "./log";
 import { callTool, connectConfiguredServers, listTools } from "./mcpTools";
-import { runOnce } from "./runOnce";
 import { getOrCreateSession, setCookieHeader, touchSession } from "./sessionStore";
 
 /**
@@ -191,14 +190,6 @@ process.on("unhandledRejection", (reason) => {
 });
 
 async function main(): Promise<void> {
-  if (runMode() === "once") {
-    // Skills Agent one-shot draft shape — run one turn and exit instead of
-    // serving the chat endpoint. See runOnce.ts for the stdout contract
-    // ansible/provision-agent.yml depends on.
-    await runOnce();
-    process.exit(process.exitCode ?? 0);
-    return;
-  }
   const config = loadConfig();
   await connectConfiguredServers(config.mcpServers);
   server.listen(port(), () => {

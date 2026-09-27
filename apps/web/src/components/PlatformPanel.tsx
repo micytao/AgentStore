@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import type {
-  EngineSettings,
   PlatformConnectionStatus,
   PlatformSettings,
   PlatformStatus,
@@ -30,19 +29,12 @@ import {
   GalleryItem,
   Label,
   Spinner,
-  Switch,
   TextInput,
   Title,
 } from "@patternfly/react-core";
 import { Table, Tbody, Td, Th, Thead, Tr } from "@patternfly/react-table";
 import { SecretField } from "@/components/SecretField";
-import {
-  fetchEngineSettings,
-  fetchPlatformStatus,
-  fetchSecrets,
-  testPlatformConnection,
-  updateEngineSettings,
-} from "@/lib/api";
+import { fetchPlatformStatus, fetchSecrets, testPlatformConnection } from "@/lib/api";
 
 type TestOutcome = { ok: boolean; message: string };
 
@@ -126,7 +118,6 @@ export function PlatformPanel() {
   const [status, setStatus] = useState<PlatformStatus | null>(null);
   const [draft, setDraft] = useState<PlatformSettings | null>(null);
   const [secrets, setSecrets] = useState<SecretSummary[]>([]);
-  const [engineSettings, setEngineSettings] = useState<EngineSettings | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [testing, setTesting] = useState<"aap" | "openshift" | null>(null);
   const [testResults, setTestResults] = useState<{
@@ -146,9 +137,6 @@ export function PlatformPanel() {
         setStatus(next);
         setDraft(next.settings);
       })
-      .catch((err: Error) => setError(err.message));
-    fetchEngineSettings()
-      .then(setEngineSettings)
       .catch((err: Error) => setError(err.message));
     loadSecrets();
   }
@@ -205,14 +193,6 @@ export function PlatformPanel() {
     } finally {
       setTesting(null);
     }
-  }
-
-  async function toggleForceSimulated() {
-    if (!engineSettings) return;
-    const next = await updateEngineSettings({
-      forceSimulated: !engineSettings.forceSimulated,
-    });
-    setEngineSettings(next);
   }
 
   if (error && !status) return <Alert variant="danger" isInline title={error} />;
@@ -373,28 +353,6 @@ export function PlatformPanel() {
           </CardBody>
         </Card>
       </FlexItem>
-
-      {engineSettings && (
-        <FlexItem>
-          <Card>
-            <CardTitle>Execution</CardTitle>
-            <CardBody>
-              <Content component={ContentVariants.p}>
-                Business listings are provisioned by AAP onto prod OpenShift. If
-                AAP is not connected, launches use a labeled simulated job
-                instead. Use this switch to force every task simulated,
-                regardless of connection status.
-              </Content>
-              <Switch
-                id="force-simulated"
-                label="Force simulated engine for every task"
-                isChecked={engineSettings.forceSimulated}
-                onChange={() => void toggleForceSimulated()}
-              />
-            </CardBody>
-          </Card>
-        </FlexItem>
-      )}
 
       <FlexItem>
         <Card>

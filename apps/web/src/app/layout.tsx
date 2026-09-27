@@ -1,7 +1,6 @@
 import "@patternfly/react-core/dist/styles/base.css";
 import "./globals.css";
 import { AppShell } from "@/components/AppShell";
-import { RoleProvider } from "@/lib/role";
 import { ThemeProvider } from "@/lib/theme";
 import type { ReactNode } from "react";
 
@@ -31,9 +30,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       </head>
       <body>
         <ThemeProvider>
-          <RoleProvider>
-            <AppShell>{children}</AppShell>
-          </RoleProvider>
+          <AppShell>{children}</AppShell>
         </ThemeProvider>
       </body>
     </html>

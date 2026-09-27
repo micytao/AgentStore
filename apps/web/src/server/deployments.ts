@@ -9,19 +9,17 @@ import {
   openshiftNamespace,
 } from "@agentstore/engine-ansible";
 import { getListing, updateListing } from "./catalog";
-import { providerFor } from "./drafting";
-import { mcpServersFor } from "./orchestrator";
+import { mcpServersFor } from "./agentRuntimeConfig";
 import { ensurePlatformEnv } from "./platform";
-import { apiKeyFor } from "./providers";
+import { apiKeyFor, providerFor } from "./providers";
 import { getSkillsByIds } from "./skills";
 
 /**
  * The `generic-chat` runtime's "deploy once" admin action: launches
  * ansible/provision-generic-agent.yml via AAP and persists progress onto
- * the listing's `deployment` field (via catalog.ts's existing
- * agentConfig-override mechanism), so every user just opens the resulting
- * `routeUrl` — no per-Task provisioning, unlike orchestrator.ts's
- * createTask()/adapterFor() path for `hosted-agent-api`/`openshell`.
+ * the listing's `deployment` field, so every admin just opens the
+ * resulting `routeUrl` — a one-time, per-listing action, not something
+ * re-provisioned per visit.
  */
 
 function now(): string {
@@ -50,8 +48,7 @@ function persistDeployment(id: string, deployment: AgentDeployment): Listing {
  * Launches (or re-launches, e.g. after a failure) the AAP job that deploys
  * this listing's generic-chat agent. Persists an initial "deploying"
  * AgentDeployment immediately and returns; the Admin UI polls
- * refreshDeployment() for progress, the same inline-progress pattern
- * TaskDetailPage.tsx already uses for Task provisioning.
+ * refreshDeployment() for progress.
  */
 export async function startDeployment(listingId: string): Promise<Listing> {
   ensurePlatformEnv();

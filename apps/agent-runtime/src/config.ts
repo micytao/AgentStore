@@ -29,13 +29,6 @@ export function port(): number {
   return Number.isFinite(n) && n > 0 ? n : 8080;
 }
 
-/** "chat" (default): serve the persistent HTTP chat endpoint, same as
- * always. "once": the Skills Agent's one-shot draft shape — run exactly
- * one turn from GOAL/SUCCESS_CRITERIA env vars and exit. See runOnce.ts. */
-export function runMode(): "chat" | "once" {
-  return process.env.RUN_MODE === "once" ? "once" : "chat";
-}
-
 function configFilePath(): string {
   return process.env.AGENT_CONFIG_FILE || "/etc/agent/config.json";
 }

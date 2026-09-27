@@ -93,33 +93,6 @@ export async function listAgentJobs(): Promise<OpenshiftJobSummary[]> {
   }));
 }
 
-export async function getJob(name: string): Promise<K8sJob | null> {
-  const ns = openshiftNamespace();
-  const response = await ocpFetch(`/apis/batch/v1/namespaces/${ns}/jobs/${name}`);
-  if (response.status === 404) return null;
-  if (!response.ok) throw new Error(`OpenShift get job ${name}: HTTP ${response.status}`);
-  return (await response.json()) as K8sJob;
-}
-
-export async function deleteJob(name: string): Promise<void> {
-  const ns = openshiftNamespace();
-  const response = await ocpFetch(
-    `/apis/batch/v1/namespaces/${ns}/jobs/${name}?propagationPolicy=Background`,
-    { method: "DELETE" }
-  );
-  if (!response.ok && response.status !== 404) {
-    throw new Error(`OpenShift delete job ${name}: HTTP ${response.status}`);
-  }
-}
-
-export async function readResultConfigMap(jobName: string): Promise<string | undefined> {
-  const ns = openshiftNamespace();
-  const response = await ocpFetch(`/api/v1/namespaces/${ns}/configmaps/${jobName}-result`);
-  if (!response.ok) return undefined;
-  const body = (await response.json()) as { data?: Record<string, string> };
-  return body.data?.draft ?? body.data?.output;
-}
-
 /** Read-back for provision-generic-agent.yml's deploy-once flow — same
  * pattern as readResultConfigMap(), just against a `<deployment_name>
  * -deploy-result` ConfigMap holding the Route host instead of a draft. */

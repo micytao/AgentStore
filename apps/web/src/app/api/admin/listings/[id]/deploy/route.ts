@@ -23,8 +23,7 @@ export async function POST(
 }
 
 /** Polls the in-flight deploy for progress — the Admin UI calls this on
- * an interval while `deployment.status === "deploying"`, the same
- * pattern used for polling Task provisioning. */
+ * an interval while `deployment.status === "deploying"`. */
 export async function GET(
   request: Request,
   context: { params: Promise<{ id: string }> }

@@ -3,6 +3,7 @@ import path from "node:path";
 import { callProvider as coreCallProvider, defaultBaseUrlFor } from "@agentstore/agent-core";
 import type { CallOptions } from "@agentstore/agent-core";
 import type {
+  Listing,
   ModelResponse,
   ProviderConfig,
   ProviderKind,
@@ -156,6 +157,19 @@ export function getActiveProvider(): ProviderConfig | undefined {
   return store().configs.find(
     (p) => p.active && (p.kind === "openai-compatible" || hasSecret(keyFor(p.id)))
   );
+}
+
+/** Resolves which configured provider a listing's deploy (generic-chat AAP
+ * deploy, or an OpenShell sandbox session) should use: its own per-agent
+ * binding if set (and it still exists), otherwise the global active
+ * provider — so listings with no explicit binding keep working. */
+export function providerFor(listing: Listing): ProviderConfig | undefined {
+  const boundId = listing.agentConfig?.providerId;
+  if (boundId) {
+    const bound = getProvider(boundId);
+    if (bound) return bound;
+  }
+  return getActiveProvider();
 }
 
 /** Returns the stored key, if any, without requiring one — callers decide

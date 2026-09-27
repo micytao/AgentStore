@@ -1,5 +1,4 @@
 import type {
-  AgentMode,
   DepartmentId,
   EngineSettings,
   Listing,
@@ -13,8 +12,6 @@ import type {
   ProviderStatus,
   SecretSummary,
   Skill,
-  Task,
-  UsageSnapshot,
 } from "@agentstore/shared";
 
 async function parse<T>(response: Response): Promise<T> {
@@ -29,64 +26,6 @@ export function fetchListings(department?: string): Promise<Listing[]> {
   const query =
     department && department !== "all" ? `?department=${department}` : "";
   return fetch(`/api/listings${query}`).then((r) => parse<Listing[]>(r));
-}
-
-export function fetchListing(id: string): Promise<Listing> {
-  return fetch(`/api/listings/${id}`).then((r) => parse<Listing>(r));
-}
-
-export function fetchTasks(): Promise<Task[]> {
-  return fetch("/api/tasks").then((r) => parse<Task[]>(r));
-}
-
-export function fetchTask(id: string): Promise<Task> {
-  return fetch(`/api/tasks/${id}`).then((r) => parse<Task>(r));
-}
-
-export function createTask(input: {
-  listingId: string;
-  mode: AgentMode;
-  gitUrl?: string;
-  target?: { goal: string; successCriteria?: string };
-}): Promise<Task> {
-  return fetch("/api/tasks", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(input),
-  }).then((r) => parse<Task>(r));
-}
-
-export function cancelTask(id: string): Promise<Task> {
-  return fetch(`/api/tasks/${id}/cancel`, { method: "POST" }).then((r) =>
-    parse<Task>(r)
-  );
-}
-
-export function approveTask(id: string): Promise<Task> {
-  return fetch(`/api/tasks/${id}/approve`, { method: "POST" }).then((r) =>
-    parse<Task>(r)
-  );
-}
-
-export function rejectTask(id: string): Promise<Task> {
-  return fetch(`/api/tasks/${id}/reject`, { method: "POST" }).then((r) =>
-    parse<Task>(r)
-  );
-}
-
-export interface InteractiveEndpoint {
-  kind: "simulated" | "openshell" | "generic-chat";
-  url?: string;
-}
-
-export function fetchTerminalEndpoint(id: string): Promise<InteractiveEndpoint> {
-  return fetch(`/api/tasks/${id}/terminal-endpoint`).then((r) =>
-    parse<InteractiveEndpoint>(r)
-  );
-}
-
-export function fetchUsage(): Promise<UsageSnapshot> {
-  return fetch("/api/usage").then((r) => parse<UsageSnapshot>(r));
 }
 
 export function updateListingAdmin(
@@ -125,6 +64,36 @@ export function deployListingAdmin(id: string): Promise<Listing> {
 /** Polls an in-flight deploy for progress; safe to call on an interval. */
 export function fetchDeploymentStatus(id: string): Promise<Listing> {
   return fetch(`/api/admin/listings/${id}/deploy`).then((r) => parse<Listing>(r));
+}
+
+/** Starts (or re-starts) an openshell listing's persistent sandbox session. */
+export function startOpenShellSession(id: string): Promise<Listing> {
+  return fetch(`/api/admin/listings/${id}/openshell-session`, { method: "POST" }).then((r) =>
+    parse<Listing>(r)
+  );
+}
+
+/** Polls an in-flight sandbox session for progress; safe to call on an interval. */
+export function fetchOpenShellSessionStatus(id: string): Promise<Listing> {
+  return fetch(`/api/admin/listings/${id}/openshell-session`).then((r) => parse<Listing>(r));
+}
+
+/** Tears down an openshell listing's sandbox session. */
+export function stopOpenShellSession(id: string): Promise<Listing> {
+  return fetch(`/api/admin/listings/${id}/openshell-session`, { method: "DELETE" }).then((r) =>
+    parse<Listing>(r)
+  );
+}
+
+export interface InteractiveEndpoint {
+  url: string;
+}
+
+/** Mints a fresh terminal token/URL for a listing's running sandbox session. */
+export function fetchListingTerminalEndpoint(id: string): Promise<InteractiveEndpoint> {
+  return fetch(`/api/admin/listings/${id}/terminal-endpoint`).then((r) =>
+    parse<InteractiveEndpoint>(r)
+  );
 }
 
 export function fetchEngineSettings(): Promise<EngineSettings> {
@@ -181,16 +150,6 @@ export function testPlatformConnection(
       openshift?: PlatformStatus["openshift"];
     }>(r)
   );
-}
-
-export function updateEngineSettings(
-  patch: Partial<EngineSettings>
-): Promise<EngineSettings> {
-  return fetch("/api/admin/engine-settings", {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(patch),
-  }).then((r) => parse<EngineSettings>(r));
 }
 
 // --- Secrets ---
@@ -356,8 +315,6 @@ export type {
   ProviderStatus,
   SecretSummary,
   Skill,
-  Task,
-  UsageSnapshot,
   PlatformSettings,
   PlatformStatus,
 };

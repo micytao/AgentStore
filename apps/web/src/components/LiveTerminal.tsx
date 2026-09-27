@@ -3,17 +3,17 @@
 import { useEffect, useRef, useState } from "react";
 import "@xterm/xterm/css/xterm.css";
 import { Alert, Card, CardBody, CardTitle } from "@patternfly/react-core";
-import { fetchTerminalEndpoint } from "@/lib/api";
+import { fetchListingTerminalEndpoint } from "@/lib/api";
 
 /**
- * Real interactive terminal for an OpenShell-backed task. Connects
- * directly to the Agent Sandbox Service's Route — not through the
- * console — using a short-lived signed token minted just for this
- * connection (see /api/tasks/[id]/terminal-endpoint). SimulatedTerminal
- * is untouched; TaskDetailPage.tsx renders this instead of it only when
- * `task.status.interactive?.kind === "openshell"`.
+ * Real interactive terminal for an OpenShell listing's persistent sandbox
+ * session. Connects directly to the Agent Sandbox Service's Route — not
+ * through the console — using a short-lived signed token minted just for
+ * this connection (see /api/admin/listings/[id]/terminal-endpoint).
+ * Rendered inline in the Admin → Catalog Agent config panel once a
+ * listing's `openshellSession.status === "running"`.
  */
-export function LiveTerminal({ taskId, listingName }: { taskId: string; listingName: string }) {
+export function LiveTerminal({ listingId, listingName }: { listingId: string; listingName: string }) {
   const hostRef = useRef<HTMLDivElement>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -24,11 +24,11 @@ export function LiveTerminal({ taskId, listingName }: { taskId: string; listingN
     let resizeObserver: ResizeObserver | undefined;
 
     async function boot() {
-      const endpoint = await fetchTerminalEndpoint(taskId).catch((err: Error) => {
+      const endpoint = await fetchListingTerminalEndpoint(listingId).catch((err: Error) => {
         throw new Error(`Could not reach the Agent Sandbox Service: ${err.message}`);
       });
-      if (endpoint.kind !== "openshell" || !endpoint.url) {
-        throw new Error("No live terminal is available for this task yet.");
+      if (!endpoint.url) {
+        throw new Error("No live terminal is available for this listing yet.");
       }
       if (disposed || !hostRef.current) return;
 
@@ -86,7 +86,7 @@ export function LiveTerminal({ taskId, listingName }: { taskId: string; listingN
       socket?.close();
       term?.dispose();
     };
-  }, [taskId]);
+  }, [listingId]);
 
   return (
     <Card isCompact>
