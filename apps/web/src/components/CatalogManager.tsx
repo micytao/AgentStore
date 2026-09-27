@@ -125,27 +125,31 @@ export function CatalogManager() {
       </FlexItem>
 
       <FlexItem>
-        <Table aria-label="Catalog listings">
-          <Thead>
-            <Tr>
-              <Th width={30}>Listing</Th>
-              <Th modifier="nowrap">Risk tier</Th>
-              <Th modifier="nowrap">Review status</Th>
-              <Th modifier="nowrap">Price</Th>
-              <Th screenReaderText="Actions" />
-            </Tr>
-          </Thead>
-          {listings.map((listing) => (
-            <ListingRow
-              key={listing.id}
-              listing={listing}
-              providers={providers}
-              mcpServers={mcpServers}
-              skills={skills}
-              onChange={loadAll}
-            />
-          ))}
-        </Table>
+        <Card>
+          <CardBody>
+            <Table aria-label="Catalog listings">
+              <Thead>
+                <Tr>
+                  <Th width={30}>Listing</Th>
+                  <Th modifier="nowrap">Risk tier</Th>
+                  <Th modifier="nowrap">Review status</Th>
+                  <Th modifier="nowrap">Price</Th>
+                  <Th screenReaderText="Actions" />
+                </Tr>
+              </Thead>
+              {listings.map((listing) => (
+                <ListingRow
+                  key={listing.id}
+                  listing={listing}
+                  providers={providers}
+                  mcpServers={mcpServers}
+                  skills={skills}
+                  onChange={loadAll}
+                />
+              ))}
+            </Table>
+          </CardBody>
+        </Card>
       </FlexItem>
 
       <FlexItem>

@@ -6,7 +6,7 @@ export default function LLMsSettingsPage() {
     <AdminPageHeader
       eyebrow="Settings"
       title="LLMs"
-      description="Manage model providers, MCP tool servers, and the OpenShell gateway/sandbox service."
+      description="Manage model providers, MCP tool servers, and reusable agent skills."
     >
       <LLMsPanel />
     </AdminPageHeader>

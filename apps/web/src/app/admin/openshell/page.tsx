@@ -1,0 +1,14 @@
+import { AdminPageHeader } from "@/components/AdminPageHeader";
+import { OpenShellPanel } from "@/components/OpenShellPanel";
+
+export default function OpenShellSettingsPage() {
+  return (
+    <AdminPageHeader
+      eyebrow="Settings"
+      title="OpenShell"
+      description="Onboard the OpenShell gateway and monitor the Agent Sandbox Service that powers Collaborative Agents."
+    >
+      <OpenShellPanel />
+    </AdminPageHeader>
+  );
+}

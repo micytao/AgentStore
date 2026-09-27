@@ -24,12 +24,12 @@ import {
 } from "@patternfly/react-core";
 import {
   BarsIcon,
-  BookIcon,
   BrainIcon,
   CloudIcon,
   HomeIcon,
   MoonIcon,
   SunIcon,
+  TerminalIcon,
   ThLargeIcon,
 } from "@patternfly/react-icons";
 import { useTheme } from "@/lib/theme";
@@ -63,7 +63,7 @@ const SETTINGS_ITEMS: {
 }[] = [
   { href: "/admin/platform", label: "Platform", icon: CloudIcon },
   { href: "/admin/llms", label: "LLMs", icon: BrainIcon },
-  { href: "/admin/skills", label: "Skills", icon: BookIcon },
+  { href: "/admin/openshell", label: "OpenShell", icon: TerminalIcon },
 ];
 
 export function AppShell({ children }: { children: ReactNode }) {

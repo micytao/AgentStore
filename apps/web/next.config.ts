@@ -22,6 +22,9 @@ const nextConfig: NextConfig = {
     return [
       { source: "/admin", destination: "/admin/platform", permanent: false },
       { source: "/admin/catalog", destination: "/catalog", permanent: false },
+      // Skills moved from its own Settings page into an LLMs sub-tab when
+      // OpenShell was promoted to take its top-level slot instead.
+      { source: "/admin/skills", destination: "/admin/llms", permanent: false },
     ];
   },
 };

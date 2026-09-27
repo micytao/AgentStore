@@ -1,12 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import type { ComponentType, ReactNode } from "react";
 import type {
   PlatformConnectionStatus,
   PlatformSettings,
   PlatformStatus,
   SecretSummary,
 } from "@agentstore/shared";
+import { AnsibleTowerIcon, OpenshiftIcon } from "@patternfly/react-icons";
 import {
   Alert,
   Bullseye,
@@ -25,8 +27,6 @@ import {
   FlexItem,
   Form,
   FormGroup,
-  Gallery,
-  GalleryItem,
   Label,
   Spinner,
   TextInput,
@@ -46,14 +46,31 @@ function TestBanner({ result, pending }: { result?: TestOutcome; pending?: boole
   return <Alert variant={result.ok ? "success" : "danger"} isInline isPlain title={result.message} />;
 }
 
+/** Icon + text title, so every AAP/OpenShift card on this page reads as
+ * "belonging to" that product at a glance instead of being plain text —
+ * same icon+FlexItem CardTitle pattern LandingPage.tsx uses for its value
+ * prop cards. */
+function IconTitle({ icon: Icon, children }: { icon: ComponentType; children: ReactNode }) {
+  return (
+    <Flex spaceItems={{ default: "spaceItemsSm" }} alignItems={{ default: "alignItemsCenter" }} flexWrap={{ default: "nowrap" }}>
+      <FlexItem style={{ display: "flex" }}>
+        <Icon />
+      </FlexItem>
+      <FlexItem>{children}</FlexItem>
+    </Flex>
+  );
+}
+
 function ConnectionCard({
   name,
+  icon,
   connection,
   url,
   details,
   result,
 }: {
   name: string;
+  icon: ComponentType;
   connection: PlatformConnectionStatus;
   url?: string;
   details?: { label: string; value: string }[];
@@ -74,8 +91,10 @@ function ConnectionCard({
   const showSuccess = Boolean(result?.ok);
 
   return (
-    <Card isCompact>
-      <CardTitle>{name}</CardTitle>
+    <Card isCompact style={{ height: "100%" }}>
+      <CardTitle>
+        <IconTitle icon={icon}>{name}</IconTitle>
+      </CardTitle>
       <CardBody>
         <DescriptionList isCompact>
           <DescriptionListGroup>
@@ -247,21 +266,27 @@ export function PlatformPanel() {
           <CardBody>
             <Content component={ContentVariants.p}>
               AgentStore is a console. It talks to Ansible Automation Platform to
-              provision, and to prod OpenShift to watch the Job that actually
+              provision, and to OpenShift to watch the Job that actually
               runs. URLs and tokens for both are configured below.
             </Content>
-            <Gallery hasGutter minWidths={{ default: "300px" }}>
-              <GalleryItem>
+            <Flex
+              spaceItems={{ default: "spaceItemsMd" }}
+              alignItems={{ default: "alignItemsStretch" }}
+              flexWrap={{ default: "wrap" }}
+            >
+              <FlexItem flex={{ default: "flex_1" }} style={{ minWidth: "300px" }}>
                 <ConnectionCard
                   name="Ansible Automation Platform"
+                  icon={AnsibleTowerIcon}
                   connection={status.aap}
                   url={status.aap.configured ? status.settings.aapControllerUrl : undefined}
                   result={testResults.aap}
                 />
-              </GalleryItem>
-              <GalleryItem>
+              </FlexItem>
+              <FlexItem flex={{ default: "flex_1" }} style={{ minWidth: "300px" }}>
                 <ConnectionCard
-                  name="OpenShift (prod)"
+                  name="OpenShift"
+                  icon={OpenshiftIcon}
                   connection={status.openshift}
                   url={status.openshift.configured ? status.settings.openshiftApiUrl : undefined}
                   details={
@@ -271,8 +296,8 @@ export function PlatformPanel() {
                   }
                   result={testResults.openshift}
                 />
-              </GalleryItem>
-            </Gallery>
+              </FlexItem>
+            </Flex>
           </CardBody>
         </Card>
       </FlexItem>
@@ -281,7 +306,9 @@ export function PlatformPanel() {
         <Card>
           <CardTitle>
             <Flex justifyContent={{ default: "justifyContentSpaceBetween" }} alignItems={{ default: "alignItemsCenter" }}>
-              <FlexItem>AAP controller</FlexItem>
+              <FlexItem>
+                <IconTitle icon={AnsibleTowerIcon}>AAP controller</IconTitle>
+              </FlexItem>
               <FlexItem>
                 <Button variant="secondary" isDisabled={testing !== null} onClick={() => void test("aap")}>
                   {testing === "aap" ? "Testing…" : "Test"}
@@ -321,7 +348,9 @@ export function PlatformPanel() {
         <Card>
           <CardTitle>
             <Flex justifyContent={{ default: "justifyContentSpaceBetween" }} alignItems={{ default: "alignItemsCenter" }}>
-              <FlexItem>Prod OpenShift</FlexItem>
+              <FlexItem>
+                <IconTitle icon={OpenshiftIcon}>OpenShift</IconTitle>
+              </FlexItem>
               <FlexItem>
                 <Button variant="secondary" isDisabled={testing !== null} onClick={() => void test("openshift")}>
                   {testing === "openshift" ? "Testing…" : "Test"}
@@ -356,7 +385,9 @@ export function PlatformPanel() {
 
       <FlexItem>
         <Card>
-          <CardTitle>Recent AAP jobs</CardTitle>
+          <CardTitle>
+            <IconTitle icon={AnsibleTowerIcon}>Recent AAP jobs</IconTitle>
+          </CardTitle>
           <CardBody>
             {status.aap.recentJobs.length === 0 ? (
               <Content component={ContentVariants.small}>No jobs yet — or AAP is not connected.</Content>
@@ -398,7 +429,9 @@ export function PlatformPanel() {
 
       <FlexItem>
         <Card>
-          <CardTitle>Agent Jobs on OpenShift</CardTitle>
+          <CardTitle>
+            <IconTitle icon={OpenshiftIcon}>Agent Jobs on OpenShift</IconTitle>
+          </CardTitle>
           <CardBody>
             {status.openshift.jobs.length === 0 ? (
               <Content component={ContentVariants.small}>

@@ -391,7 +391,7 @@ export const SECRET_SLOTS: SecretSlot[] = [
     key: "OPENSHIFT_TOKEN",
     label: "OpenShift API token",
     description:
-      "Bearer token used to watch and stop agent Jobs on the prod OpenShift cluster.",
+      "Bearer token used to watch and stop agent Jobs on the OpenShift cluster.",
     usedBy: "engine-ansible adapter / Platform portal",
     group: "platform",
   },
