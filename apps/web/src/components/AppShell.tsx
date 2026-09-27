@@ -6,6 +6,7 @@ import { useState, type ReactNode } from "react";
 import {
   Avatar,
   Brand,
+  Button,
   Dropdown,
   DropdownItem,
   DropdownList,
@@ -23,12 +24,27 @@ import {
   PageSidebar,
   PageSidebarBody,
   PageToggleButton,
+  Tooltip,
 } from "@patternfly/react-core";
-import { BarsIcon, TasksIcon, ThIcon, UserCogIcon } from "@patternfly/react-icons";
+import {
+  BarsIcon,
+  MoonIcon,
+  SunIcon,
+  TasksIcon,
+  ThIcon,
+  UserCogIcon,
+} from "@patternfly/react-icons";
 import type { ComponentType } from "react";
 import type { Role } from "@agentstore/shared";
 import { useRole } from "@/lib/role";
+import { useTheme } from "@/lib/theme";
 import { UsageChip } from "./UsageChip";
+
+/** Red rounded-square badge with a bold monoline "A" mark — drawn as
+ * strokes (not a system-font glyph) so it renders identically everywhere
+ * a data-URI <img> shows up, with no font-loading dependency. */
+const BRAND_MARK_SRC =
+  "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 28 28'%3E%3Crect width='28' height='28' rx='7' fill='%23c9190b'/%3E%3Cpath d='M14 7L8 22M14 7L20 22M10.2 16.5L17.8 16.5' fill='none' stroke='white' stroke-width='3.1' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E";
 
 const NAV_ITEMS: {
   href: string;
@@ -62,7 +78,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           <MastheadLogo component={(props) => <Link {...props} href="/" />}>
             <Brand
               className="agentstore-brand-mark"
-              src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 28 28'%3E%3Crect width='28' height='28' rx='6' fill='%23c9190b'/%3E%3Cpath d='M14 6.4L16.6 11.9 22.6 12.9 18.3 17.2 19.3 23.2 14 20.3 8.7 23.2 9.7 17.2 5.4 12.9 11.4 11.9 14 6.4Z' fill='white'/%3E%3C/svg%3E"
+              src={BRAND_MARK_SRC}
               alt="AgentStore"
             />
             <span className="agentstore-brand-text">Agent Store</span>
@@ -71,6 +87,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       </MastheadMain>
       <MastheadContent>
         <div className="agentstore-masthead-actions">
+          <ThemeToggle />
           <UsageChip />
           <RoleSwitcher />
         </div>
@@ -110,6 +127,22 @@ export function AppShell({ children }: { children: ReactNode }) {
     >
       {children}
     </Page>
+  );
+}
+
+function ThemeToggle() {
+  const { theme, toggleTheme } = useTheme();
+  const isDark = theme === "dark";
+
+  return (
+    <Tooltip content={isDark ? "Switch to light theme" : "Switch to dark theme"}>
+      <Button
+        variant="plain"
+        onClick={toggleTheme}
+        aria-label={isDark ? "Switch to light theme" : "Switch to dark theme"}
+        icon={isDark ? <SunIcon /> : <MoonIcon />}
+      />
+    </Tooltip>
   );
 }
 

@@ -34,38 +34,11 @@ a {
   color: inherit;
 }
 
-/* Dark masthead + dark nav sidebar, matching the OpenShift Console / AAP
- * chrome. PatternFly v6's ".pf-v6-theme-dark" tokens only activate when
- * applied at :root, so they can't be scoped to just these two regions while
- * keeping the rest of the app in the light theme. Instead we override the
- * specific component tokens Masthead/PageSidebar/Nav read from, using
- * PatternFly's own dark gray/blue palette values. */
-/* PatternFly's own masthead.css sets --pf-v6-c-masthead--BackgroundColor
- * directly on .pf-v6-c-masthead too (not just inherited from an ancestor
- * like the sidebar's token is), so an equal-specificity override here can
- * lose on source order. Bump specificity with :root so it always wins. */
-:root .pf-v6-c-masthead {
-  --pf-v6-c-masthead--BackgroundColor: #151515;
-  --pf-v6-c-masthead--BorderColor: transparent;
-  color: #fff;
-}
-
-.pf-v6-c-page__sidebar {
-  --pf-v6-c-page__sidebar--BackgroundColor: #1f1f1f;
-  --pf-v6-c-page__sidebar--xl--BackgroundColor: #1f1f1f;
-  --pf-v6-c-page__sidebar--BorderInlineEndColor: transparent;
-}
-
-.pf-v6-c-page__sidebar .pf-v6-c-nav__link {
-  --pf-v6-c-nav__link--Color: #d2d2d2;
-  --pf-v6-c-nav__link--hover--Color: #fff;
-  --pf-v6-c-nav__link--hover--BackgroundColor: rgba(255, 255, 255, 0.08);
-  --pf-v6-c-nav__link--m-current--Color: #fff;
-  --pf-v6-c-nav__link--m-current--BackgroundColor: rgba(255, 255, 255, 0.1);
-  --pf-v6-c-nav__link--BorderColor: #2b62d9;
-  --pf-v6-c-nav__link-icon--Color: #b8bbbe;
-  --pf-v6-c-nav__link--m-current__link-icon--Color: #fff;
-}
+/* Light/dark mode is a user-toggleable, whole-app theme (see
+ * src/lib/theme.tsx) rather than a permanently-dark masthead/sidebar: we
+ * just add/remove PatternFly v6's own ".pf-v6-theme-dark" class on <html>
+ * and let its built-in tokens recolor Masthead, PageSidebar, Nav, Card,
+ * etc. together, so the header and body are always in sync. */
 
 /* AppShell brand mark + masthead action row. */
 .pf-v6-c-masthead__logo {
@@ -82,7 +55,9 @@ a {
 .agentstore-brand-text {
   margin-left: 0.6rem;
   font-weight: 600;
-  color: #fff;
+  /* No hardcoded color: the masthead now follows the light/dark toggle, so
+   * this should inherit whichever text color PatternFly's current theme
+   * sets on the page (dark text on light, light text on dark). */
   white-space: nowrap;
 }
 
