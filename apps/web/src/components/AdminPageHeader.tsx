@@ -4,10 +4,10 @@ import type { ReactNode } from "react";
 import { Content, ContentVariants, PageSection, Title } from "@patternfly/react-core";
 
 /**
- * Shared page shell for every Settings sub-page (Catalog/Platform/LLMs/
- * Skills) — the sub-navigation itself lives in the left sidebar (see
- * AppShell.tsx's "Settings" NavExpandable) instead of a horizontal
- * <Tabs> bar, so each Settings route renders its own header + panel.
+ * Shared page shell for a top-level section (Catalog) or a Settings
+ * sub-page (Platform/LLMs/Skills) — the sub-navigation itself lives in the
+ * left sidebar (see AppShell.tsx) instead of a horizontal <Tabs> bar, so
+ * each route renders its own header + panel.
  *
  * This is a client component so that `page.tsx` (a Server Component) never
  * imports from `@patternfly/react-core` directly — PatternFly ships no RSC
@@ -20,17 +20,22 @@ import { Content, ContentVariants, PageSection, Title } from "@patternfly/react-
 export function AdminPageHeader({
   title,
   description,
+  eyebrow,
   children,
 }: {
   title: string;
   description: string;
+  /** Small caption above the title naming the parent nav group (e.g.
+   * "Settings" for Platform/LLMs/Skills). Omitted for top-level sections
+   * like Catalog, which have no parent group to name. */
+  eyebrow?: string;
   children: ReactNode;
 }) {
   return (
     <>
       <PageSection variant="secondary">
         <Content>
-          <Content component={ContentVariants.small}>Settings</Content>
+          {eyebrow && <Content component={ContentVariants.small}>{eyebrow}</Content>}
           <Title headingLevel="h1" size="2xl">
             {title}
           </Title>

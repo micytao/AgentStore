@@ -1,7 +1,7 @@
 import { AdminPageHeader } from "@/components/AdminPageHeader";
 import { CatalogManager } from "@/components/CatalogManager";
 
-export default function CatalogSettingsPage() {
+export default function CatalogPage() {
   return (
     <AdminPageHeader
       title="Catalog"

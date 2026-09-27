@@ -54,11 +54,17 @@ a {
 
 .agentstore-brand-text {
   margin-left: 0.6rem;
-  font-weight: 600;
-  /* No hardcoded color: the masthead now follows the light/dark toggle, so
-   * this should inherit whichever text color PatternFly's current theme
-   * sets on the page (dark text on light, light text on dark). */
+  /* Tracked-out uppercase wordmark, bold and in the brand red — a "tech
+   * brand" look distinct from the rest of the UI's normal sans-serif text,
+   * and (unlike a gradient/mono treatment) still reads cleanly in both
+   * light and dark mode since it's a single flat, saturated color. */
+  font-family: inherit;
+  font-size: 1.05rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
   white-space: nowrap;
+  color: #c9190b;
 }
 
 .agentstore-masthead-actions {

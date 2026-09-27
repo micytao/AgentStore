@@ -27,29 +27,40 @@ import {
   BookIcon,
   BrainIcon,
   CloudIcon,
+  HomeIcon,
   MoonIcon,
   SunIcon,
   ThLargeIcon,
-  UserCogIcon,
 } from "@patternfly/react-icons";
 import { useTheme } from "@/lib/theme";
 
-/** Red rounded-square badge with a bold monoline "A" mark — drawn as
- * strokes (not a system-font glyph) so it renders identically everywhere
- * a data-URI <img> shows up, with no font-loading dependency. */
+/** Red hexagon badge with a bold monoline "A" mark — drawn as strokes (not
+ * a system-font glyph) so it renders identically everywhere a data-URI
+ * <img> shows up, with no font-loading dependency. The hexagon (rather
+ * than, say, a literal fedora) keeps the mark original — a fedora reads as
+ * Red Hat's registered trademark, which this project has no affiliation
+ * with. */
 const BRAND_MARK_SRC =
-  "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 28 28'%3E%3Crect width='28' height='28' rx='7' fill='%23c9190b'/%3E%3Cpath d='M14 7L8 22M14 7L20 22M10.2 16.5L17.8 16.5' fill='none' stroke='white' stroke-width='3.1' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E";
+  "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 28 28'%3E%3Cpolygon points='14,1 25.3,7.5 25.3,20.5 14,27 2.7,20.5 2.7,7.5' fill='%23c9190b'/%3E%3Cpath d='M14 7L8 22M14 7L20 22M10.2 16.5L17.8 16.5' fill='none' stroke='white' stroke-width='3.1' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E";
 
 /** AgentStore is an admin-only console (end-user auth/roles are OpenShift's
- * job once this is deployed there — see docs/DEFERRED.md), so the sidebar
- * is just this one "Settings" group with a sub-item per admin section,
- * instead of a Catalog/My Tasks/Admin top-level split. */
+ * job once this is deployed there — see docs/DEFERRED.md). The sidebar is
+ * two top-level items (Landing Page, Catalog) plus a "Settings" group for
+ * the remaining admin sections. */
+const TOP_LEVEL_ITEMS: {
+  href: string;
+  label: string;
+  icon: ComponentType;
+}[] = [
+  { href: "/", label: "Landing Page", icon: HomeIcon },
+  { href: "/catalog", label: "Catalog", icon: ThLargeIcon },
+];
+
 const SETTINGS_ITEMS: {
   href: string;
   label: string;
   icon: ComponentType;
 }[] = [
-  { href: "/admin/catalog", label: "Catalog", icon: ThLargeIcon },
   { href: "/admin/platform", label: "Platform", icon: CloudIcon },
   { href: "/admin/llms", label: "LLMs", icon: BrainIcon },
   { href: "/admin/skills", label: "Skills", icon: BookIcon },
@@ -98,12 +109,17 @@ export function AppShell({ children }: { children: ReactNode }) {
       <PageSidebarBody>
         <Nav aria-label="Agent Store">
           <NavList>
-            <NavExpandable
-              title="Settings"
-              icon={<UserCogIcon />}
-              isActive={settingsActive}
-              isExpanded
-            >
+            {TOP_LEVEL_ITEMS.map((item) => {
+              const Icon = item.icon;
+              // "/" is exact-match only (startsWith would match every route).
+              const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
+              return (
+                <NavItem key={item.href} isActive={active} icon={<Icon />}>
+                  <Link href={item.href}>{item.label}</Link>
+                </NavItem>
+              );
+            })}
+            <NavExpandable title="Settings" isActive={settingsActive} isExpanded>
               {SETTINGS_ITEMS.map((item) => {
                 const Icon = item.icon;
                 const active = pathname.startsWith(item.href);

@@ -4,6 +4,7 @@ import { SkillsPanel } from "@/components/SkillsPanel";
 export default function SkillsSettingsPage() {
   return (
     <AdminPageHeader
+      eyebrow="Settings"
       title="Skills"
       description="Author reusable skill instructions and attach them to agents in the Catalog."
     >

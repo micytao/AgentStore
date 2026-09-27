@@ -4,6 +4,7 @@ import { PlatformPanel } from "@/components/PlatformPanel";
 export default function PlatformSettingsPage() {
   return (
     <AdminPageHeader
+      eyebrow="Settings"
       title="Platform"
       description="Connect Ansible Automation Platform and OpenShift so agents can be deployed for real."
     >

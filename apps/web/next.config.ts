@@ -16,11 +16,12 @@ const nextConfig: NextConfig = {
     "@patternfly/react-table",
   ],
   async redirects() {
-    // AgentStore is an admin-only console — every route collapses into the
-    // Settings sub-pages under /admin/*.
+    // "/" now serves the real Landing Page (see app/page.tsx) instead of
+    // redirecting. Catalog is a top-level section at /catalog; "/admin"
+    // bare now falls through to the first remaining Settings sub-page.
     return [
-      { source: "/", destination: "/admin/catalog", permanent: false },
-      { source: "/admin", destination: "/admin/catalog", permanent: false },
+      { source: "/admin", destination: "/admin/platform", permanent: false },
+      { source: "/admin/catalog", destination: "/catalog", permanent: false },
     ];
   },
 };
