@@ -26,7 +26,15 @@ version: 3
 
 images:
   base_image:
-    name: quay.io/ansible/ansible-runner:latest
+    # quay.io/ansible/ansible-runner:latest looks like the obvious
+    # choice but is the wrong image: it's frozen since April 2022,
+    # permanently stuck on ansible-core 2.12.5 / an old Python (2.12.5
+    # is too old for any current kubernetes.core release, and one of
+    # its own bundled dependencies crashes with "cannot import name
+    # 'files' from importlib.resources" -- a Python 3.9+ stdlib API --
+    # when actually running a playbook). awx-ee is the actively
+    # maintained image actually meant to be extended into custom EEs.
+    name: quay.io/ansible/awx-ee:latest
 
 dependencies:
   galaxy: requirements.yml

@@ -10,7 +10,15 @@
 # Containerfile from execution-environment.yml on the fly. If you change
 # what execution-environment.yml installs, mirror the change here too so
 # both build paths produce an equivalent image.
-FROM quay.io/ansible/ansible-runner:latest
+#
+# Base image: awx-ee, not the more obvious-looking
+# quay.io/ansible/ansible-runner — that image is frozen since April
+# 2022 (permanently stuck on ansible-core 2.12.5 / an old Python), and
+# one of its bundled dependencies crashes with "cannot import name
+# 'files' from importlib.resources" — a Python 3.9+ stdlib API — the
+# moment a playbook actually runs. awx-ee is the actively maintained
+# image actually meant to be extended into custom EEs.
+FROM quay.io/ansible/awx-ee:latest
 
 COPY requirements.yml /tmp/requirements.yml
 RUN ansible-galaxy collection install -r /tmp/requirements.yml \
@@ -18,14 +26,10 @@ RUN ansible-galaxy collection install -r /tmp/requirements.yml \
 
 # Installed into an isolated venv, NOT the base image's system Python
 # site-packages, which `ansible-core`/`ansible-runner` themselves also
-# use. A plain `pip3 install` here can silently upgrade shared
-# transitive dependencies (e.g. importlib-metadata/zipp) to versions
-# that break ansible-core's own plugin loading on this image's Python
-# 3.8 ("cannot import name 'files' from importlib.resources" at
-# playbook run time -- that's Python 3.9+ stdlib API). `ansible-builder
-# build` (Option A, ../README.md) avoids this automatically by always
-# installing a collection's Python dependencies into their own venv;
-# this replicates that for the OpenShift BuildConfig path.
+# use — a plain `pip3 install` here can upgrade shared transitive
+# dependencies out from under them. `ansible-builder build` (Option A,
+# ../README.md) does this automatically for every collection's Python
+# dependencies; this replicates it for the OpenShift BuildConfig path.
 # --system-site-packages keeps everything already in the base image
 # (PyYAML, jinja2, etc. that ansible.builtin modules expect) visible
 # from inside the venv, so only the *new* packages below are isolated.
@@ -42,14 +46,11 @@ ENV ANSIBLE_PYTHON_INTERPRETER=/opt/ansible-venv/bin/python3
 # an Ansible collection or a pip/system package, so it's installed via
 # the upstream get-helm-3 script, same as execution-environment.yml's
 # additional_build_steps. get-helm-3 shells out to `openssl` to verify
-# the downloaded binary's checksum; quay.io/ansible/ansible-runner
-# doesn't include it, and installing it via a package manager isn't
-# reliable here either (this base image's dnf/yum repos point at
-# CentOS's public mirrorlist, which many locked-down cluster networks
-# — including OpenShift build pods with restricted egress — can't
-# resolve). VERIFY_CHECKSUM=false skips that verification step
-# entirely instead, needing only `curl` (to GitHub), which already
-# works in this environment.
+# the downloaded binary's checksum; VERIFY_CHECKSUM=false skips that
+# step and relies on curl (to GitHub) alone, sidestepping both "this
+# base image doesn't have openssl" and "this base image's package
+# manager can't resolve its own mirrors from a locked-down cluster
+# network" failure modes we've already hit once each.
 RUN curl -fsSL -o /tmp/get-helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 \
     && chmod 700 /tmp/get-helm.sh \
     && VERIFY_CHECKSUM=false /tmp/get-helm.sh --no-sudo \
