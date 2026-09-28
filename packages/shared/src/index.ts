@@ -63,9 +63,11 @@ export interface Listing {
   id: string;
   name: string;
   department: DepartmentId;
-  category: string;
+  /** Free-text sub-grouping within a department, admin-facing display only
+   * (table subtitle, wizard review card) — not used for filtering/search
+   * logic, so it's optional. */
+  category?: string;
   description: string;
-  icon: string;
   riskTier: RiskTier;
   reviewStatus: ReviewStatus;
   /** What this agent costs to run — informational only; there is no
@@ -148,9 +150,8 @@ export interface Skill {
 export interface ListingCreateInput {
   name: string;
   department: DepartmentId;
-  category: string;
+  category?: string;
   description: string;
-  icon: string;
   riskTier: RiskTier;
   pricing?: Pricing;
   openshellAgent?: string;

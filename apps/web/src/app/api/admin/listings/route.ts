@@ -8,9 +8,9 @@ export async function POST(request: Request) {
   if (denied) return denied;
 
   const body = (await request.json()) as ListingCreateInput;
-  if (!body.name || !body.department || !body.category || !body.description) {
+  if (!body.name || !body.department || !body.description) {
     return NextResponse.json(
-      { error: "name, department, category, and description are required" },
+      { error: "name, department, and description are required" },
       { status: 400 }
     );
   }

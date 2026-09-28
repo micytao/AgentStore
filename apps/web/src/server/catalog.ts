@@ -264,7 +264,6 @@ export function createListing(input: ListingCreateInput): Listing {
     department: input.department,
     category: input.category,
     description: input.description,
-    icon: input.icon,
     riskTier: input.riskTier,
     reviewStatus,
     pricing: input.pricing,

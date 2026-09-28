@@ -18,6 +18,8 @@ import {
   FormGroup,
   FormSelect,
   FormSelectOption,
+  Gallery,
+  GalleryItem,
   InputGroup,
   InputGroupItem,
   Label,
@@ -30,6 +32,8 @@ import {
   TextArea,
   TextInput,
   Title,
+  ToggleGroup,
+  ToggleGroupItem,
   Wizard,
   WizardFooterWrapper,
   WizardHeader,
@@ -86,6 +90,23 @@ const REVIEW_STATUSES: ReviewStatus[] = [
   "deprecated",
 ];
 
+/** Suggested (not exhaustive) category values for the onboarding wizard,
+ * scoped *within* each Department rather than restating it. Department is
+ * "who owns/runs this" (org structure); Category is "which specific job
+ * within that department" (a drill-down, not a synonym) — e.g. Engineering
+ * splits into Software development / Site reliability / Virtualization /
+ * Platform & DevOps, mirroring how the built-in catalog's real categories
+ * (Software development, Site reliability, Virtualization) already work.
+ * Keeping this per-department (instead of one flat list) is what avoids
+ * categories that just re-spell the department name. */
+const CATEGORY_OPTIONS_BY_DEPARTMENT: Record<DepartmentId, string[]> = {
+  engineering: ["Software development", "Site reliability", "Virtualization", "Platform & DevOps"],
+  support: ["Customer support", "Technical support", "Onboarding & training", "IT helpdesk"],
+  security: ["Compliance auditing", "Vulnerability management", "Access review", "Threat detection"],
+  data: ["Analytics & reporting", "Data engineering", "BI & dashboards"],
+  finance: ["Expense management", "Payroll & HR ops", "Procurement", "Cost optimization"],
+};
+
 export function CatalogManager() {
   const [listings, setListings] = useState<Listing[] | null>(null);
   const [providers, setProviders] = useState<ProviderStatus[]>([]);
@@ -93,6 +114,10 @@ export function CatalogManager() {
   const [skills, setSkills] = useState<Skill[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [showWizard, setShowWizard] = useState(false);
+  const [viewMode, setViewMode] = useState<"table" | "badge">("table");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [departmentFilter, setDepartmentFilter] = useState<DepartmentId | "all">("all");
+  const [categoryFilter, setCategoryFilter] = useState("all");
 
   function loadAll() {
     Promise.all([fetchListings(), fetchProviders(), fetchMcpServers(), fetchSkills()])
@@ -142,6 +167,31 @@ export function CatalogManager() {
     return () => clearInterval(timer);
   }, [listings]);
 
+  const categoryOptions = useMemo(() => {
+    const set = new Set<string>();
+    for (const l of listings ?? []) {
+      if (l.category) set.add(l.category);
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [listings]);
+
+  const filteredListings = useMemo(() => {
+    if (!listings) return null;
+    const query = searchQuery.trim().toLowerCase();
+    return listings.filter((l) => {
+      if (departmentFilter !== "all" && l.department !== departmentFilter) return false;
+      if (categoryFilter !== "all" && l.category !== categoryFilter) return false;
+      if (
+        query &&
+        !l.name.toLowerCase().includes(query) &&
+        !l.description.toLowerCase().includes(query)
+      ) {
+        return false;
+      }
+      return true;
+    });
+  }, [listings, searchQuery, departmentFilter, categoryFilter]);
+
   if (error) return <Alert variant="danger" isInline title={error} />;
   if (!listings) {
     return (
@@ -150,6 +200,7 @@ export function CatalogManager() {
       </Bullseye>
     );
   }
+  const visibleListings = filteredListings ?? [];
 
   return (
     <Flex direction={{ default: "column" }} spaceItems={{ default: "spaceItemsLg" }}>
@@ -165,31 +216,127 @@ export function CatalogManager() {
       </FlexItem>
 
       <FlexItem>
-        <Card>
-          <CardBody>
-            <Table aria-label="Catalog listings">
-              <Thead>
-                <Tr>
-                  <Th width={30}>Listing</Th>
-                  <Th modifier="nowrap">Risk tier</Th>
-                  <Th modifier="nowrap">Review status</Th>
-                  <Th modifier="nowrap">Price</Th>
-                  <Th screenReaderText="Actions" />
-                </Tr>
-              </Thead>
-              {listings.map((listing) => (
-                <ListingRow
-                  key={listing.id}
-                  listing={listing}
-                  providers={providers}
-                  mcpServers={mcpServers}
-                  skills={skills}
-                  onChange={loadAll}
-                />
+        <Flex
+          spaceItems={{ default: "spaceItemsMd" }}
+          alignItems={{ default: "alignItemsFlexEnd" }}
+          flexWrap={{ default: "wrap" }}
+        >
+          <FlexItem flex={{ default: "flex_1" }} style={{ minWidth: "16rem" }}>
+            <SearchInput
+              aria-label="Search listings"
+              placeholder="Search by name or description…"
+              value={searchQuery}
+              onChange={(_e, v) => setSearchQuery(v)}
+              onClear={() => setSearchQuery("")}
+            />
+          </FlexItem>
+          <FlexItem>
+            <FormSelect
+              aria-label="Filter by department"
+              value={departmentFilter}
+              onChange={(_e, v) => setDepartmentFilter(v as DepartmentId | "all")}
+            >
+              {DEPARTMENTS.map((d) => (
+                <FormSelectOption key={d.id} value={d.id} label={d.name} />
               ))}
-            </Table>
-          </CardBody>
-        </Card>
+            </FormSelect>
+          </FlexItem>
+          <FlexItem>
+            <FormSelect
+              aria-label="Filter by category"
+              value={categoryFilter}
+              onChange={(_e, v) => setCategoryFilter(v)}
+            >
+              <FormSelectOption value="all" label="All categories" />
+              {categoryOptions.map((c) => (
+                <FormSelectOption key={c} value={c} label={c} />
+              ))}
+            </FormSelect>
+          </FlexItem>
+          {(searchQuery || departmentFilter !== "all" || categoryFilter !== "all") && (
+            <FlexItem>
+              <Button
+                variant="link"
+                onClick={() => {
+                  setSearchQuery("");
+                  setDepartmentFilter("all");
+                  setCategoryFilter("all");
+                }}
+              >
+                Clear filters
+              </Button>
+            </FlexItem>
+          )}
+          <FlexItem align={{ default: "alignRight" }}>
+            <ToggleGroup aria-label="Catalog view">
+              <ToggleGroupItem
+                text="Table"
+                isSelected={viewMode === "table"}
+                onChange={() => setViewMode("table")}
+              />
+              <ToggleGroupItem
+                text="Badge"
+                isSelected={viewMode === "badge"}
+                onChange={() => setViewMode("badge")}
+              />
+            </ToggleGroup>
+          </FlexItem>
+        </Flex>
+      </FlexItem>
+
+      <FlexItem>
+        {visibleListings.length === 0 ? (
+          <Card>
+            <CardBody>
+              <Content component={ContentVariants.small}>
+                No listings match the current search/filters.
+              </Content>
+            </CardBody>
+          </Card>
+        ) : viewMode === "table" ? (
+          <Card>
+            <CardBody>
+              {/* isExpandable here is purely a styling flag (adds the
+                  pf-m-expandable class) — it's what makes isStriped target
+                  every-other <Tbody> instead of every-other <Tr>, which is
+                  what we need since each listing row is its own <Tbody>. */}
+              <Table aria-label="Catalog listings" isStriped isExpandable>
+                <Thead>
+                  <Tr>
+                    <Th modifier="nowrap">Listing</Th>
+                    <Th modifier="nowrap">Risk tier</Th>
+                    <Th modifier="nowrap">Review status</Th>
+                    <Th modifier="nowrap">Price</Th>
+                    <Th screenReaderText="Actions" />
+                  </Tr>
+                </Thead>
+                {visibleListings.map((listing) => (
+                  <ListingRow
+                    key={listing.id}
+                    listing={listing}
+                    providers={providers}
+                    mcpServers={mcpServers}
+                    skills={skills}
+                    onChange={loadAll}
+                  />
+                ))}
+              </Table>
+            </CardBody>
+          </Card>
+        ) : (
+          <Gallery hasGutter minWidths={{ default: "22rem" }}>
+            {visibleListings.map((listing) => (
+              <ListingBadgeCard
+                key={listing.id}
+                listing={listing}
+                providers={providers}
+                mcpServers={mcpServers}
+                skills={skills}
+                onChange={loadAll}
+              />
+            ))}
+          </Gallery>
+        )}
       </FlexItem>
 
       <FlexItem>
@@ -213,19 +360,12 @@ export function CatalogManager() {
   );
 }
 
-function ListingRow({
-  listing,
-  providers,
-  mcpServers,
-  skills,
-  onChange,
-}: {
-  listing: Listing;
-  providers: ProviderStatus[];
-  mcpServers: McpServerStatus[];
-  skills: Skill[];
-  onChange: () => void;
-}) {
+/** Shared editable-row state for a listing — draft fields (risk tier,
+ * review status, price), save/delete handlers, and the "Agent config"
+ * modal's open flag. Used by both `ListingRow` (table view) and
+ * `ListingBadgeCard` (badge view) so the two presentations can never
+ * drift out of sync with each other's editing/saving/deleting behavior. */
+function useListingRowState(listing: Listing, onChange: () => void) {
   const [draft, setDraft] = useState<Required<Pick<ListingUpdate, "name" | "description" | "riskTier" | "reviewStatus" | "pricing">>>({
     name: listing.name,
     description: listing.description,
@@ -271,6 +411,135 @@ function ListingRow({
     }
   }
 
+  return { draft, update, save, remove, saving, saved, showConfig, setShowConfig, deleting };
+}
+
+/** Shared action buttons (Open agent/terminal, Save, Agent config,
+ * Delete) — identical set for both the table row and the badge card. */
+function ListingActionsBar({
+  listing,
+  saving,
+  saved,
+  deleting,
+  onSave,
+  onDelete,
+  onOpenConfig,
+}: {
+  listing: Listing;
+  saving: boolean;
+  saved: boolean;
+  deleting: boolean;
+  onSave: () => void;
+  onDelete: () => void;
+  onOpenConfig: () => void;
+}) {
+  return (
+    <Flex
+      spaceItems={{ default: "spaceItemsXs" }}
+      flexWrap={{ default: "nowrap" }}
+      justifyContent={{ default: "justifyContentFlexEnd" }}
+    >
+      {listing.runtime === "openshell" && listing.openshellSession?.status === "running" ? (
+        <FlexItem>
+          <Button variant="primary" size="sm" onClick={onOpenConfig}>
+            Open terminal
+          </Button>
+        </FlexItem>
+      ) : listing.runtime !== "openshell" &&
+        listing.deployment?.status === "running" &&
+        listing.deployment.routeUrl ? (
+        <FlexItem>
+          <Button
+            variant="primary"
+            size="sm"
+            component={(props) => (
+              <a {...props} href={listing.deployment!.routeUrl} target="_blank" rel="noreferrer" />
+            )}
+          >
+            Open agent
+          </Button>
+        </FlexItem>
+      ) : null}
+      <FlexItem>
+        <Button variant={saved ? "secondary" : "primary"} size="sm" onClick={onSave} isDisabled={saving}>
+          {saving ? "Saving…" : saved ? "Saved" : "Save"}
+        </Button>
+      </FlexItem>
+      <FlexItem>
+        <Button variant="secondary" size="sm" onClick={onOpenConfig}>
+          Config
+        </Button>
+      </FlexItem>
+      <FlexItem>
+        <Button variant="danger" size="sm" onClick={onDelete} isDisabled={deleting}>
+          {deleting ? "Deleting…" : "Delete"}
+        </Button>
+      </FlexItem>
+    </Flex>
+  );
+}
+
+/** Shared "Agent config" modal — identical for both views. Always safe to
+ * mount unconditionally; renders nothing while `isOpen` is false. */
+function ListingConfigModal({
+  listing,
+  providers,
+  mcpServers,
+  skills,
+  isOpen,
+  onClose,
+  onChange,
+}: {
+  listing: Listing;
+  providers: ProviderStatus[];
+  mcpServers: McpServerStatus[];
+  skills: Skill[];
+  isOpen: boolean;
+  onClose: () => void;
+  onChange: () => void;
+}) {
+  if (!isOpen) return null;
+  return (
+    <Modal variant="large" isOpen onClose={onClose} aria-label={`Agent config — ${listing.name}`}>
+      <ModalHeader title={`Agent config — ${listing.name}`} />
+      <ModalBody>
+        <AgentConfigPanel
+          listing={listing}
+          providers={providers}
+          mcpServers={mcpServers}
+          skills={skills}
+          onChange={onChange}
+        />
+      </ModalBody>
+      <ModalFooter>
+        <Button variant="link" onClick={onClose}>
+          Close
+        </Button>
+      </ModalFooter>
+    </Modal>
+  );
+}
+
+function riskLabelColor(tier: RiskTier): "red" | "orange" | "green" {
+  return tier === "high" ? "red" : tier === "medium" ? "orange" : "green";
+}
+
+function ListingRow({
+  listing,
+  providers,
+  mcpServers,
+  skills,
+  onChange,
+}: {
+  listing: Listing;
+  providers: ProviderStatus[];
+  mcpServers: McpServerStatus[];
+  skills: Skill[];
+  onChange: () => void;
+}) {
+  const { draft, update, save, remove, saving, saved, showConfig, setShowConfig, deleting } =
+    useListingRowState(listing, onChange);
+
   return (
     <>
       <Tbody>
@@ -279,7 +548,8 @@ function ListingRow({
             <strong>{listing.name}</strong>
             <br />
             <Content component={ContentVariants.small}>
-              {departmentLabel(listing.department)} · {listing.category}
+              {departmentLabel(listing.department)}
+              {listing.category ? ` · ${listing.category}` : ""}
               {listing.source === "custom" ? " · Custom" : ""}
             </Content>
           </Td>
@@ -329,72 +599,157 @@ function ListingRow({
               </InputGroupItem>
             </InputGroup>
           </Td>
-          <Td dataLabel="Actions" modifier="fitContent">
-            <Flex spaceItems={{ default: "spaceItemsSm" }} flexWrap={{ default: "nowrap" }}>
-              {listing.runtime === "openshell" && listing.openshellSession?.status === "running" ? (
-                <FlexItem>
-                  <Button variant="primary" size="sm" onClick={() => setShowConfig(true)}>
-                    Open terminal
-                  </Button>
-                </FlexItem>
-              ) : listing.runtime !== "openshell" &&
-                listing.deployment?.status === "running" &&
-                listing.deployment.routeUrl ? (
-                <FlexItem>
-                  <Button
-                    variant="primary"
-                    size="sm"
-                    component={(props) => (
-                      <a {...props} href={listing.deployment!.routeUrl} target="_blank" rel="noreferrer" />
-                    )}
-                  >
-                    Open agent
-                  </Button>
-                </FlexItem>
-              ) : null}
-              <FlexItem>
-                <Button variant={saved ? "secondary" : "primary"} size="sm" onClick={() => void save()} isDisabled={saving}>
-                  {saving ? "Saving…" : saved ? "Saved" : "Save"}
-                </Button>
-              </FlexItem>
-              <FlexItem>
-                <Button variant="secondary" size="sm" onClick={() => setShowConfig(true)}>
-                  Agent config
-                </Button>
-              </FlexItem>
-              <FlexItem>
-                <Button variant="danger" size="sm" onClick={() => void remove()} isDisabled={deleting}>
-                  {deleting ? "Deleting…" : "Delete"}
-                </Button>
-              </FlexItem>
-            </Flex>
+          <Td dataLabel="Actions">
+            <ListingActionsBar
+              listing={listing}
+              saving={saving}
+              saved={saved}
+              deleting={deleting}
+              onSave={() => void save()}
+              onDelete={() => void remove()}
+              onOpenConfig={() => setShowConfig(true)}
+            />
           </Td>
         </Tr>
       </Tbody>
-      {showConfig && (
-        <Modal
-          variant="large"
-          isOpen
-          onClose={() => setShowConfig(false)}
-          aria-label={`Agent config — ${listing.name}`}
-        >
-          <ModalHeader title={`Agent config — ${listing.name}`} />
-          <ModalBody>
-            <AgentConfigPanel
-              listing={listing}
-              providers={providers}
-              mcpServers={mcpServers}
-              skills={skills}
-              onChange={onChange}
-            />
-          </ModalBody>
-          <ModalFooter>
-            <Button variant="link" onClick={() => setShowConfig(false)}>
-              Close
-            </Button>
-          </ModalFooter>
-        </Modal>
-      )}
+      <ListingConfigModal
+        listing={listing}
+        providers={providers}
+        mcpServers={mcpServers}
+        skills={skills}
+        isOpen={showConfig}
+        onClose={() => setShowConfig(false)}
+        onChange={onChange}
+      />
+    </>
+  );
+}
+
+/** Badge/card presentation of the same listing row — same editable
+ * fields, actions, and Agent config modal as `ListingRow`, laid out as a
+ * `Card` for the Gallery grid instead of table cells. */
+function ListingBadgeCard({
+  listing,
+  providers,
+  mcpServers,
+  skills,
+  onChange,
+}: {
+  listing: Listing;
+  providers: ProviderStatus[];
+  mcpServers: McpServerStatus[];
+  skills: Skill[];
+  onChange: () => void;
+}) {
+  const { draft, update, save, remove, saving, saved, showConfig, setShowConfig, deleting } =
+    useListingRowState(listing, onChange);
+
+  return (
+    <>
+      <GalleryItem>
+        <Card isFullHeight isCompact>
+          <CardTitle>{listing.name}</CardTitle>
+          <CardBody>
+            <Flex direction={{ default: "column" }} spaceItems={{ default: "spaceItemsMd" }}>
+              <FlexItem>
+                <Content component={ContentVariants.small}>
+                  {departmentLabel(listing.department)}
+                  {listing.category ? ` · ${listing.category}` : ""}
+                  {listing.source === "custom" ? " · Custom" : ""}
+                </Content>
+              </FlexItem>
+              <FlexItem>
+                <Flex spaceItems={{ default: "spaceItemsXs" }} flexWrap={{ default: "wrap" }}>
+                  <FlexItem>
+                    <Label color={riskLabelColor(draft.riskTier)} isCompact>
+                      {draft.riskTier} risk
+                    </Label>
+                  </FlexItem>
+                  <FlexItem>
+                    <Label isCompact>{draft.reviewStatus}</Label>
+                  </FlexItem>
+                  <FlexItem>
+                    <Label isCompact>
+                      {formatUsd(draft.pricing.amount)}
+                      {draft.pricing.unit === "per-hour" ? " / hour" : " / task"}
+                    </Label>
+                  </FlexItem>
+                </Flex>
+              </FlexItem>
+              <FlexItem>
+                <Flex spaceItems={{ default: "spaceItemsSm" }} flexWrap={{ default: "wrap" }}>
+                  <FlexItem style={{ minWidth: "7rem" }}>
+                    <FormSelect
+                      aria-label={`Risk tier for ${listing.name}`}
+                      value={draft.riskTier}
+                      onChange={(_e, v) => update({ riskTier: v as RiskTier })}
+                    >
+                      {RISK_TIERS.map((tier) => (
+                        <FormSelectOption key={tier} value={tier} label={tier} />
+                      ))}
+                    </FormSelect>
+                  </FlexItem>
+                  <FlexItem style={{ minWidth: "9rem" }}>
+                    <FormSelect
+                      aria-label={`Review status for ${listing.name}`}
+                      value={draft.reviewStatus}
+                      onChange={(_e, v) => update({ reviewStatus: v as ReviewStatus })}
+                    >
+                      {REVIEW_STATUSES.map((status) => (
+                        <FormSelectOption key={status} value={status} label={status} />
+                      ))}
+                    </FormSelect>
+                  </FlexItem>
+                </Flex>
+              </FlexItem>
+              <FlexItem>
+                <InputGroup>
+                  <InputGroupItem>
+                    <TextInput
+                      style={{ width: "5rem" }}
+                      aria-label={`Price amount for ${listing.name}`}
+                      inputMode="decimal"
+                      value={String(draft.pricing.amount)}
+                      onChange={(_e, v) => update({ pricing: { ...draft.pricing, amount: Number(v) || 0 } })}
+                    />
+                  </InputGroupItem>
+                  <InputGroupItem>
+                    <FormSelect
+                      aria-label={`Price unit for ${listing.name}`}
+                      value={draft.pricing.unit}
+                      onChange={(_e, v) => update({ pricing: { ...draft.pricing, unit: v as PricingUnit } })}
+                    >
+                      {PRICING_UNITS.map((u) => (
+                        <FormSelectOption key={u.id} value={u.id} label={u.label} />
+                      ))}
+                    </FormSelect>
+                  </InputGroupItem>
+                </InputGroup>
+              </FlexItem>
+              <FlexItem>
+                <ListingActionsBar
+                  listing={listing}
+                  saving={saving}
+                  saved={saved}
+                  deleting={deleting}
+                  onSave={() => void save()}
+                  onDelete={() => void remove()}
+                  onOpenConfig={() => setShowConfig(true)}
+                />
+              </FlexItem>
+            </Flex>
+          </CardBody>
+        </Card>
+      </GalleryItem>
+      <ListingConfigModal
+        listing={listing}
+        providers={providers}
+        mcpServers={mcpServers}
+        skills={skills}
+        isOpen={showConfig}
+        onClose={() => setShowConfig(false)}
+        onChange={onChange}
+      />
     </>
   );
 }
@@ -1000,16 +1355,6 @@ function OpenShellDeploySection({ listing, onChange }: { listing: Listing; onCha
   );
 }
 
-const ICON_OPTIONS: { id: string; label: string }[] = [
-  { id: "code", label: "Code" },
-  { id: "comments", label: "Comments" },
-  { id: "shield", label: "Shield" },
-  { id: "chart", label: "Chart" },
-  { id: "money", label: "Money" },
-  { id: "headset", label: "Headset" },
-  { id: "server", label: "Server" },
-];
-
 /** Footer for wizard steps that must validate before advancing — `onNext`
  * runs the step's validation and returns an error message (blocking the
  * advance) or null (clear to proceed). */
@@ -1090,7 +1435,6 @@ function OnboardAgentWizard({
   const [department, setDepartment] = useState<DepartmentId>("engineering");
   const [category, setCategory] = useState("");
   const [description, setDescription] = useState("");
-  const [icon, setIcon] = useState("code");
   const [riskTier, setRiskTier] = useState<RiskTier>("medium");
   const [pricingUnit, setPricingUnit] = useState<PricingUnit>("per-task");
   const [pricingAmount, setPricingAmount] = useState("0.80");
@@ -1118,7 +1462,6 @@ function OnboardAgentWizard({
 
   function validateBasics(): string | null {
     if (!name.trim()) return "Name is required";
-    if (!category.trim()) return "Category is required";
     if (!description.trim()) return "Description is required";
     return null;
   }
@@ -1137,9 +1480,8 @@ function OnboardAgentWizard({
       await createListingAdmin({
         name: name.trim(),
         department,
-        category: category.trim(),
+        category: category.trim() || undefined,
         description: description.trim(),
-        icon,
         riskTier,
         pricing: { unit: pricingUnit, amount: Number(pricingAmount) || 0 },
         runtime,
@@ -1195,24 +1537,30 @@ function OnboardAgentWizard({
                 />
               </FormGroup>
               <FormGroup label="Department" isRequired fieldId="wizard-department">
-                <FormSelect id="wizard-department" value={department} onChange={(_e, v) => setDepartment(v as DepartmentId)}>
+                <FormSelect
+                  id="wizard-department"
+                  value={department}
+                  onChange={(_e, v) => {
+                    const nextDept = v as DepartmentId;
+                    setDepartment(nextDept);
+                    // Category is a drill-down *within* a department, so a category
+                    // chosen under the old department rarely still makes sense here —
+                    // reset it rather than silently keeping a mismatched value.
+                    if (!CATEGORY_OPTIONS_BY_DEPARTMENT[nextDept].includes(category)) {
+                      setCategory("");
+                    }
+                  }}
+                >
                   {DEPARTMENTS.filter((d) => d.id !== "all").map((d) => (
                     <FormSelectOption key={d.id} value={d.id} label={d.name} />
                   ))}
                 </FormSelect>
               </FormGroup>
-              <FormGroup label="Category" isRequired fieldId="wizard-category">
-                <TextInput
-                  id="wizard-category"
-                  value={category}
-                  onChange={(_e, v) => setCategory(v)}
-                  placeholder="e.g. Contract review"
-                />
-              </FormGroup>
-              <FormGroup label="Icon" fieldId="wizard-icon">
-                <FormSelect id="wizard-icon" value={icon} onChange={(_e, v) => setIcon(v)}>
-                  {ICON_OPTIONS.map((i) => (
-                    <FormSelectOption key={i.id} value={i.id} label={i.label} />
+              <FormGroup label="Category (optional)" fieldId="wizard-category">
+                <FormSelect id="wizard-category" value={category} onChange={(_e, v) => setCategory(v)}>
+                  <FormSelectOption value="" label="No category" />
+                  {CATEGORY_OPTIONS_BY_DEPARTMENT[department].map((c) => (
+                    <FormSelectOption key={c} value={c} label={c} />
                   ))}
                 </FormSelect>
               </FormGroup>
@@ -1254,8 +1602,14 @@ function OnboardAgentWizard({
             <Form>
               <FormGroup label="Runtime" fieldId="wizard-runtime">
                 <FormSelect id="wizard-runtime" value={runtime} onChange={(_e, v) => setRuntime(v as AgentRuntime)}>
-                  <FormSelectOption value="generic-chat" label="Generic chat agent (persistent Deployment + Route)" />
-                  <FormSelectOption value="openshell" label="OpenShell (interactive coding/engineering sandbox)" />
+                  <FormSelectOption
+                    value="generic-chat"
+                    label="Autonomous agent — Generic chat agent (persistent Deployment + Route)"
+                  />
+                  <FormSelectOption
+                    value="openshell"
+                    label="Collaborative agent — OpenShell (interactive coding/engineering sandbox)"
+                  />
                 </FormSelect>
               </FormGroup>
               {runtime === "openshell" && (
