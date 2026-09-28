@@ -24,6 +24,8 @@ export { pingOpenshift, listAgentJobs } from "./openshift";
 export {
   startEeImageBuild,
   getEeImageBuildResult,
+  getEeImageBuildPhase,
+  getEeImageBuildLog,
   type EeImageBuildInput,
   type EeImageBuildResult,
 } from "./eeBuild";

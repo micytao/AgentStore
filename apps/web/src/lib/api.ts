@@ -156,9 +156,17 @@ export function registerExecutionEnvironment(input: {
 }
 
 /** Starts (or re-starts) the "Build from source" OpenShift build (Admin
- * -> Platform -> AAP Job Templates -> "+ Build from source"). Returns
- * the updated PlatformSettings (holding `eeBuild`). */
-export function startEeImageBuild(input: { name: string; credentialId?: number }): Promise<PlatformSettings> {
+ * -> Platform -> AAP Job Templates -> "+ Build from source"). `settings`
+ * is saved server-side in the same request (no separate "Save" step),
+ * same save-as-a-side-effect convention as createJobTemplates() —
+ * otherwise a Git URL/branch typed into the draft but never saved via
+ * "Create job templates" would silently be lost. Returns the updated
+ * PlatformSettings (holding `eeBuild`). */
+export function startEeImageBuild(input: {
+  name: string;
+  credentialId?: number;
+  settings?: Partial<PlatformSettings>;
+}): Promise<PlatformSettings> {
   return fetch("/api/admin/platform/execution-environment-build", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -169,6 +177,14 @@ export function startEeImageBuild(input: { name: string; credentialId?: number }
 /** Polls the in-flight build for progress; safe to call on an interval. */
 export function fetchEeBuildStatus(): Promise<PlatformSettings> {
   return fetch("/api/admin/platform/execution-environment-build").then((r) => parse<PlatformSettings>(r));
+}
+
+/** Tail of the build's log, for the "View build log" section — lets an
+ * admin see exactly why a build failed without leaving AgentStore. */
+export function fetchEeBuildLog(): Promise<{ log: string }> {
+  return fetch("/api/admin/platform/execution-environment-build/log").then((r) =>
+    parse<{ log: string }>(r)
+  );
 }
 
 export function updatePlatformSettings(

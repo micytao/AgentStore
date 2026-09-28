@@ -1,5 +1,7 @@
 import type { EeBuildStatus, PlatformSettings } from "@agentstore/shared";
 import {
+  getEeImageBuildLog,
+  getEeImageBuildPhase,
   getEeImageBuildResult,
   isAapConfigured,
   isOpenshiftConfigured,
@@ -100,6 +102,11 @@ export async function refreshEeBuild(): Promise<PlatformSettings> {
   }
 
   try {
+    // Peeked separately from getEeImageBuildResult()'s own status check
+    // below purely so the "Build from source" mini-form's progress bar
+    // has something to render even mid-poll — a second cheap GET on the
+    // same Build object, not worth folding into one call.
+    const ocpPhase = await getEeImageBuildPhase(build.buildName);
     const buildInput = buildInputFrom(
       settings,
       build.executionEnvironmentName ?? "AgentStore execution environment",
@@ -108,13 +115,14 @@ export async function refreshEeBuild(): Promise<PlatformSettings> {
     const result = await getEeImageBuildResult(build.buildName, buildInput);
     if (!result) {
       // Build is still New/Pending/Running — nothing more to do this poll.
-      return persist({ ...build, phase: "building", updatedAt: now() });
+      return persist({ ...build, phase: "building", ocpPhase, updatedAt: now() });
     }
     return persist(
       {
         ...build,
         status: "running",
         phase: "done",
+        ocpPhase,
         image: result.image,
         executionEnvironmentId: result.executionEnvironmentId,
         updatedAt: now(),
@@ -129,4 +137,18 @@ export async function refreshEeBuild(): Promise<PlatformSettings> {
       updatedAt: now(),
     });
   }
+}
+
+/**
+ * Tail of the current/most recent build's log — the "View build log"
+ * section on the "Build from source" mini-form polls this so an admin
+ * can see exactly why a build failed without leaving AgentStore for the
+ * OpenShift console. Returns a friendly message instead of throwing
+ * when there's no build to show a log for yet.
+ */
+export async function fetchEeBuildLog(): Promise<string> {
+  ensurePlatformEnv();
+  const build = getPlatformSettings().eeBuild;
+  if (!build?.buildName) return "(no build started yet)";
+  return getEeImageBuildLog(build.buildName);
 }

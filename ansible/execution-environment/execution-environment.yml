@@ -34,5 +34,10 @@ dependencies:
 
 additional_build_steps:
   append_final:
+    # get-helm-3 shells out to `openssl` to verify the downloaded
+    # binary's checksum, which this base image doesn't include by
+    # default — install it first (see ./Containerfile for the same fix
+    # on the OpenShift BuildConfig build path).
+    - RUN microdnf install -y openssl || dnf install -y openssl || yum install -y openssl
     - RUN curl -fsSL -o /tmp/get-helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
     - RUN chmod +x /tmp/get-helm.sh && /tmp/get-helm.sh --no-sudo && rm /tmp/get-helm.sh

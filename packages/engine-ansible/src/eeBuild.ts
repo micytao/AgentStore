@@ -78,6 +78,15 @@ export interface EeImageBuildResult {
   executionEnvironmentId: number;
 }
 
+/** Just the raw OpenShift Build phase ("New" | "Pending" | "Running" |
+ * "Complete" | "Failed" | "Error" | "Cancelled"), for the "Build from
+ * source" mini-form's progress bar — a coarser signal than a real
+ * percentage (OpenShift doesn't expose one), but still more informative
+ * than a single static "building…" label. */
+export async function getEeImageBuildPhase(buildName: string): Promise<string> {
+  return (await ocp.getEeBuildStatus(buildName)).phase;
+}
+
 /** Phase 2: polls the Build from phase 1; returns undefined while it's
  * still New/Pending/Running (the caller should try again shortly). Once
  * it's Complete, reads back the built image's pullable reference from
@@ -101,4 +110,12 @@ export async function getEeImageBuildResult(
     credentialId: input.registryCredentialId,
   });
   return { image, executionEnvironmentId: ee.id };
+}
+
+/** Tail of the Build's log, for the "View build log" section on the
+ * "Build from source" mini-form — lets an admin see exactly why a build
+ * failed (e.g. the openssl/get-helm-3 error this was added to
+ * diagnose) without leaving AgentStore for the OpenShift console. */
+export async function getEeImageBuildLog(buildName: string, tailLines = 200): Promise<string> {
+  return ocp.getEeBuildLogTail(buildName, tailLines);
 }

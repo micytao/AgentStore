@@ -24,6 +24,7 @@ import {
   DescriptionListDescription,
   DescriptionListGroup,
   DescriptionListTerm,
+  ExpandableSection,
   Flex,
   FlexItem,
   Form,
@@ -31,6 +32,7 @@ import {
   FormSelect,
   FormSelectOption,
   Label,
+  Progress,
   Spinner,
   TextInput,
   Title,
@@ -39,6 +41,7 @@ import { Table, Tbody, Td, Th, Thead, Tr } from "@patternfly/react-table";
 import { SecretField } from "@/components/SecretField";
 import {
   createJobTemplates,
+  fetchEeBuildLog,
   fetchEeBuildStatus,
   fetchJobTemplateBootstrapStatus,
   fetchPlatformStatus,
@@ -47,6 +50,23 @@ import {
   startEeImageBuild,
   testPlatformConnection,
 } from "@/lib/api";
+
+/** Coarse phase -> percent mapping for the "Build from source"
+ * progress bar — OpenShift doesn't expose a real completion
+ * percentage, so this is step-based, not measured. */
+function eeBuildProgressPercent(ocpPhase: string | undefined, running: boolean, done: boolean): number {
+  if (done || ocpPhase === "Complete") return 100;
+  switch (ocpPhase) {
+    case "New":
+      return 10;
+    case "Pending":
+      return 25;
+    case "Running":
+      return 65;
+    default:
+      return running ? 5 : 0;
+  }
+}
 
 type TestOutcome = { ok: boolean; message: string };
 
@@ -218,6 +238,11 @@ function JobTemplatesCard({
   const eeBuild = draft.eeBuild;
   const eeBuildRunning = eeBuild?.status === "deploying";
   const eeBuildDone = eeBuild?.status === "running";
+  const eeBuildFailed = eeBuild?.status === "failed";
+
+  const [showBuildLog, setShowBuildLog] = useState(false);
+  const [buildLog, setBuildLog] = useState("");
+  const [buildLogLoading, setBuildLogLoading] = useState(false);
 
   useEffect(() => {
     if (!running) return;
@@ -238,6 +263,39 @@ function JobTemplatesCard({
     }, 4000);
     return () => clearInterval(timer);
   }, [eeBuildRunning, onSettingsUpdate]);
+
+  // Polls the OpenShift Build log while a build is in flight, and once
+  // more on failure/success so the viewer ends up showing the final
+  // content instead of whatever was last fetched mid-build. Auto-opens
+  // on failure so the reason is visible without an extra click.
+  useEffect(() => {
+    if (!eeBuild?.buildName) return;
+    let cancelled = false;
+    function load() {
+      setBuildLogLoading(true);
+      fetchEeBuildLog()
+        .then(({ log }) => {
+          if (!cancelled) setBuildLog(log);
+        })
+        .catch((err: Error) => {
+          if (!cancelled) setBuildLog(`(failed to load build log: ${err.message})`);
+        })
+        .finally(() => {
+          if (!cancelled) setBuildLogLoading(false);
+        });
+    }
+    load();
+    if (!eeBuildRunning) return () => { cancelled = true; };
+    const timer = setInterval(load, 4000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [eeBuild?.buildName, eeBuildRunning]);
+
+  useEffect(() => {
+    if (eeBuildFailed) setShowBuildLog(true);
+  }, [eeBuildFailed]);
 
   async function create() {
     setBusy(true);
@@ -285,6 +343,10 @@ function JobTemplatesCard({
       const next = await startEeImageBuild({
         name: buildEeName,
         credentialId: buildEeCredentialId ? Number(buildEeCredentialId) : undefined,
+        settings: {
+          aapProjectGitUrl: draft.aapProjectGitUrl,
+          aapProjectGitBranch: draft.aapProjectGitBranch,
+        },
       });
       onSettingsUpdate(next);
     } catch (err) {
@@ -513,10 +575,52 @@ function JobTemplatesCard({
                   {starting
                     ? "Starting…"
                     : eeBuildRunning
-                      ? `Building… (${eeBuild?.phase ?? "in progress"})`
+                      ? `Building… (${eeBuild?.ocpPhase ?? "starting"})`
                       : "Start build"}
                 </Button>
               </div>
+
+              {(eeBuildRunning || eeBuildDone || eeBuildFailed) && (
+                <Progress
+                  value={eeBuildProgressPercent(eeBuild?.ocpPhase, eeBuildRunning, eeBuildDone)}
+                  title="OpenShift build"
+                  label={eeBuildFailed ? "Failed" : eeBuild?.ocpPhase ?? "Starting…"}
+                  variant={eeBuildFailed ? "danger" : eeBuildDone ? "success" : undefined}
+                  measureLocation="inside"
+                  style={{ marginTop: "0.75rem", maxWidth: "420px" }}
+                />
+              )}
+
+              {eeBuild?.buildName && (
+                <ExpandableSection
+                  toggleContent={`View build log${buildLogLoading ? " (loading…)" : ""}`}
+                  isExpanded={showBuildLog}
+                  onToggle={() => setShowBuildLog((v) => !v)}
+                  style={{ marginTop: "0.5rem" }}
+                >
+                  <Content component={ContentVariants.small}>
+                    Build <code>{eeBuild.buildName}</code> — same log{" "}
+                    <code>oc logs -f bc/agentstore-ee</code> or the OpenShift console&apos;s
+                    Build page would show, last 200 lines.
+                  </Content>
+                  <pre
+                    style={{
+                      marginTop: "0.5rem",
+                      maxHeight: "320px",
+                      overflow: "auto",
+                      background: "var(--pf-t--global--background--color--floating--default, #151515)",
+                      color: "var(--pf-t--global--text--color--inverse, #f0f0f0)",
+                      padding: "0.75rem",
+                      borderRadius: "4px",
+                      fontSize: "0.8rem",
+                      whiteSpace: "pre-wrap",
+                      wordBreak: "break-word",
+                    }}
+                  >
+                    {buildLog || "(no output yet)"}
+                  </pre>
+                </ExpandableSection>
+              )}
             </CardBody>
           </Card>
         )}

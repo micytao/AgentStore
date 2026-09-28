@@ -23,8 +23,13 @@ RUN pip3 install --no-cache-dir -r /tmp/requirements.txt \
 # helm CLI — provision-openshell-gateway.yml shells out to it; it's not
 # an Ansible collection or a pip/system package, so it's installed via
 # the upstream get-helm-3 script, same as execution-environment.yml's
-# additional_build_steps.
-RUN curl -fsSL -o /tmp/get-helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 \
+# additional_build_steps. get-helm-3 shells out to `openssl` to verify
+# the downloaded binary's checksum, which quay.io/ansible/ansible-runner
+# doesn't include by default — install it first, trying microdnf (UBI
+# minimal images) then dnf/yum (fuller UBI images) since it's not
+# guaranteed which one this base image ships.
+RUN (microdnf install -y openssl || dnf install -y openssl || yum install -y openssl) \
+    && curl -fsSL -o /tmp/get-helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 \
     && chmod 700 /tmp/get-helm.sh \
     && /tmp/get-helm.sh --no-sudo \
     && rm -f /tmp/get-helm.sh

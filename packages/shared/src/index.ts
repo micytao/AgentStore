@@ -319,6 +319,12 @@ export interface PlatformSettings {
 export interface EeBuildStatus {
   status: AgentDeploymentStatus;
   phase?: string;
+  /** Raw OpenShift Build phase ("New" | "Pending" | "Running" |
+   * "Complete" | "Failed" | "Error" | "Cancelled"), refreshed every
+   * poll — drives the "Build from source" mini-form's progress bar.
+   * OpenShift doesn't expose a real completion percentage, so this is
+   * the most granular signal available. */
+  ocpPhase?: string;
   /** Stashed between start and finish — not shown in the UI. */
   buildName?: string;
   /** Stashed between start and finish: the AAP Execution Environment

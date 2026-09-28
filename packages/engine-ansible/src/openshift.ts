@@ -268,6 +268,24 @@ export async function getEeBuildStatus(buildName: string): Promise<EeBuildStatus
   return { phase: body.status?.phase ?? "Unknown", message: body.status?.message ?? body.status?.logSnippet };
 }
 
+/** Tail of a Build's log — the same content `oc logs -f bc/<name>` or the
+ * OpenShift console's Build detail page shows, surfaced inside
+ * AgentStore's "Build from source" mini-form so troubleshooting a
+ * failed build doesn't require switching to the OpenShift console at
+ * all. Unlike every other call in this file, the response body is
+ * plain text, not JSON. */
+export async function getEeBuildLogTail(buildName: string, tailLines = 200): Promise<string> {
+  const ns = openshiftNamespace();
+  const response = await ocpFetch(
+    `/apis/build.openshift.io/v1/namespaces/${ns}/builds/${buildName}/log?tailLines=${tailLines}`
+  );
+  if (!response.ok) {
+    if (response.status === 404) return "(no log yet — the build hasn't started running)";
+    throw new Error(`OpenShift get build log: HTTP ${response.status}`);
+  }
+  return response.text();
+}
+
 /** Reads back the built image's pullable reference (including registry
  * host + digest) once a Build lands its output on this ImageStreamTag —
  * exactly what AAP's Execution Environment `image` field needs. */
