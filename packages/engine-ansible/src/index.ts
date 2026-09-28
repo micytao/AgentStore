@@ -30,6 +30,14 @@ export {
   type EeImageBuildResult,
 } from "./eeBuild";
 export {
+  startAgentRuntimeImageBuild,
+  getAgentRuntimeImageBuildResult,
+  getAgentRuntimeImageBuildPhase,
+  getAgentRuntimeImageBuildLog,
+  type AgentRuntimeImageBuildInput,
+  type AgentRuntimeImageBuildResult,
+} from "./agentRuntimeBuild";
+export {
   applyPlatformEnv,
   isAapConfigured,
   isOpenshiftConfigured,
@@ -40,6 +48,7 @@ export {
   openshiftNamespace,
   openshiftConsoleUrl,
   openshiftInsecureTls,
+  agentRuntimeImage,
 } from "./config";
 export {
   deleteGenericAgentDeployment,

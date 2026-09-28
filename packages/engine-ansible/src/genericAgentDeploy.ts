@@ -1,6 +1,6 @@
 import type { AgentDeploymentStatus, OpenShellMcpServerConfig, ProviderKind, Skill } from "@agentstore/shared";
 import * as aap from "./aap";
-import { aapJobUrl, agentRuntimeImage, isOpenshiftConfigured, openshiftNamespace } from "./config";
+import { aapJobUrl, agentRuntimeImage as defaultAgentRuntimeImage, isOpenshiftConfigured, openshiftNamespace } from "./config";
 import * as ocp from "./openshift";
 
 /**
@@ -37,6 +37,13 @@ export interface GenericAgentDeployInput {
   introLines: string[];
   skills: Skill[];
   mcpServers: OpenShellMcpServerConfig[];
+  /** Overrides config.ts's agentRuntimeImage() env-var default — pass
+   * PlatformSettings.agentRuntimeImage here once the "Build from
+   * source" action (Admin -> Platform -> Agent Runtime) has produced a
+   * real one. Falls back to the env var (and ultimately the
+   * `agent-runtime:dev` placeholder, which nothing actually publishes)
+   * when omitted or empty. */
+  agentRuntimeImage?: string;
 }
 
 export async function launchGenericAgentDeploy(
@@ -47,7 +54,7 @@ export async function launchGenericAgentDeploy(
     namespace: openshiftNamespace(),
     listing_id: input.listingId,
     listing_name: input.listingName,
-    agent_runtime_image: agentRuntimeImage(),
+    agent_runtime_image: input.agentRuntimeImage || defaultAgentRuntimeImage(),
     provider_kind: input.provider.kind,
     provider_base_url: input.provider.baseUrl ?? "",
     provider_default_model: input.provider.defaultModel ?? "",

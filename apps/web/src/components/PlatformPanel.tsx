@@ -2,12 +2,13 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { ComponentType, ReactNode } from "react";
-import type {
-  AapNamedObject,
-  PlatformConnectionStatus,
-  PlatformSettings,
-  PlatformStatus,
-  SecretSummary,
+import {
+  EE_BUILD_LOG_TAIL_LINES,
+  type AapNamedObject,
+  type PlatformConnectionStatus,
+  type PlatformSettings,
+  type PlatformStatus,
+  type SecretSummary,
 } from "@agentstore/shared";
 import { AnsibleTowerIcon, OpenshiftIcon } from "@patternfly/react-icons";
 import {
@@ -41,20 +42,24 @@ import { Table, Tbody, Td, Th, Thead, Tr } from "@patternfly/react-table";
 import { SecretField } from "@/components/SecretField";
 import {
   createJobTemplates,
+  fetchAgentRuntimeBuildLog,
+  fetchAgentRuntimeBuildStatus,
   fetchEeBuildLog,
   fetchEeBuildStatus,
   fetchJobTemplateBootstrapStatus,
   fetchPlatformStatus,
   fetchSecrets,
   registerExecutionEnvironment,
+  startAgentRuntimeBuild,
   startEeImageBuild,
   testPlatformConnection,
 } from "@/lib/api";
 
-/** Coarse phase -> percent mapping for the "Build from source"
- * progress bar — OpenShift doesn't expose a real completion
+/** Coarse phase -> percent mapping for any "Build from source"
+ * progress bar (the Execution Environment's and the agent-runtime
+ * image's alike) — OpenShift doesn't expose a real completion
  * percentage, so this is step-based, not measured. */
-function eeBuildProgressPercent(ocpPhase: string | undefined, running: boolean, done: boolean): number {
+function ocpBuildProgressPercent(ocpPhase: string | undefined, running: boolean, done: boolean): number {
   if (done || ocpPhase === "Complete") return 100;
   switch (ocpPhase) {
     case "New":
@@ -597,7 +602,7 @@ function JobTemplatesCard({
 
               {(eeBuildRunning || eeBuildDone || eeBuildFailed) && (
                 <Progress
-                  value={eeBuildProgressPercent(eeBuild?.ocpPhase, eeBuildRunning, eeBuildDone)}
+                  value={ocpBuildProgressPercent(eeBuild?.ocpPhase, eeBuildRunning, eeBuildDone)}
                   title="OpenShift build"
                   label={eeBuildFailed ? "Failed" : eeBuild?.ocpPhase ?? "Starting…"}
                   variant={eeBuildFailed ? "danger" : eeBuildDone ? "success" : undefined}
@@ -616,7 +621,7 @@ function JobTemplatesCard({
                   <Content component={ContentVariants.small}>
                     Build <code>{eeBuild.buildName}</code> — same log{" "}
                     <code>oc logs -f bc/agentstore-ee</code> or the OpenShift console&apos;s
-                    Build page would show, last 200 lines.
+                    Build page would show, last {EE_BUILD_LOG_TAIL_LINES} lines.
                   </Content>
                   <pre
                     style={{
@@ -705,6 +710,199 @@ function JobTemplatesCard({
             {busy ? "Starting…" : running ? `Creating… (${bootstrap?.phase ?? "in progress"})` : "Create job templates"}
           </Button>
         </div>
+      </CardBody>
+    </Card>
+  );
+}
+
+/**
+ * The agent-runtime image's "Build from source" admin action (Admin ->
+ * Platform -> Agent Runtime): apps/agent-runtime's chat container has
+ * no manual-register alternative like the Execution Environment does
+ * (there's no AAP object for it to become) — "Start build" is the only
+ * path, so this card is deliberately simpler than JobTemplatesCard's
+ * EE section: no name/credential mini-form, just a build button, this
+ * same progress bar, and log viewer.
+ */
+function AgentRuntimeCard({
+  draft,
+  onSettingsUpdate,
+}: {
+  draft: PlatformSettings;
+  onSettingsUpdate: (next: PlatformSettings) => void;
+}) {
+  const [starting, setStarting] = useState(false);
+  const [startError, setStartError] = useState<string | null>(null);
+  const build = draft.agentRuntimeBuild;
+  const running = build?.status === "deploying";
+  const done = build?.status === "running";
+  const failed = build?.status === "failed";
+
+  const [showBuildLog, setShowBuildLog] = useState(false);
+  const [buildLog, setBuildLog] = useState("");
+  const [buildLogLoading, setBuildLogLoading] = useState(false);
+
+  useEffect(() => {
+    if (!running) return;
+    const timer = setInterval(() => {
+      fetchAgentRuntimeBuildStatus()
+        .then(onSettingsUpdate)
+        .catch((err: Error) => setStartError(err.message));
+    }, 4000);
+    return () => clearInterval(timer);
+  }, [running, onSettingsUpdate]);
+
+  // Same "poll a few extra cycles after completion" logic as
+  // JobTemplatesCard's EE log viewer — see that effect's comment for
+  // the rationale (a fast-failing build can flip to a terminal status
+  // before the log ever gets fetched a second time).
+  const logExtraPollsRef = useRef(0);
+  useEffect(() => {
+    if (!build?.buildName) return;
+    let cancelled = false;
+    logExtraPollsRef.current = 3;
+    function load() {
+      setBuildLogLoading(true);
+      fetchAgentRuntimeBuildLog()
+        .then(({ log }) => {
+          if (!cancelled) setBuildLog(log);
+        })
+        .catch((err: Error) => {
+          if (!cancelled) setBuildLog(`(failed to load build log: ${err.message})`);
+        })
+        .finally(() => {
+          if (!cancelled) setBuildLogLoading(false);
+        });
+    }
+    load();
+    const timer = setInterval(() => {
+      if (!running) {
+        if (logExtraPollsRef.current <= 0) {
+          clearInterval(timer);
+          return;
+        }
+        logExtraPollsRef.current -= 1;
+      }
+      load();
+    }, 4000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [build?.buildName, running]);
+
+  useEffect(() => {
+    if (failed) setShowBuildLog(true);
+  }, [failed]);
+
+  async function startBuild() {
+    setStarting(true);
+    setStartError(null);
+    try {
+      const next = await startAgentRuntimeBuild({
+        aapProjectGitUrl: draft.aapProjectGitUrl,
+        aapProjectGitBranch: draft.aapProjectGitBranch,
+      });
+      onSettingsUpdate(next);
+    } catch (err) {
+      setStartError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setStarting(false);
+    }
+  }
+
+  return (
+    <Card>
+      <CardTitle>
+        <IconTitle icon={OpenshiftIcon}>Agent Runtime image</IconTitle>
+      </CardTitle>
+      <CardBody>
+        <Content component={ContentVariants.small}>
+          The persistent chat container every generic-chat deploy runs (
+          <code>apps/agent-runtime</code>). Without a real image here, deploys
+          fail trying to pull the <code>agent-runtime:dev</code> placeholder
+          from Docker Hub — nothing publishes that. &quot;Start build&quot;
+          builds <code>apps/agent-runtime/Containerfile</code> as an OpenShift
+          BuildConfig — source: the Project Git URL/branch on the AAP Job
+          Templates card above — and pushes the result to OpenShift&apos;s
+          internal registry. No local <code>podman</code> needed.
+        </Content>
+
+        {startError && <Alert variant="danger" isInline title={startError} style={{ marginTop: "0.5rem" }} />}
+        {(build?.error || done) && (
+          <Alert
+            variant={build?.error ? "danger" : "success"}
+            isInline
+            title={build?.error ? build.error : `Built image ready: ${build?.image}`}
+            style={{ marginTop: "0.5rem" }}
+          />
+        )}
+
+        <DescriptionList isCompact style={{ marginTop: "0.75rem" }}>
+          <DescriptionListGroup>
+            <DescriptionListTerm>Current image</DescriptionListTerm>
+            <DescriptionListDescription>
+              {draft.agentRuntimeImage ? (
+                <span title={draft.agentRuntimeImage} style={{ wordBreak: "break-all" }}>
+                  {draft.agentRuntimeImage}
+                </span>
+              ) : (
+                <Content component={ContentVariants.small}>
+                  Not built yet — deploys fall back to the <code>agent-runtime:dev</code>{" "}
+                  placeholder, which fails to pull.
+                </Content>
+              )}
+            </DescriptionListDescription>
+          </DescriptionListGroup>
+        </DescriptionList>
+
+        <div style={{ marginTop: "0.75rem" }}>
+          <Button variant="primary" isDisabled={starting || running} onClick={() => void startBuild()}>
+            {starting ? "Starting…" : running ? `Building… (${build?.ocpPhase ?? "starting"})` : "Start build"}
+          </Button>
+        </div>
+
+        {(running || done || failed) && (
+          <Progress
+            value={ocpBuildProgressPercent(build?.ocpPhase, running, done)}
+            title="OpenShift build"
+            label={failed ? "Failed" : build?.ocpPhase ?? "Starting…"}
+            variant={failed ? "danger" : done ? "success" : undefined}
+            measureLocation="inside"
+            style={{ marginTop: "0.75rem", maxWidth: "420px" }}
+          />
+        )}
+
+        {build?.buildName && (
+          <ExpandableSection
+            toggleContent={`View build log${buildLogLoading ? " (loading…)" : ""}`}
+            isExpanded={showBuildLog}
+            onToggle={() => setShowBuildLog((v) => !v)}
+            style={{ marginTop: "0.5rem" }}
+          >
+            <Content component={ContentVariants.small}>
+              Build <code>{build.buildName}</code> — same log{" "}
+              <code>oc logs -f bc/agentstore-agent-runtime</code> or the OpenShift
+              console&apos;s Build page would show, last {EE_BUILD_LOG_TAIL_LINES} lines.
+            </Content>
+            <pre
+              style={{
+                marginTop: "0.5rem",
+                maxHeight: "320px",
+                overflow: "auto",
+                background: "var(--pf-t--global--background--color--floating--default, #151515)",
+                color: "var(--pf-t--global--text--color--inverse, #f0f0f0)",
+                padding: "0.75rem",
+                borderRadius: "4px",
+                fontSize: "0.8rem",
+                whiteSpace: "pre-wrap",
+                wordBreak: "break-word",
+              }}
+            >
+              {buildLog || "(no output yet)"}
+            </pre>
+          </ExpandableSection>
+        )}
       </CardBody>
     </Card>
   );
@@ -842,7 +1040,12 @@ export function PlatformPanel() {
   function applyBootstrapUpdate(next: PlatformSettings) {
     setDraft(next);
     setStatus((prev) => (prev ? { ...prev, settings: next } : prev));
-    if (next.aapBootstrap?.status !== "deploying" && next.eeBuild?.status !== "deploying") load();
+    if (
+      next.aapBootstrap?.status !== "deploying" &&
+      next.eeBuild?.status !== "deploying" &&
+      next.agentRuntimeBuild?.status !== "deploying"
+    )
+      load();
   }
 
   return (
@@ -983,6 +1186,10 @@ export function PlatformPanel() {
           onFieldChange={updateDraftField}
           onSettingsUpdate={applyBootstrapUpdate}
         />
+      </FlexItem>
+
+      <FlexItem>
+        <AgentRuntimeCard draft={draft} onSettingsUpdate={applyBootstrapUpdate} />
       </FlexItem>
 
       <FlexItem>

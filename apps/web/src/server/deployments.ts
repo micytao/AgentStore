@@ -10,7 +10,7 @@ import {
 } from "@agentstore/engine-ansible";
 import { getListing, updateListing } from "./catalog";
 import { mcpServersFor } from "./agentRuntimeConfig";
-import { ensurePlatformEnv } from "./platform";
+import { ensurePlatformEnv, getPlatformSettings } from "./platform";
 import { apiKeyFor, providerFor } from "./providers";
 import { getSkillsByIds } from "./skills";
 
@@ -90,6 +90,11 @@ export async function startDeployment(listingId: string): Promise<Listing> {
     introLines: chatIntroLinesFor(listing),
     skills: getSkillsByIds(listing.agentConfig?.skillIds),
     mcpServers: mcpServersFor(listing),
+    // Falls back to the AGENT_RUNTIME_IMAGE env var (and ultimately the
+    // `agent-runtime:dev` placeholder, which nothing actually publishes)
+    // when the "Build from source" action on Admin -> Platform -> Agent
+    // Runtime hasn't been run yet.
+    agentRuntimeImage: getPlatformSettings().agentRuntimeImage,
   });
 
   return persistDeployment(listingId, {

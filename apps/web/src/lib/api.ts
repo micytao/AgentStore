@@ -187,6 +187,31 @@ export function fetchEeBuildLog(): Promise<{ log: string }> {
   );
 }
 
+/** Starts (or re-starts) the agent-runtime image's "Build from source"
+ * OpenShift build (Admin -> Platform -> Agent Runtime). `settings` is
+ * saved server-side in the same request, same save-as-a-side-effect
+ * convention as startEeImageBuild(). Returns the updated
+ * PlatformSettings (holding `agentRuntimeBuild`/`agentRuntimeImage`). */
+export function startAgentRuntimeBuild(settings?: Partial<PlatformSettings>): Promise<PlatformSettings> {
+  return fetch("/api/admin/platform/agent-runtime-build", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ settings }),
+  }).then((r) => parse<PlatformSettings>(r));
+}
+
+/** Polls the in-flight agent-runtime build for progress; safe to call
+ * on an interval. */
+export function fetchAgentRuntimeBuildStatus(): Promise<PlatformSettings> {
+  return fetch("/api/admin/platform/agent-runtime-build").then((r) => parse<PlatformSettings>(r));
+}
+
+/** Tail of the agent-runtime build's log, for the "View build log"
+ * section. */
+export function fetchAgentRuntimeBuildLog(): Promise<{ log: string }> {
+  return fetch("/api/admin/platform/agent-runtime-build/log").then((r) => parse<{ log: string }>(r));
+}
+
 export function updatePlatformSettings(
   patch: Partial<PlatformSettings>
 ): Promise<PlatformStatus> {

@@ -302,6 +302,27 @@ export interface PlatformSettings {
    * AgentStore) instead of requiring `ansible-builder`/`podman` locally.
    * See EeBuildStatus. */
   eeBuild?: EeBuildStatus;
+
+  // --- Agent Runtime image (Admin -> Platform -> Agent Runtime) --------
+  //
+  // apps/agent-runtime is the persistent chat container
+  // provision-generic-agent.yml deploys per generic-chat listing. Unlike
+  // the AAP Execution Environment above, there's no "manual register"
+  // step for AAP to do — the built image's reference is used directly
+  // by the Deployment spec — so this is just "build" (below) plus the
+  // resulting reference, no separate id/lookup concept.
+  /** The agent-runtime image's pullable reference, used by every
+   * generic-chat deploy in place of the `agent-runtime:dev` placeholder
+   * default (packages/engine-ansible/src/config.ts's
+   * agentRuntimeImage()) — set automatically once a "Build from source"
+   * build completes, or pasted in manually if built/pushed elsewhere. */
+  agentRuntimeImage?: string;
+  /** Progress/result of the agent-runtime "Build from source" admin
+   * action, once ever started — same OpenShift BuildConfig/Build
+   * mechanism as EeBuildStatus, just building
+   * apps/agent-runtime/Containerfile instead, and with no AAP-
+   * registration step tacked on. */
+  agentRuntimeBuild?: OcpImageBuildStatus;
 }
 
 /** Progress/result of the "Build from source" admin action — builds
@@ -316,7 +337,21 @@ export interface PlatformSettings {
  * object. Same two-phase start/poll convention as AapBootstrapStatus:
  * the Build itself can take a few minutes, so starting it and polling it
  * are separate calls. */
-export interface EeBuildStatus {
+/** Single source of truth for the "View build log" section's tail
+ * size — used by both engine-ansible's getEeImageBuildLog() and the
+ * Admin UI's description text ("last N lines"), so the two can never
+ * drift out of sync the way they did once already. */
+export const EE_BUILD_LOG_TAIL_LINES = 1000;
+
+/** Generic OpenShift image-build progress shape, shared by every
+ * "Build from source" admin action — both the AAP Execution
+ * Environment's EeBuildStatus (below) and the agent-runtime chat
+ * container's build (PlatformSettings.agentRuntimeBuild) are driven by
+ * the exact same OpenShift BuildConfig/Build primitives
+ * (packages/engine-ansible/src/openshift.ts), just with a different
+ * Containerfile/context, and (for the EE only) an extra AAP-
+ * registration step tacked on. */
+export interface OcpImageBuildStatus {
   status: AgentDeploymentStatus;
   phase?: string;
   /** Raw OpenShift Build phase ("New" | "Pending" | "Running" |
@@ -327,19 +362,22 @@ export interface EeBuildStatus {
   ocpPhase?: string;
   /** Stashed between start and finish — not shown in the UI. */
   buildName?: string;
+  /** The built image's pullable reference (OpenShift's internal
+   * registry, e.g. `image-registry.openshift-image-registry.svc:5000/
+   * <namespace>/agentstore-ee@sha256:...`), once status is "running". */
+  image?: string;
+  error?: string;
+  updatedAt?: string;
+}
+
+export interface EeBuildStatus extends OcpImageBuildStatus {
   /** Stashed between start and finish: the AAP Execution Environment
    * name/registry-credential this build's image gets registered under
    * once the OpenShift Build completes. */
   executionEnvironmentName?: string;
   registryCredentialId?: number;
-  /** The built image's pullable reference (OpenShift's internal
-   * registry, e.g. `image-registry.openshift-image-registry.svc:5000/
-   * <namespace>/agentstore-ee@sha256:...`), once status is "running". */
-  image?: string;
   /** Mirrors PlatformSettings.aapExecutionEnvironmentId once registered. */
   executionEnvironmentId?: number;
-  error?: string;
-  updatedAt?: string;
 }
 
 /** The OpenShell chart's workload kind for its main server: a
