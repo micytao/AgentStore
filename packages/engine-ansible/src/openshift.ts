@@ -21,7 +21,17 @@ async function ocpFetch(path: string, init: RequestInit = {}): Promise<Response>
     headers.set("Content-Type", "application/json");
   }
   const dispatcher = dispatcherFor(openshiftInsecureTls());
-  return fetch(`${base}${path}`, { ...init, headers, ...(dispatcher ? { dispatcher } : {}) } as RequestInit);
+  // Every call here is live cluster state (job/build status, logs,
+  // image references) — Next.js's App Router patches the global fetch()
+  // to cache GET requests by default, which would otherwise make
+  // repeated polls (e.g. the build log tail) silently return a stale
+  // snapshot instead of fresh data.
+  return fetch(`${base}${path}`, {
+    ...init,
+    headers,
+    cache: "no-store",
+    ...(dispatcher ? { dispatcher } : {}),
+  } as RequestInit);
 }
 
 export async function pingOpenshift(): Promise<{ ok: boolean; error?: string }> {

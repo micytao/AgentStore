@@ -35,7 +35,10 @@ async function serviceFetch(path: string, init: RequestInit = {}): Promise<Respo
   if (init.body && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
   }
-  return fetch(`${openshellServiceUrl()}${path}`, { ...init, headers });
+  // Live session/health state — see the matching comment in
+  // engine-ansible's aapFetch()/ocpFetch() for why cache: "no-store" is
+  // needed (Next.js's App Router caches GET fetch() by default).
+  return fetch(`${openshellServiceUrl()}${path}`, { ...init, headers, cache: "no-store" });
 }
 
 async function parseOrThrow<T>(response: Response, action: string): Promise<T> {

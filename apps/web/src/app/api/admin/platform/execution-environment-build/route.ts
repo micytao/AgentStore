@@ -4,6 +4,10 @@ import { requireAdmin } from "@/server/auth";
 import { refreshEeBuild, startEeBuild } from "@/server/eeBuild";
 import { savePlatformSettings } from "@/server/platform";
 
+// GET reads nothing from `request` either — see the matching comment
+// in ./log/route.ts for why this needs to stay fully dynamic.
+export const dynamic = "force-dynamic";
+
 /**
  * Starts (or re-starts) the "Build from source" action on the AAP Job
  * Templates card — builds the Execution Environment image as an

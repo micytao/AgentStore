@@ -49,9 +49,15 @@ async function aapFetch(path: string, init: RequestInit = {}): Promise<Response>
   }
   const dispatcher = dispatcherFor(aapInsecureTls());
   const prefix = await controllerApiPrefix(base, dispatcher);
+  // Every call here is live AAP state (job/project-sync status, lists
+  // that change as objects are created) — Next.js's App Router patches
+  // the global fetch() to cache GET requests by default, which would
+  // otherwise make repeated polls (e.g. job/project-sync status) return
+  // a stale snapshot instead of fresh data.
   return fetch(`${base}${prefix}${path}`, {
     ...init,
     headers,
+    cache: "no-store",
     ...(dispatcher ? { dispatcher } : {}),
   } as RequestInit);
 }
