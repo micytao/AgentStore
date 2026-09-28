@@ -24,12 +24,15 @@ RUN pip3 install --no-cache-dir -r /tmp/requirements.txt \
 # an Ansible collection or a pip/system package, so it's installed via
 # the upstream get-helm-3 script, same as execution-environment.yml's
 # additional_build_steps. get-helm-3 shells out to `openssl` to verify
-# the downloaded binary's checksum, which quay.io/ansible/ansible-runner
-# doesn't include by default — install it first, trying microdnf (UBI
-# minimal images) then dnf/yum (fuller UBI images) since it's not
-# guaranteed which one this base image ships.
-RUN (microdnf install -y openssl || dnf install -y openssl || yum install -y openssl) \
-    && curl -fsSL -o /tmp/get-helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 \
+# the downloaded binary's checksum; quay.io/ansible/ansible-runner
+# doesn't include it, and installing it via a package manager isn't
+# reliable here either (this base image's dnf/yum repos point at
+# CentOS's public mirrorlist, which many locked-down cluster networks
+# — including OpenShift build pods with restricted egress — can't
+# resolve). VERIFY_CHECKSUM=false skips that verification step
+# entirely instead, needing only `curl` (to GitHub), which already
+# works in this environment.
+RUN curl -fsSL -o /tmp/get-helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 \
     && chmod 700 /tmp/get-helm.sh \
-    && /tmp/get-helm.sh --no-sudo \
+    && VERIFY_CHECKSUM=false /tmp/get-helm.sh --no-sudo \
     && rm -f /tmp/get-helm.sh
