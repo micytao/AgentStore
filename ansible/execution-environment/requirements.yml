@@ -1,4 +1,12 @@
 ---
 collections:
+  # Pinned, not a floor: kubernetes.core >=3.0.0 requires ansible-core
+  # >=2.14.0 (per its requires_ansible metadata on Galaxy), but
+  # quay.io/ansible/ansible-runner:latest ships ansible-core 2.12.5 --
+  # an unpinned ">=3.0.0" silently resolves to the newest 6.x release,
+  # which AAP then refuses to run against ("Collection kubernetes.core
+  # does not support Ansible version 2.12.5.post0"). 2.4.2 is the
+  # newest release in the 2.x line that still supports 2.12.5
+  # (requires_ansible: >=2.9.17).
   - name: kubernetes.core
-    version: ">=3.0.0"
+    version: "2.4.2"

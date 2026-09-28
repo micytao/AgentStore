@@ -16,9 +16,27 @@ COPY requirements.yml /tmp/requirements.yml
 RUN ansible-galaxy collection install -r /tmp/requirements.yml \
     && rm -f /tmp/requirements.yml
 
+# Installed into an isolated venv, NOT the base image's system Python
+# site-packages, which `ansible-core`/`ansible-runner` themselves also
+# use. A plain `pip3 install` here can silently upgrade shared
+# transitive dependencies (e.g. importlib-metadata/zipp) to versions
+# that break ansible-core's own plugin loading on this image's Python
+# 3.8 ("cannot import name 'files' from importlib.resources" at
+# playbook run time -- that's Python 3.9+ stdlib API). `ansible-builder
+# build` (Option A, ../README.md) avoids this automatically by always
+# installing a collection's Python dependencies into their own venv;
+# this replicates that for the OpenShift BuildConfig path.
+# --system-site-packages keeps everything already in the base image
+# (PyYAML, jinja2, etc. that ansible.builtin modules expect) visible
+# from inside the venv, so only the *new* packages below are isolated.
 COPY requirements.txt /tmp/requirements.txt
-RUN pip3 install --no-cache-dir -r /tmp/requirements.txt \
+RUN python3 -m venv --system-site-packages /opt/ansible-venv \
+    && /opt/ansible-venv/bin/pip install --no-cache-dir -r /tmp/requirements.txt \
     && rm -f /tmp/requirements.txt
+# Module execution (e.g. kubernetes.core.k8s, which needs the `kubernetes`
+# package just installed above) uses this interpreter; ansible-core's
+# own process keeps running under the untouched system Python.
+ENV ANSIBLE_PYTHON_INTERPRETER=/opt/ansible-venv/bin/python3
 
 # helm CLI — provision-openshell-gateway.yml shells out to it; it's not
 # an Ansible collection or a pip/system package, so it's installed via
