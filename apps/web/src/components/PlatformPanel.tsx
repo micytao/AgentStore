@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import type { ComponentType, ReactNode } from "react";
 import type {
+  AapNamedObject,
   PlatformConnectionStatus,
   PlatformSettings,
   PlatformStatus,
@@ -27,6 +28,8 @@ import {
   FlexItem,
   Form,
   FormGroup,
+  FormSelect,
+  FormSelectOption,
   Label,
   Spinner,
   TextInput,
@@ -34,7 +37,16 @@ import {
 } from "@patternfly/react-core";
 import { Table, Tbody, Td, Th, Thead, Tr } from "@patternfly/react-table";
 import { SecretField } from "@/components/SecretField";
-import { fetchPlatformStatus, fetchSecrets, testPlatformConnection } from "@/lib/api";
+import {
+  createJobTemplates,
+  fetchEeBuildStatus,
+  fetchJobTemplateBootstrapStatus,
+  fetchPlatformStatus,
+  fetchSecrets,
+  registerExecutionEnvironment,
+  startEeImageBuild,
+  testPlatformConnection,
+} from "@/lib/api";
 
 type TestOutcome = { ok: boolean; message: string };
 
@@ -128,6 +140,452 @@ function ConnectionCard({
         {showError && (
           <Alert variant="danger" isInline isPlain title={errorMessage} style={{ marginTop: "0.5rem" }} />
         )}
+      </CardBody>
+    </Card>
+  );
+}
+
+/**
+ * "Create job templates" admin action: calls the AAP REST API directly
+ * to create the Project/Inventory/Kubernetes-credential/Job-Template
+ * objects that launchGenericAgentDeploy() (autonomous) and
+ * launchGatewayDeploy() (collaborative) already know how to launch by
+ * id — see apps/web/src/server/aapBootstrap.ts. Its "Create job
+ * templates" button + polling mirror CatalogManager.tsx's
+ * DeploySection exactly, just platform-scoped instead of per-listing.
+ */
+/** Organization/Project picker: a real `FormSelect` of AAP objects
+ * matched by *name* (not id — that's what PlatformSettings stores for
+ * these two fields, since findOrganizationByName()/findOrCreateProject()
+ * both key off name). Falls back to showing whatever's currently typed
+ * as an extra option so a value never gets silently wiped out if AAP
+ * hasn't been probed yet or the name isn't in the list (e.g. a Project
+ * not created yet). */
+function NamedObjectSelect({
+  id,
+  value,
+  options,
+  onChange,
+  emptyLabel,
+}: {
+  id: string;
+  value: string;
+  options: AapNamedObject[];
+  onChange: (name: string) => void;
+  emptyLabel: string;
+}) {
+  const hasCurrent = !value || options.some((o) => o.name === value);
+  return (
+    <FormSelect id={id} value={value} onChange={(_e, v) => onChange(v)}>
+      {options.length === 0 && <FormSelectOption value={value} label={value || emptyLabel} />}
+      {!hasCurrent && <FormSelectOption value={value} label={`${value} (not in AAP yet)`} />}
+      {options.map((o) => (
+        <FormSelectOption key={o.id} value={o.name} label={o.name} />
+      ))}
+    </FormSelect>
+  );
+}
+
+function JobTemplatesCard({
+  draft,
+  aap,
+  onFieldChange,
+  onSettingsUpdate,
+}: {
+  draft: PlatformSettings;
+  aap: PlatformStatus["aap"];
+  onFieldChange: <K extends keyof PlatformSettings>(key: K, value: PlatformSettings[K]) => void;
+  onSettingsUpdate: (next: PlatformSettings) => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const bootstrap = draft.aapBootstrap;
+  const running = bootstrap?.status === "deploying";
+  const done = bootstrap?.status === "running";
+
+  const [showRegisterEe, setShowRegisterEe] = useState(false);
+  const [newEeName, setNewEeName] = useState("AgentStore execution environment");
+  const [newEeImage, setNewEeImage] = useState("");
+  const [newEeCredentialId, setNewEeCredentialId] = useState("");
+  const [registering, setRegistering] = useState(false);
+  const [registerError, setRegisterError] = useState<string | null>(null);
+
+  const [showBuildEe, setShowBuildEe] = useState(false);
+  const [buildEeName, setBuildEeName] = useState("AgentStore execution environment");
+  const [buildEeCredentialId, setBuildEeCredentialId] = useState("");
+  const [starting, setStarting] = useState(false);
+  const [startError, setStartError] = useState<string | null>(null);
+  const eeBuild = draft.eeBuild;
+  const eeBuildRunning = eeBuild?.status === "deploying";
+  const eeBuildDone = eeBuild?.status === "running";
+
+  useEffect(() => {
+    if (!running) return;
+    const timer = setInterval(() => {
+      fetchJobTemplateBootstrapStatus()
+        .then(onSettingsUpdate)
+        .catch((err: Error) => setError(err.message));
+    }, 4000);
+    return () => clearInterval(timer);
+  }, [running, onSettingsUpdate]);
+
+  useEffect(() => {
+    if (!eeBuildRunning) return;
+    const timer = setInterval(() => {
+      fetchEeBuildStatus()
+        .then(onSettingsUpdate)
+        .catch((err: Error) => setStartError(err.message));
+    }, 4000);
+    return () => clearInterval(timer);
+  }, [eeBuildRunning, onSettingsUpdate]);
+
+  async function create() {
+    setBusy(true);
+    setError(null);
+    try {
+      const next = await createJobTemplates({
+        aapOrganizationName: draft.aapOrganizationName,
+        aapProjectName: draft.aapProjectName,
+        aapProjectGitUrl: draft.aapProjectGitUrl,
+        aapProjectGitBranch: draft.aapProjectGitBranch,
+        aapProjectScmCredentialId: draft.aapProjectScmCredentialId,
+        aapExecutionEnvironmentId: draft.aapExecutionEnvironmentId,
+      });
+      onSettingsUpdate(next);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function registerEe() {
+    setRegistering(true);
+    setRegisterError(null);
+    try {
+      const next = await registerExecutionEnvironment({
+        name: newEeName,
+        image: newEeImage,
+        credentialId: newEeCredentialId ? Number(newEeCredentialId) : undefined,
+      });
+      onSettingsUpdate(next);
+      setShowRegisterEe(false);
+      setNewEeImage("");
+    } catch (err) {
+      setRegisterError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setRegistering(false);
+    }
+  }
+
+  async function startBuild() {
+    setStarting(true);
+    setStartError(null);
+    try {
+      const next = await startEeImageBuild({
+        name: buildEeName,
+        credentialId: buildEeCredentialId ? Number(buildEeCredentialId) : undefined,
+      });
+      onSettingsUpdate(next);
+    } catch (err) {
+      setStartError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setStarting(false);
+    }
+  }
+
+  return (
+    <Card>
+      <CardTitle>
+        <IconTitle icon={AnsibleTowerIcon}>AAP Job Templates</IconTitle>
+      </CardTitle>
+      <CardBody>
+        <Content component={ContentVariants.small}>
+          Creates the two AAP Job Templates AgentStore launches by id — one for
+          autonomous (generic-chat) agent deploys, one for the collaborative
+          OpenShell gateway install — plus the Project, Inventory, and Kubernetes
+          credential they need. Run this once instead of creating them by hand in
+          the AAP web UI.
+        </Content>
+
+        {error && <Alert variant="danger" isInline title={error} style={{ marginTop: "0.5rem" }} />}
+        {bootstrap?.error && (
+          <Alert variant="danger" isInline title={bootstrap.error} style={{ marginTop: "0.5rem" }} />
+        )}
+        {done && (
+          <Alert
+            variant="success"
+            isInline
+            title={`Created job template #${bootstrap?.autonomousJobTemplateId} (autonomous) and #${bootstrap?.collaborativeJobTemplateId} (collaborative) — both fields below are now filled in.`}
+            style={{ marginTop: "0.5rem" }}
+          />
+        )}
+
+        <Form style={{ marginTop: "0.75rem" }}>
+          <Flex spaceItems={{ default: "spaceItemsMd" }} flexWrap={{ default: "wrap" }}>
+            <FlexItem flex={{ default: "flex_1" }} style={{ minWidth: "200px" }}>
+              <FormGroup label="Organization" isRequired fieldId="jt-org">
+                <NamedObjectSelect
+                  id="jt-org"
+                  value={draft.aapOrganizationName}
+                  options={aap.organizations}
+                  onChange={(v) => onFieldChange("aapOrganizationName", v)}
+                  emptyLabel="Connect AAP above to load organizations"
+                />
+              </FormGroup>
+            </FlexItem>
+            <FlexItem flex={{ default: "flex_1" }} style={{ minWidth: "200px" }}>
+              <FormGroup label="Existing project (optional)" fieldId="jt-project-pick">
+                <FormSelect
+                  id="jt-project-pick"
+                  value={aap.projects.some((p) => p.name === draft.aapProjectName) ? draft.aapProjectName : "__new__"}
+                  onChange={(_e, v) => {
+                    if (v !== "__new__") onFieldChange("aapProjectName", v);
+                  }}
+                >
+                  <FormSelectOption value="__new__" label="+ Create new project…" />
+                  {aap.projects.map((p) => (
+                    <FormSelectOption key={p.id} value={p.name} label={`${p.name} (#${p.id})`} />
+                  ))}
+                </FormSelect>
+              </FormGroup>
+            </FlexItem>
+            <FlexItem flex={{ default: "flex_1" }} style={{ minWidth: "180px" }}>
+              <FormGroup label="Project name" isRequired fieldId="jt-project-name">
+                <TextInput
+                  id="jt-project-name"
+                  value={draft.aapProjectName}
+                  onChange={(_e, v) => onFieldChange("aapProjectName", v)}
+                />
+              </FormGroup>
+            </FlexItem>
+          </Flex>
+          <Flex spaceItems={{ default: "spaceItemsMd" }} flexWrap={{ default: "wrap" }} style={{ marginTop: "0.5rem" }}>
+            <FlexItem flex={{ default: "flex_2" }} style={{ minWidth: "260px" }}>
+              <FormGroup
+                label="Project Git URL"
+                isRequired
+                fieldId="jt-git-url"
+              >
+                <TextInput
+                  id="jt-git-url"
+                  value={draft.aapProjectGitUrl}
+                  placeholder="https://github.com/your-org/AgentStore.git"
+                  onChange={(_e, v) => onFieldChange("aapProjectGitUrl", v)}
+                />
+              </FormGroup>
+            </FlexItem>
+            <FlexItem flex={{ default: "flex_1" }} style={{ minWidth: "120px" }}>
+              <FormGroup label="Branch" fieldId="jt-git-branch">
+                <TextInput
+                  id="jt-git-branch"
+                  value={draft.aapProjectGitBranch}
+                  placeholder="main"
+                  onChange={(_e, v) => onFieldChange("aapProjectGitBranch", v)}
+                />
+              </FormGroup>
+            </FlexItem>
+            <FlexItem flex={{ default: "flex_1" }} style={{ minWidth: "220px" }}>
+              <FormGroup label="SCM credential (private repos only)" fieldId="jt-scm-cred">
+                <FormSelect
+                  id="jt-scm-cred"
+                  value={String(draft.aapProjectScmCredentialId || "")}
+                  onChange={(_e, v) => onFieldChange("aapProjectScmCredentialId", v ? Number(v) : "")}
+                >
+                  <FormSelectOption value="" label="None (public repo)" />
+                  {aap.credentials.map((c) => (
+                    <FormSelectOption key={c.id} value={String(c.id)} label={`${c.name} (#${c.id})`} />
+                  ))}
+                </FormSelect>
+              </FormGroup>
+            </FlexItem>
+          </Flex>
+          <Content component={ContentVariants.small} style={{ marginTop: "0.5rem" }}>
+            "Project Git URL" must point at your whole AgentStore repo (or fork) —
+            not just this <code>ansible/</code> folder — since the job templates
+            reference <code>ansible/provision-generic-agent.yml</code> and{" "}
+            <code>ansible/provision-openshell-gateway.yml</code> relative to the repo
+            root.
+          </Content>
+
+          <Flex
+            spaceItems={{ default: "spaceItemsMd" }}
+            flexWrap={{ default: "wrap" }}
+            alignItems={{ default: "alignItemsFlexEnd" }}
+            style={{ marginTop: "0.5rem" }}
+          >
+            <FlexItem flex={{ default: "flex_1" }} style={{ minWidth: "220px" }}>
+              <FormGroup label="Execution environment" isRequired fieldId="jt-ee">
+                <FormSelect
+                  id="jt-ee"
+                  value={String(draft.aapExecutionEnvironmentId || "")}
+                  onChange={(_e, v) => onFieldChange("aapExecutionEnvironmentId", v ? Number(v) : "")}
+                >
+                  <FormSelectOption value="" label="Select an execution environment…" />
+                  {aap.executionEnvironments.map((e) => (
+                    <FormSelectOption key={e.id} value={String(e.id)} label={`${e.name} (#${e.id})`} />
+                  ))}
+                </FormSelect>
+              </FormGroup>
+            </FlexItem>
+            <FlexItem>
+              <Button
+                variant="link"
+                isInline
+                onClick={() => {
+                  setShowBuildEe((v) => !v);
+                  setShowRegisterEe(false);
+                }}
+              >
+                {showBuildEe ? "Cancel" : "+ Build from source"}
+              </Button>
+            </FlexItem>
+            <FlexItem>
+              <Button
+                variant="link"
+                isInline
+                onClick={() => {
+                  setShowRegisterEe((v) => !v);
+                  setShowBuildEe(false);
+                }}
+              >
+                {showRegisterEe ? "Cancel" : "+ Register a new image…"}
+              </Button>
+            </FlexItem>
+          </Flex>
+        </Form>
+
+        {(eeBuild?.error || eeBuildDone) && (
+          <Alert
+            variant={eeBuild?.error ? "danger" : "success"}
+            isInline
+            title={
+              eeBuild?.error
+                ? eeBuild.error
+                : `Built and registered execution environment #${eeBuild?.executionEnvironmentId} — selected below.`
+            }
+            style={{ marginTop: "0.5rem" }}
+          />
+        )}
+
+        {showBuildEe && (
+          <Card isCompact isPlain style={{ marginTop: "0.5rem", border: "1px dashed var(--pf-t--global--border--color--100, #ccc)" }}>
+            <CardBody>
+              <Content component={ContentVariants.small}>
+                Builds <code>ansible/execution-environment/Containerfile</code> as an
+                OpenShift BuildConfig — source: the Project Git URL/branch above — and
+                pushes the result to OpenShift&apos;s internal registry, then registers it
+                in AAP automatically. No local <code>ansible-builder</code>/
+                <code>podman</code> needed; see{" "}
+                <code>ansible/execution-environment/README.md</code> (&quot;Option
+                B&quot;) for the caveats (AAP must be able to pull from that registry).
+              </Content>
+              {startError && (
+                <Alert variant="danger" isInline title={startError} style={{ marginTop: "0.5rem" }} />
+              )}
+              <Flex spaceItems={{ default: "spaceItemsMd" }} flexWrap={{ default: "wrap" }} style={{ marginTop: "0.5rem" }}>
+                <FlexItem flex={{ default: "flex_1" }} style={{ minWidth: "200px" }}>
+                  <FormGroup label="Name" isRequired fieldId="jt-build-ee-name">
+                    <TextInput id="jt-build-ee-name" value={buildEeName} onChange={(_e, v) => setBuildEeName(v)} />
+                  </FormGroup>
+                </FlexItem>
+                <FlexItem flex={{ default: "flex_1" }} style={{ minWidth: "220px" }}>
+                  <FormGroup label="Registry credential (only if AAP needs one)" fieldId="jt-build-ee-cred">
+                    <FormSelect
+                      id="jt-build-ee-cred"
+                      value={buildEeCredentialId}
+                      onChange={(_e, v) => setBuildEeCredentialId(v)}
+                    >
+                      <FormSelectOption value="" label="None (AAP pulls without one)" />
+                      {aap.registryCredentials.map((c) => (
+                        <FormSelectOption key={c.id} value={String(c.id)} label={`${c.name} (#${c.id})`} />
+                      ))}
+                    </FormSelect>
+                  </FormGroup>
+                </FlexItem>
+              </Flex>
+              <div style={{ marginTop: "0.5rem" }}>
+                <Button
+                  variant="secondary"
+                  isDisabled={starting || eeBuildRunning || !buildEeName.trim()}
+                  onClick={() => void startBuild()}
+                >
+                  {starting
+                    ? "Starting…"
+                    : eeBuildRunning
+                      ? `Building… (${eeBuild?.phase ?? "in progress"})`
+                      : "Start build"}
+                </Button>
+              </div>
+            </CardBody>
+          </Card>
+        )}
+
+        {showRegisterEe && (
+          <Card isCompact isPlain style={{ marginTop: "0.5rem", border: "1px dashed var(--pf-t--global--border--color--100, #ccc)" }}>
+            <CardBody>
+              <Content component={ContentVariants.small}>
+                Registers an image you&apos;ve already built and pushed as an AAP
+                Execution Environment (build steps: see{" "}
+                <code>ansible/execution-environment/README.md</code>). Doesn&apos;t
+                build or push anything itself — AAP has no API for that.
+              </Content>
+              {registerError && (
+                <Alert variant="danger" isInline title={registerError} style={{ marginTop: "0.5rem" }} />
+              )}
+              <Flex spaceItems={{ default: "spaceItemsMd" }} flexWrap={{ default: "wrap" }} style={{ marginTop: "0.5rem" }}>
+                <FlexItem flex={{ default: "flex_2" }} style={{ minWidth: "260px" }}>
+                  <FormGroup label="Image reference" isRequired fieldId="jt-ee-image">
+                    <TextInput
+                      id="jt-ee-image"
+                      value={newEeImage}
+                      placeholder="quay.io/your-org/agentstore-ee:latest"
+                      onChange={(_e, v) => setNewEeImage(v)}
+                    />
+                  </FormGroup>
+                </FlexItem>
+                <FlexItem flex={{ default: "flex_1" }} style={{ minWidth: "180px" }}>
+                  <FormGroup label="Name" isRequired fieldId="jt-ee-name">
+                    <TextInput id="jt-ee-name" value={newEeName} onChange={(_e, v) => setNewEeName(v)} />
+                  </FormGroup>
+                </FlexItem>
+                <FlexItem flex={{ default: "flex_1" }} style={{ minWidth: "200px" }}>
+                  <FormGroup label="Registry credential (private images only)" fieldId="jt-ee-cred">
+                    <FormSelect id="jt-ee-cred" value={newEeCredentialId} onChange={(_e, v) => setNewEeCredentialId(v)}>
+                      <FormSelectOption value="" label="None (public image)" />
+                      {aap.registryCredentials.map((c) => (
+                        <FormSelectOption key={c.id} value={String(c.id)} label={`${c.name} (#${c.id})`} />
+                      ))}
+                    </FormSelect>
+                  </FormGroup>
+                </FlexItem>
+              </Flex>
+              <div style={{ marginTop: "0.5rem" }}>
+                <Button
+                  variant="secondary"
+                  isDisabled={registering || !newEeImage.trim() || !newEeName.trim()}
+                  onClick={() => void registerEe()}
+                >
+                  {registering ? "Registering…" : "Register"}
+                </Button>
+              </div>
+            </CardBody>
+          </Card>
+        )}
+
+        <Content component={ContentVariants.small} style={{ marginTop: "0.5rem" }}>
+          The selected execution environment must already include the{" "}
+          <code>kubernetes.core</code> collection (and the <code>helm</code> CLI, for
+          the collaborative template) — see{" "}
+          <code>ansible/execution-environment/</code> for a ready-to-build
+          definition if you don&apos;t have one yet.
+        </Content>
+
+        <div style={{ marginTop: "0.75rem" }}>
+          <Button variant="primary" isDisabled={busy || running} onClick={() => void create()}>
+            {busy ? "Starting…" : running ? `Creating… (${bootstrap?.phase ?? "in progress"})` : "Create job templates"}
+          </Button>
+        </div>
       </CardBody>
     </Card>
   );
@@ -251,6 +709,22 @@ export function PlatformPanel() {
 
   const aapToken = secrets.find((s) => s.key === "AAP_TOKEN");
   const openshiftToken = secrets.find((s) => s.key === "OPENSHIFT_TOKEN");
+
+  function updateDraftField<K extends keyof PlatformSettings>(key: K, value: PlatformSettings[K]) {
+    setDraft((prev) => (prev ? { ...prev, [key]: value } : prev));
+  }
+
+  /** Applied after createJobTemplates()/fetchJobTemplateBootstrapStatus()
+   * — both return the freshly-saved PlatformSettings, which already
+   * includes any newly-populated aapJobTemplateId/
+   * openshellGatewayJobTemplateId. Re-runs the full status load once the
+   * bootstrap settles so the AAP controller card's "Templates: ..." list
+   * and Recent AAP jobs table pick up the newly created objects too. */
+  function applyBootstrapUpdate(next: PlatformSettings) {
+    setDraft(next);
+    setStatus((prev) => (prev ? { ...prev, settings: next } : prev));
+    if (next.aapBootstrap?.status !== "deploying" && next.eeBuild?.status !== "deploying") load();
+  }
 
   return (
     <Flex direction={{ default: "column" }} spaceItems={{ default: "spaceItemsLg" }}>
@@ -381,6 +855,15 @@ export function PlatformPanel() {
             {openshiftToken && <SecretField secret={openshiftToken} onChange={loadSecrets} />}
           </CardBody>
         </Card>
+      </FlexItem>
+
+      <FlexItem>
+        <JobTemplatesCard
+          draft={draft}
+          aap={status.aap}
+          onFieldChange={updateDraftField}
+          onSettingsUpdate={applyBootstrapUpdate}
+        />
       </FlexItem>
 
       <FlexItem>

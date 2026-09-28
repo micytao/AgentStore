@@ -1,0 +1,38 @@
+---
+# ansible-builder (v3 schema) definition for the Execution Environment
+# AgentStore's two Job Templates need — see ../README.md's "AAP Job
+# Templates" bootstrap and Admin -> Platform -> AAP Job Templates.
+#
+# provision-generic-agent.yml needs the `kubernetes.core` collection
+# (plus its Python `kubernetes` client library, pulled in via
+# requirements.txt below). provision-openshell-gateway.yml additionally
+# needs the `helm` CLI, installed via additional_build_steps since it's
+# not an Ansible collection or a pip/system package.
+#
+# Build (from this directory):
+#   pip install ansible-builder
+#   ansible-builder build \
+#     -t <your-registry>/agentstore-ee:latest \
+#     -f execution-environment.yml \
+#     --container-runtime podman
+#   podman push <your-registry>/agentstore-ee:latest
+#
+# Then either add it in AAP's web UI (Automation Execution ->
+# Infrastructure -> Execution Environments -> Add), or use Admin ->
+# Platform -> AAP Job Templates -> "Register execution environment" in
+# AgentStore, which calls the AAP API for you (no image build — that
+# part still has to happen here, locally/in CI, first).
+version: 3
+
+images:
+  base_image:
+    name: quay.io/ansible/ansible-runner:latest
+
+dependencies:
+  galaxy: requirements.yml
+  python: requirements.txt
+
+additional_build_steps:
+  append_final:
+    - RUN curl -fsSL -o /tmp/get-helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
+    - RUN chmod +x /tmp/get-helm.sh && /tmp/get-helm.sh --no-sudo && rm /tmp/get-helm.sh

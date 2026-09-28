@@ -1,0 +1,30 @@
+# Hand-written equivalent of execution-environment.yml (the
+# ansible-builder v3 schema in this same directory), used only by the
+# in-cluster OpenShift BuildConfig path — Admin -> Platform -> AAP Job
+# Templates -> "+ Build from source" — which drives a plain Docker-
+# strategy build and needs a real Containerfile/Dockerfile to build,
+# not the ansible-builder schema file.
+#
+# `ansible-builder build` (see ./README.md "Option A: build locally")
+# ignores this file entirely — it generates its own multi-stage
+# Containerfile from execution-environment.yml on the fly. If you change
+# what execution-environment.yml installs, mirror the change here too so
+# both build paths produce an equivalent image.
+FROM quay.io/ansible/ansible-runner:latest
+
+COPY requirements.yml /tmp/requirements.yml
+RUN ansible-galaxy collection install -r /tmp/requirements.yml \
+    && rm -f /tmp/requirements.yml
+
+COPY requirements.txt /tmp/requirements.txt
+RUN pip3 install --no-cache-dir -r /tmp/requirements.txt \
+    && rm -f /tmp/requirements.txt
+
+# helm CLI — provision-openshell-gateway.yml shells out to it; it's not
+# an Ansible collection or a pip/system package, so it's installed via
+# the upstream get-helm-3 script, same as execution-environment.yml's
+# additional_build_steps.
+RUN curl -fsSL -o /tmp/get-helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 \
+    && chmod 700 /tmp/get-helm.sh \
+    && /tmp/get-helm.sh --no-sudo \
+    && rm -f /tmp/get-helm.sh

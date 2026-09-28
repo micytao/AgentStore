@@ -9,8 +9,24 @@
  * one-shot Skills Agent draft/approve flow — see ansible/provision-agent.yml
  * (deleted) and apps/agent-runtime/src/runOnce.ts (deleted).
  */
-export { pingAap, listJobTemplates, listRecentJobs } from "./aap";
+export {
+  pingAap,
+  listJobTemplates,
+  listRecentJobs,
+  listExecutionEnvironments,
+  listCredentialsByKind,
+  listOrganizations,
+  listProjects,
+  findOrCreateExecutionEnvironment,
+  type FindOrCreateExecutionEnvironmentInput,
+} from "./aap";
 export { pingOpenshift, listAgentJobs } from "./openshift";
+export {
+  startEeImageBuild,
+  getEeImageBuildResult,
+  type EeImageBuildInput,
+  type EeImageBuildResult,
+} from "./eeBuild";
 export {
   applyPlatformEnv,
   isAapConfigured,
@@ -21,6 +37,7 @@ export {
   openshiftApiUrl,
   openshiftNamespace,
   openshiftConsoleUrl,
+  openshiftInsecureTls,
 } from "./config";
 export {
   deleteGenericAgentDeployment,
@@ -35,6 +52,13 @@ export {
   type GatewayDeployInput,
   type GatewayDeployStatus,
 } from "./gatewayDeploy";
+export {
+  startJobTemplateBootstrap,
+  finishJobTemplateBootstrap,
+  type JobTemplateBootstrapInput,
+  type JobTemplateBootstrapHandle,
+  type JobTemplateBootstrapResult,
+} from "./jobTemplateBootstrap";
 /** Exported so deployments.ts can derive a stable per-listing resource
  * name — DNS-1123-safe (lowercase alphanumeric + "-", no leading/trailing
  * "-"), since it becomes a Deployment/Service/Route/Secret name. */

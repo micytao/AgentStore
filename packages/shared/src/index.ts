@@ -265,6 +265,75 @@ export interface PlatformSettings {
   /** Progress/result of the one-time "install the gateway" admin action,
    * once ever started — see OpenShellGatewayDeployment below. */
   openshellGatewayDeployment?: OpenShellGatewayDeployment;
+
+  // --- AAP Job Template bootstrap (Admin -> Platform -> "Create job
+  // templates") -- inputs the admin supplies once; the *outputs* land on
+  // aapJobTemplateId/openshellGatewayJobTemplateId above, same fields the
+  // manual-entry flow already used. ---
+  /** AAP Organization name to create/attach objects under. Looked up by
+   * name, never created (avoids requiring elevated RBAC on the AAP
+   * token) — must already exist, "Default" always does on a fresh AAP. */
+  aapOrganizationName: string;
+  /** Name for the AAP Project this bootstrap finds-or-creates, pointing
+   * at this repo's `ansible/` directory. */
+  aapProjectName: string;
+  /** Git URL/branch AAP syncs the Project from — must contain
+   * ansible/provision-generic-agent.yml and
+   * ansible/provision-openshell-gateway.yml at its root. */
+  aapProjectGitUrl: string;
+  aapProjectGitBranch: string;
+  /** AAP Credential id (Source Control kind) for a private repo. Empty
+   * means public/unauthenticated clone. */
+  aapProjectScmCredentialId: number | "";
+  /** AAP Execution Environment id the two created Job Templates run
+   * under — must already have the `kubernetes.core` collection (and the
+   * `helm` CLI, for the collaborative/gateway template) installed. AAP
+   * has no API to build EE images, so unlike everything else this
+   * bootstrap automates, the admin must have already built/published one
+   * and just picks it from a list here. */
+  aapExecutionEnvironmentId: number | "";
+  /** Progress/result of the one-time "Create job templates" admin
+   * action, once ever started. */
+  aapBootstrap?: AapBootstrapStatus;
+  /** Progress/result of the "Build from source" admin action (Admin ->
+   * Platform -> AAP Job Templates -> "+ Build from source"), once ever
+   * started — builds the Execution Environment image inside the
+   * OpenShift cluster itself (an OpenShift BuildConfig, triggered from
+   * AgentStore) instead of requiring `ansible-builder`/`podman` locally.
+   * See EeBuildStatus. */
+  eeBuild?: EeBuildStatus;
+}
+
+/** Progress/result of the "Build from source" admin action — builds
+ * `ansible/execution-environment/Containerfile` as an OpenShift
+ * BuildConfig (source: the same `aapProjectGitUrl`/`aapProjectGitBranch`
+ * already configured for the AAP Project above, since that repo also
+ * contains this Containerfile), pushes the result to OpenShift's
+ * internal image registry via an ImageStream, then registers the
+ * resulting pullable image reference as an AAP Execution Environment —
+ * the same `findOrCreateExecutionEnvironment()` the manual "Register a
+ * new image" action already uses, so both paths converge on one AAP
+ * object. Same two-phase start/poll convention as AapBootstrapStatus:
+ * the Build itself can take a few minutes, so starting it and polling it
+ * are separate calls. */
+export interface EeBuildStatus {
+  status: AgentDeploymentStatus;
+  phase?: string;
+  /** Stashed between start and finish — not shown in the UI. */
+  buildName?: string;
+  /** Stashed between start and finish: the AAP Execution Environment
+   * name/registry-credential this build's image gets registered under
+   * once the OpenShift Build completes. */
+  executionEnvironmentName?: string;
+  registryCredentialId?: number;
+  /** The built image's pullable reference (OpenShift's internal
+   * registry, e.g. `image-registry.openshift-image-registry.svc:5000/
+   * <namespace>/agentstore-ee@sha256:...`), once status is "running". */
+  image?: string;
+  /** Mirrors PlatformSettings.aapExecutionEnvironmentId once registered. */
+  executionEnvironmentId?: number;
+  error?: string;
+  updatedAt?: string;
 }
 
 /** The OpenShell chart's workload kind for its main server: a
@@ -304,6 +373,41 @@ export interface AapJobTemplate {
   name: string;
 }
 
+/** Minimal id/name pair for the AAP objects the Job Template bootstrap
+ * needs the admin to pick (Execution Environment) or optionally pick
+ * (Source Control credential, for a private Project repo). */
+export interface AapNamedObject {
+  id: number;
+  name: string;
+}
+
+/** Progress/result of the one-time "Create job templates" admin action
+ * (Admin -> Platform -> AAP Job Templates) — calls the AAP REST API
+ * directly to create the Project/Inventory/Credential/Job Template
+ * objects the two "deploy via AAP" flows
+ * (genericAgentDeploy.ts/gatewayDeploy.ts) launch by id. Platform-scoped,
+ * so it lives on PlatformSettings, same convention as
+ * OpenShellGatewayDeployment. `phase` is a short human-readable label
+ * ("syncing-project", "creating-templates", ...) the UI can show next to
+ * a spinner while `status` is "running" — the underlying work spans two
+ * HTTP round trips (start kicks off the Project SCM sync, refresh polls
+ * it and finishes once sync succeeds) because a Project's initial sync
+ * can take longer than one request should block for. */
+export interface AapBootstrapStatus {
+  status: AgentDeploymentStatus;
+  phase?: string;
+  /** Stashed between the start and finish calls — not shown in the UI. */
+  projectId?: number;
+  projectUpdateId?: number;
+  /** Populated once status is "running"/"done": mirrors
+   * PlatformSettings.aapJobTemplateId once the launch flow can use it. */
+  autonomousJobTemplateId?: number;
+  /** Mirrors PlatformSettings.openshellGatewayJobTemplateId. */
+  collaborativeJobTemplateId?: number;
+  error?: string;
+  updatedAt?: string;
+}
+
 export interface AapJobSummary {
   id: number;
   name: string;
@@ -335,6 +439,23 @@ export interface PlatformStatus {
   aap: PlatformConnectionStatus & {
     jobTemplates: AapJobTemplate[];
     recentJobs: AapJobSummary[];
+    /** For the Execution Environment `FormSelect` on the "Create job
+     * templates" card — required, no default is sensible to guess. */
+    executionEnvironments: AapNamedObject[];
+    /** Source Control kind credentials only, for the optional SCM
+     * credential `FormSelect` (private Project repos). */
+    credentials: AapNamedObject[];
+    /** For the Organization `FormSelect` — real options instead of a
+     * free-text field, since organizations are only ever looked up by
+     * name, never created. */
+    organizations: AapNamedObject[];
+    /** For the Project `FormSelect` — lets the admin reuse an existing
+     * Project by name instead of retyping it from memory. */
+    projects: AapNamedObject[];
+    /** Container Registry (kind "registry") credentials, for the
+     * optional "Register a new image" mini-form's private-registry
+     * credential `FormSelect`. */
+    registryCredentials: AapNamedObject[];
   };
   openshift: PlatformConnectionStatus & {
     jobs: OpenshiftJobSummary[];

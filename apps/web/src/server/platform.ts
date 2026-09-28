@@ -6,7 +6,11 @@ import {
   isAapConfigured,
   isOpenshiftConfigured,
   listAgentJobs,
+  listCredentialsByKind,
+  listExecutionEnvironments,
   listJobTemplates,
+  listOrganizations,
+  listProjects,
   listRecentJobs,
   pingAap,
   pingOpenshift,
@@ -30,6 +34,12 @@ const DEFAULT_SETTINGS: PlatformSettings = {
   openshellGatewayNamespace: "openshell",
   openshellGatewayWorkloadKind: "statefulset",
   openshellGatewayJobTemplateId: "",
+  aapOrganizationName: "Default",
+  aapProjectName: "AgentStore",
+  aapProjectGitUrl: "",
+  aapProjectGitBranch: "main",
+  aapProjectScmCredentialId: "",
+  aapExecutionEnvironmentId: "",
 };
 
 function dataDir(): string {
@@ -83,25 +93,63 @@ export function ensurePlatformEnv(): void {
   applyOpenShellServiceEnv(settings);
 }
 
+function emptyAapLists(): Pick<
+  PlatformStatus["aap"],
+  "jobTemplates" | "recentJobs" | "executionEnvironments" | "credentials" | "organizations" | "projects" | "registryCredentials"
+> {
+  return {
+    jobTemplates: [],
+    recentJobs: [],
+    executionEnvironments: [],
+    credentials: [],
+    organizations: [],
+    projects: [],
+    registryCredentials: [],
+  };
+}
+
 async function probeAap(): Promise<PlatformStatus["aap"]> {
   const configured = isAapConfigured();
   if (!configured) {
-    return { configured: false, connected: false, error: "Not configured", jobTemplates: [], recentJobs: [] };
+    return { configured: false, connected: false, error: "Not configured", ...emptyAapLists() };
   }
   const ping = await pingAap();
   if (!ping.ok) {
-    return { configured: true, connected: false, error: ping.error, jobTemplates: [], recentJobs: [] };
+    return { configured: true, connected: false, error: ping.error, ...emptyAapLists() };
   }
   try {
-    const [jobTemplates, recentJobs] = await Promise.all([listJobTemplates(), listRecentJobs(12)]);
-    return { configured: true, connected: true, jobTemplates, recentJobs };
+    // executionEnvironments/credentials/organizations/projects/
+    // registryCredentials feed the "AAP Job Templates" bootstrap card's
+    // dropdowns; failures there shouldn't be fatal to the rest of this
+    // probe (e.g. an AAP install with one of these endpoints disabled),
+    // so each independently falls back to an empty list.
+    const [jobTemplates, recentJobs, executionEnvironments, credentials, organizations, projects, registryCredentials] =
+      await Promise.all([
+        listJobTemplates(),
+        listRecentJobs(12),
+        listExecutionEnvironments().catch(() => []),
+        listCredentialsByKind("scm").catch(() => []),
+        listOrganizations().catch(() => []),
+        listProjects().catch(() => []),
+        listCredentialsByKind("registry").catch(() => []),
+      ]);
+    return {
+      configured: true,
+      connected: true,
+      jobTemplates,
+      recentJobs,
+      executionEnvironments,
+      credentials,
+      organizations,
+      projects,
+      registryCredentials,
+    };
   } catch (err) {
     return {
       configured: true,
       connected: false,
       error: err instanceof Error ? err.message : String(err),
-      jobTemplates: [],
-      recentJobs: [],
+      ...emptyAapLists(),
     };
   }
 }

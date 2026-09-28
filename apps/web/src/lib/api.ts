@@ -121,6 +121,56 @@ export function fetchGatewayStatus(): Promise<PlatformSettings> {
   return fetch("/api/admin/platform/gateway").then((r) => parse<PlatformSettings>(r));
 }
 
+/** Starts (or re-starts) the one-time "Create job templates" AAP
+ * bootstrap. `settings` is saved server-side in the same request (no
+ * separate "Save" step) before the bootstrap kicks off — mirrors
+ * `testPlatformConnection()`'s save-as-a-side-effect convention. Returns
+ * the updated PlatformSettings (holding `aapBootstrap`). */
+export function createJobTemplates(settings: Partial<PlatformSettings>): Promise<PlatformSettings> {
+  return fetch("/api/admin/platform/job-templates", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ settings }),
+  }).then((r) => parse<PlatformSettings>(r));
+}
+
+/** Polls the in-flight job template bootstrap for progress; safe to call
+ * on an interval. */
+export function fetchJobTemplateBootstrapStatus(): Promise<PlatformSettings> {
+  return fetch("/api/admin/platform/job-templates").then((r) => parse<PlatformSettings>(r));
+}
+
+/** Registers an already-built-and-pushed image as an AAP Execution
+ * Environment (see ansible/execution-environment/README.md for building
+ * it) and auto-selects it. Returns the updated PlatformSettings. */
+export function registerExecutionEnvironment(input: {
+  name: string;
+  image: string;
+  credentialId?: number;
+}): Promise<PlatformSettings> {
+  return fetch("/api/admin/platform/execution-environments", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  }).then((r) => parse<PlatformSettings>(r));
+}
+
+/** Starts (or re-starts) the "Build from source" OpenShift build (Admin
+ * -> Platform -> AAP Job Templates -> "+ Build from source"). Returns
+ * the updated PlatformSettings (holding `eeBuild`). */
+export function startEeImageBuild(input: { name: string; credentialId?: number }): Promise<PlatformSettings> {
+  return fetch("/api/admin/platform/execution-environment-build", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  }).then((r) => parse<PlatformSettings>(r));
+}
+
+/** Polls the in-flight build for progress; safe to call on an interval. */
+export function fetchEeBuildStatus(): Promise<PlatformSettings> {
+  return fetch("/api/admin/platform/execution-environment-build").then((r) => parse<PlatformSettings>(r));
+}
+
 export function updatePlatformSettings(
   patch: Partial<PlatformSettings>
 ): Promise<PlatformStatus> {
