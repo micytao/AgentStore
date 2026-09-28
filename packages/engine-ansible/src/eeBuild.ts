@@ -116,6 +116,6 @@ export async function getEeImageBuildResult(
  * "Build from source" mini-form — lets an admin see exactly why a build
  * failed (e.g. the openssl/get-helm-3 error this was added to
  * diagnose) without leaving AgentStore for the OpenShift console. */
-export async function getEeImageBuildLog(buildName: string, tailLines = 200): Promise<string> {
+export async function getEeImageBuildLog(buildName: string, tailLines = 1000): Promise<string> {
   return ocp.getEeBuildLogTail(buildName, tailLines);
 }

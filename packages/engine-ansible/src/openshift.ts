@@ -284,13 +284,20 @@ export async function getEeBuildStatus(buildName: string): Promise<EeBuildStatus
  * failed build doesn't require switching to the OpenShift console at
  * all. Unlike every other call in this file, the response body is
  * plain text, not JSON. */
-export async function getEeBuildLogTail(buildName: string, tailLines = 200): Promise<string> {
+export async function getEeBuildLogTail(buildName: string, tailLines = 1000): Promise<string> {
   const ns = openshiftNamespace();
   const response = await ocpFetch(
     `/apis/build.openshift.io/v1/namespaces/${ns}/builds/${buildName}/log?tailLines=${tailLines}`
   );
   if (!response.ok) {
-    if (response.status === 404) return "(no log yet — the build hasn't started running)";
+    // 404 here doesn't just mean "hasn't started" -- a Build's log
+    // becomes unavailable once its pod is garbage-collected, which can
+    // happen quickly for one that failed early. Genuinely ambiguous
+    // without also checking the Build's phase, so say so plainly
+    // rather than asserting a specific (possibly wrong) reason.
+    if (response.status === 404) {
+      return "(no log available — either the build hasn't started yet, or its pod has already been cleaned up)";
+    }
     throw new Error(`OpenShift get build log: HTTP ${response.status}`);
   }
   return response.text();

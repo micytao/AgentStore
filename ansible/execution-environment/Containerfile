@@ -20,6 +20,15 @@
 # image actually meant to be extended into custom EEs.
 FROM quay.io/ansible/awx-ee:latest
 
+# awx-ee's own Dockerfile switches to a non-root USER (standard
+# OpenShift-arbitrary-UID practice) -- that user's $HOME isn't
+# writable, so `ansible-galaxy collection install` fails with
+# "Permission denied: /.ansible" unless we switch back to root for
+# our own build steps below. (OpenShift's SCC overrides the runtime
+# UID at job-launch time regardless of what's set here, so this
+# doesn't affect which user AAP actually runs the container as later.)
+USER root
+
 COPY requirements.yml /tmp/requirements.yml
 RUN ansible-galaxy collection install -r /tmp/requirements.yml \
     && rm -f /tmp/requirements.yml

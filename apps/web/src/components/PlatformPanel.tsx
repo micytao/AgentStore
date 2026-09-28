@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ComponentType, ReactNode } from "react";
 import type {
   AapNamedObject,
@@ -264,13 +264,20 @@ function JobTemplatesCard({
     return () => clearInterval(timer);
   }, [eeBuildRunning, onSettingsUpdate]);
 
-  // Polls the OpenShift Build log while a build is in flight, and once
-  // more on failure/success so the viewer ends up showing the final
-  // content instead of whatever was last fetched mid-build. Auto-opens
-  // on failure so the reason is visible without an extra click.
+  // Polls the OpenShift Build log while a build is in flight. A build
+  // that fails very fast (e.g. within the first STEP, like the
+  // permission-denied case that motivated this) can flip to a terminal
+  // status before this ever polls a second time, leaving the viewer
+  // stuck on stale/partial content from just before the failure — so
+  // this keeps polling a few extra cycles after eeBuildRunning goes
+  // false instead of stopping immediately, to give the final log a
+  // moment to propagate. Auto-opens on failure (separate effect below)
+  // so the reason is visible without an extra click.
+  const logExtraPollsRef = useRef(0);
   useEffect(() => {
     if (!eeBuild?.buildName) return;
     let cancelled = false;
+    logExtraPollsRef.current = 3;
     function load() {
       setBuildLogLoading(true);
       fetchEeBuildLog()
@@ -285,8 +292,16 @@ function JobTemplatesCard({
         });
     }
     load();
-    if (!eeBuildRunning) return () => { cancelled = true; };
-    const timer = setInterval(load, 4000);
+    const timer = setInterval(() => {
+      if (!eeBuildRunning) {
+        if (logExtraPollsRef.current <= 0) {
+          clearInterval(timer);
+          return;
+        }
+        logExtraPollsRef.current -= 1;
+      }
+      load();
+    }, 4000);
     return () => {
       cancelled = true;
       clearInterval(timer);
