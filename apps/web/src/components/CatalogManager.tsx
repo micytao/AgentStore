@@ -21,6 +21,10 @@ import {
   InputGroup,
   InputGroupItem,
   Label,
+  Modal,
+  ModalBody,
+  ModalFooter,
+  ModalHeader,
   SearchInput,
   Spinner,
   TextArea,
@@ -32,7 +36,7 @@ import {
   WizardStep,
   useWizardContext,
 } from "@patternfly/react-core";
-import { ExpandableRowContent, Table, Tbody, Td, Th, Thead, Tr } from "@patternfly/react-table";
+import { Table, Tbody, Td, Th, Thead, Tr } from "@patternfly/react-table";
 import {
   DEPARTMENTS,
   departmentLabel,
@@ -60,6 +64,7 @@ import {
   fetchProviders,
   fetchSkills,
   startOpenShellSession,
+  stopDeploymentAdmin,
   stopOpenShellSession,
   updateListingAdmin,
 } from "@/lib/api";
@@ -102,6 +107,41 @@ export function CatalogManager() {
 
   useEffect(loadAll, []);
 
+  // Self-heals any listing whose deployment/session status is stuck at
+  // "deploying" even when nobody currently has that listing's "Agent
+  // config" panel expanded — DeploySection/OpenShellDeploySection only
+  // poll for completion while actually mounted, so a deploy that
+  // finishes after an admin collapses the panel (or never opens it
+  // again) would otherwise leave the persisted status stuck at
+  // "deploying" forever: no routeUrl, no "Open agent" button, a
+  // permanently-grey status label, even though the real Deployment on
+  // OpenShift finished successfully. This runs unconditionally at the
+  // table level instead, independent of which rows are expanded.
+  useEffect(() => {
+    if (!listings) return;
+    const pendingGenericChat = listings.filter(
+      (l) => l.runtime !== "openshell" && l.deployment?.status === "deploying"
+    );
+    const pendingOpenshell = listings.filter(
+      (l) => l.runtime === "openshell" && l.openshellSession?.status === "deploying"
+    );
+    if (pendingGenericChat.length === 0 && pendingOpenshell.length === 0) return;
+
+    const timer = setInterval(() => {
+      Promise.all([
+        ...pendingGenericChat.map((l) => fetchDeploymentStatus(l.id).catch(() => null)),
+        ...pendingOpenshell.map((l) => fetchOpenShellSessionStatus(l.id).catch(() => null)),
+      ]).then((results) => {
+        const byId = new Map(
+          results.filter((l): l is Listing => Boolean(l)).map((l) => [l.id, l])
+        );
+        if (byId.size === 0) return;
+        setListings((prev) => prev?.map((l) => byId.get(l.id) ?? l) ?? prev);
+      });
+    }, 5000);
+    return () => clearInterval(timer);
+  }, [listings]);
+
   if (error) return <Alert variant="danger" isInline title={error} />;
   if (!listings) {
     return (
@@ -119,8 +159,8 @@ export function CatalogManager() {
         </Title>
         <Content component={ContentVariants.small}>
           Adjust risk tier, review status, and price per listing — changes
-          save immediately. Expand a row to bind a provider, tools, skills,
-          and the AAP job template, or delete the agent entirely.
+          save immediately. Open Agent config to bind a provider, tools,
+          skills, and the AAP job template, or delete the agent entirely.
         </Content>
       </FlexItem>
 
@@ -153,7 +193,10 @@ export function CatalogManager() {
       </FlexItem>
 
       <FlexItem>
-        {showWizard ? (
+        <Button variant="primary" onClick={() => setShowWizard(true)}>
+          + Onboard new agent
+        </Button>
+        {showWizard && (
           <OnboardAgentWizard
             providers={providers}
             mcpServers={mcpServers}
@@ -164,10 +207,6 @@ export function CatalogManager() {
             }}
             onCancel={() => setShowWizard(false)}
           />
-        ) : (
-          <Button variant="primary" onClick={() => setShowWizard(true)}>
-            + Onboard new agent
-          </Button>
         )}
       </FlexItem>
     </Flex>
@@ -216,10 +255,16 @@ function ListingRow({
   }
 
   async function remove() {
-    if (!window.confirm(`Delete "${listing.name}"? It disappears from the catalog immediately.`)) return;
+    if (
+      !window.confirm(
+        `Delete "${listing.name}"? It disappears from the catalog immediately and any running deployment/session is torn down.`
+      )
+    )
+      return;
     setDeleting(true);
     try {
-      await deleteListingAdmin(listing.id);
+      const { warning } = await deleteListingAdmin(listing.id);
+      if (warning) window.alert(warning);
       onChange();
     } finally {
       setDeleting(false);
@@ -227,98 +272,130 @@ function ListingRow({
   }
 
   return (
-    <Tbody isExpanded={showConfig}>
-      <Tr>
-        <Td dataLabel="Listing">
-          <strong>{listing.name}</strong>
-          <br />
-          <Content component={ContentVariants.small}>
-            {departmentLabel(listing.department)} · {listing.category}
-            {listing.source === "custom" ? " · Custom" : ""}
-          </Content>
-        </Td>
-        <Td dataLabel="Risk tier">
-          <FormSelect
-            aria-label={`Risk tier for ${listing.name}`}
-            value={draft.riskTier}
-            onChange={(_e, v) => update({ riskTier: v as RiskTier })}
-          >
-            {RISK_TIERS.map((tier) => (
-              <FormSelectOption key={tier} value={tier} label={tier} />
-            ))}
-          </FormSelect>
-        </Td>
-        <Td dataLabel="Review status">
-          <FormSelect
-            aria-label={`Review status for ${listing.name}`}
-            value={draft.reviewStatus}
-            onChange={(_e, v) => update({ reviewStatus: v as ReviewStatus })}
-          >
-            {REVIEW_STATUSES.map((status) => (
-              <FormSelectOption key={status} value={status} label={status} />
-            ))}
-          </FormSelect>
-        </Td>
-        <Td dataLabel="Price">
-          <InputGroup>
-            <InputGroupItem>
-              <TextInput
-                style={{ width: "5rem" }}
-                aria-label={`Price amount for ${listing.name}`}
-                inputMode="decimal"
-                value={String(draft.pricing.amount)}
-                onChange={(_e, v) => update({ pricing: { ...draft.pricing, amount: Number(v) || 0 } })}
-              />
-            </InputGroupItem>
-            <InputGroupItem>
-              <FormSelect
-                aria-label={`Price unit for ${listing.name}`}
-                value={draft.pricing.unit}
-                onChange={(_e, v) => update({ pricing: { ...draft.pricing, unit: v as PricingUnit } })}
-              >
-                {PRICING_UNITS.map((u) => (
-                  <FormSelectOption key={u.id} value={u.id} label={u.label} />
-                ))}
-              </FormSelect>
-            </InputGroupItem>
-          </InputGroup>
-        </Td>
-        <Td dataLabel="Actions" modifier="fitContent">
-          <Flex spaceItems={{ default: "spaceItemsSm" }} flexWrap={{ default: "nowrap" }}>
-            <FlexItem>
-              <Button variant={saved ? "secondary" : "primary"} size="sm" onClick={() => void save()} isDisabled={saving}>
-                {saving ? "Saving…" : saved ? "Saved" : "Save"}
-              </Button>
-            </FlexItem>
-            <FlexItem>
-              <Button variant="secondary" size="sm" onClick={() => setShowConfig((v) => !v)}>
-                {showConfig ? "Hide config" : "Agent config"}
-              </Button>
-            </FlexItem>
-            <FlexItem>
-              <Button variant="danger" size="sm" onClick={() => void remove()} isDisabled={deleting}>
-                {deleting ? "Deleting…" : "Delete"}
-              </Button>
-            </FlexItem>
-          </Flex>
-        </Td>
-      </Tr>
-      {showConfig && (
-        <Tr isExpanded>
-          <Td colSpan={5}>
-            <ExpandableRowContent>
-              <AgentConfigPanel
-                listing={listing}
-                providers={providers}
-                mcpServers={mcpServers}
-                skills={skills}
-                onChange={onChange}
-              />
-            </ExpandableRowContent>
+    <>
+      <Tbody>
+        <Tr>
+          <Td dataLabel="Listing">
+            <strong>{listing.name}</strong>
+            <br />
+            <Content component={ContentVariants.small}>
+              {departmentLabel(listing.department)} · {listing.category}
+              {listing.source === "custom" ? " · Custom" : ""}
+            </Content>
+          </Td>
+          <Td dataLabel="Risk tier">
+            <FormSelect
+              aria-label={`Risk tier for ${listing.name}`}
+              value={draft.riskTier}
+              onChange={(_e, v) => update({ riskTier: v as RiskTier })}
+            >
+              {RISK_TIERS.map((tier) => (
+                <FormSelectOption key={tier} value={tier} label={tier} />
+              ))}
+            </FormSelect>
+          </Td>
+          <Td dataLabel="Review status">
+            <FormSelect
+              aria-label={`Review status for ${listing.name}`}
+              value={draft.reviewStatus}
+              onChange={(_e, v) => update({ reviewStatus: v as ReviewStatus })}
+            >
+              {REVIEW_STATUSES.map((status) => (
+                <FormSelectOption key={status} value={status} label={status} />
+              ))}
+            </FormSelect>
+          </Td>
+          <Td dataLabel="Price">
+            <InputGroup>
+              <InputGroupItem>
+                <TextInput
+                  style={{ width: "5rem" }}
+                  aria-label={`Price amount for ${listing.name}`}
+                  inputMode="decimal"
+                  value={String(draft.pricing.amount)}
+                  onChange={(_e, v) => update({ pricing: { ...draft.pricing, amount: Number(v) || 0 } })}
+                />
+              </InputGroupItem>
+              <InputGroupItem>
+                <FormSelect
+                  aria-label={`Price unit for ${listing.name}`}
+                  value={draft.pricing.unit}
+                  onChange={(_e, v) => update({ pricing: { ...draft.pricing, unit: v as PricingUnit } })}
+                >
+                  {PRICING_UNITS.map((u) => (
+                    <FormSelectOption key={u.id} value={u.id} label={u.label} />
+                  ))}
+                </FormSelect>
+              </InputGroupItem>
+            </InputGroup>
+          </Td>
+          <Td dataLabel="Actions" modifier="fitContent">
+            <Flex spaceItems={{ default: "spaceItemsSm" }} flexWrap={{ default: "nowrap" }}>
+              {listing.runtime === "openshell" && listing.openshellSession?.status === "running" ? (
+                <FlexItem>
+                  <Button variant="primary" size="sm" onClick={() => setShowConfig(true)}>
+                    Open terminal
+                  </Button>
+                </FlexItem>
+              ) : listing.runtime !== "openshell" &&
+                listing.deployment?.status === "running" &&
+                listing.deployment.routeUrl ? (
+                <FlexItem>
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    component={(props) => (
+                      <a {...props} href={listing.deployment!.routeUrl} target="_blank" rel="noreferrer" />
+                    )}
+                  >
+                    Open agent
+                  </Button>
+                </FlexItem>
+              ) : null}
+              <FlexItem>
+                <Button variant={saved ? "secondary" : "primary"} size="sm" onClick={() => void save()} isDisabled={saving}>
+                  {saving ? "Saving…" : saved ? "Saved" : "Save"}
+                </Button>
+              </FlexItem>
+              <FlexItem>
+                <Button variant="secondary" size="sm" onClick={() => setShowConfig(true)}>
+                  Agent config
+                </Button>
+              </FlexItem>
+              <FlexItem>
+                <Button variant="danger" size="sm" onClick={() => void remove()} isDisabled={deleting}>
+                  {deleting ? "Deleting…" : "Delete"}
+                </Button>
+              </FlexItem>
+            </Flex>
           </Td>
         </Tr>
+      </Tbody>
+      {showConfig && (
+        <Modal
+          variant="large"
+          isOpen
+          onClose={() => setShowConfig(false)}
+          aria-label={`Agent config — ${listing.name}`}
+        >
+          <ModalHeader title={`Agent config — ${listing.name}`} />
+          <ModalBody>
+            <AgentConfigPanel
+              listing={listing}
+              providers={providers}
+              mcpServers={mcpServers}
+              skills={skills}
+              onChange={onChange}
+            />
+          </ModalBody>
+          <ModalFooter>
+            <Button variant="link" onClick={() => setShowConfig(false)}>
+              Close
+            </Button>
+          </ModalFooter>
+        </Modal>
       )}
-    </Tbody>
+    </>
   );
 }
 
@@ -491,9 +568,6 @@ function AgentConfigPanel({
   return (
     <Flex direction={{ default: "column" }} spaceItems={{ default: "spaceItemsLg" }}>
       <FlexItem>
-        <Title headingLevel="h4" size="md">
-          Agent config — {listing.name}
-        </Title>
         <Content component={ContentVariants.small}>
           Bind a specific model provider, tool subset, and skills to this
           agent. Leave provider unset to keep using the global active
@@ -669,6 +743,20 @@ function DeploySection({ listing, onChange }: { listing: Listing; onChange: () =
     }
   }
 
+  async function stop() {
+    setBusy(true);
+    setError(null);
+    try {
+      const updated = await stopDeploymentAdmin(listing.id);
+      setDeployment(updated.deployment);
+      onChange();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   const status = deployment?.status ?? "not-deployed";
   const statusColor: "green" | "red" | "grey" = status === "running" ? "green" : status === "failed" ? "red" : "grey";
 
@@ -714,34 +802,53 @@ function DeploySection({ listing, onChange }: { listing: Listing; onChange: () =
 
           {(deployment?.aapJobUrl || (status === "running" && deployment?.routeUrl)) && (
             <FlexItem>
-              <Content component={ContentVariants.small}>
+              <Flex alignItems={{ default: "alignItemsCenter" }} spaceItems={{ default: "spaceItemsMd" }}>
                 {deployment?.aapJobUrl && (
-                  <>
-                    <a href={deployment.aapJobUrl} target="_blank" rel="noreferrer">
-                      View AAP job →
-                    </a>
-                    {"  "}
-                  </>
+                  <FlexItem>
+                    <Content component={ContentVariants.small}>
+                      <a href={deployment.aapJobUrl} target="_blank" rel="noreferrer">
+                        View AAP job →
+                      </a>
+                    </Content>
+                  </FlexItem>
                 )}
                 {status === "running" && deployment?.routeUrl && (
-                  <a href={deployment.routeUrl} target="_blank" rel="noreferrer">
-                    Open agent →
-                  </a>
+                  <FlexItem>
+                    <Button
+                      variant="danger"
+                      component={(props) => (
+                        <a {...props} href={deployment.routeUrl} target="_blank" rel="noreferrer" />
+                      )}
+                    >
+                      Open agent →
+                    </Button>
+                  </FlexItem>
                 )}
-              </Content>
+              </Flex>
             </FlexItem>
           )}
 
           <FlexItem>
-            <Button variant="primary" onClick={() => void deploy()} isDisabled={busy || status === "deploying"}>
-              {busy
-                ? "Starting…"
-                : status === "deploying"
-                  ? "Deploying…"
-                  : status === "running"
-                    ? "Redeploy"
-                    : "Deploy to OpenShift"}
-            </Button>
+            <Flex spaceItems={{ default: "spaceItemsSm" }}>
+              <FlexItem>
+                <Button variant="primary" onClick={() => void deploy()} isDisabled={busy || status === "deploying"}>
+                  {busy
+                    ? "Starting…"
+                    : status === "deploying"
+                      ? "Deploying…"
+                      : status === "running"
+                        ? "Redeploy"
+                        : "Deploy to OpenShift"}
+                </Button>
+              </FlexItem>
+              {(status === "running" || status === "failed") && (
+                <FlexItem>
+                  <Button variant="danger" onClick={() => void stop()} isDisabled={busy}>
+                    Stop
+                  </Button>
+                </FlexItem>
+              )}
+            </Flex>
           </FlexItem>
         </Flex>
       </CardBody>
@@ -1054,19 +1161,24 @@ function OnboardAgentWizard({
   }
 
   return (
-    <Card>
-      <CardBody>
-        <Wizard
-          onClose={onCancel}
-          isVisitRequired
-          header={
-            <WizardHeader
-              title="Onboard a new agent"
-              description="Publish a new listing to the catalog, or save it as a draft to finish later."
-              onClose={onCancel}
-            />
-          }
-        >
+    // `onEscapePress` (not `onClose`) on purpose: passing `onClose` makes
+    // Modal render its own close X, which then visually collides with
+    // WizardHeader's own close X (different padding/z-index assumptions —
+    // Modal's close button is positioned assuming a plain ModalHeader
+    // sibling, not a Wizard header banner). WizardHeader's own X is the
+    // only close affordance; this just keeps Escape working.
+    <Modal variant="large" isOpen onEscapePress={onCancel} aria-label="Onboard a new agent">
+      <Wizard
+        onClose={onCancel}
+        isVisitRequired
+        header={
+          <WizardHeader
+            title="Onboard a new agent"
+            description="Publish a new listing to the catalog, or save it as a draft to finish later."
+            onClose={onCancel}
+          />
+        }
+      >
           <WizardStep
             id="basics"
             name="Basics"
@@ -1261,8 +1373,7 @@ function OnboardAgentWizard({
               </CardBody>
             </Card>
           </WizardStep>
-        </Wizard>
-      </CardBody>
-    </Card>
+      </Wizard>
+    </Modal>
   );
 }

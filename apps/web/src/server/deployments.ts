@@ -2,6 +2,7 @@ import type { AgentDeployment, Listing } from "@agentstore/shared";
 import { departmentLabel } from "@agentstore/shared";
 import {
   aapDefaultJobTemplateId,
+  deleteGenericAgentDeployment,
   genericAgentDeploymentName,
   getGenericAgentDeployStatus,
   isAapConfigured,
@@ -131,4 +132,26 @@ export async function refreshDeployment(listingId: string): Promise<Listing> {
     error: result.error,
     updatedAt: now(),
   });
+}
+
+/**
+ * Tears down this listing's generic-chat deployment (Deployment/Service/
+ * Route/Secret/result-ConfigMap — see deleteGenericAgentDeployment()),
+ * e.g. an admin explicitly stopping a running agent, or cleaning up after
+ * a failed deploy that left partial resources behind. Mirrors
+ * openshellDeploy.ts's stopOpenShellSession() — resets to a plain
+ * "not-deployed" state afterwards, so "Deploy to OpenShift" reappears and
+ * a follow-up deploy starts completely fresh.
+ */
+export async function stopDeployment(listingId: string): Promise<Listing> {
+  ensurePlatformEnv();
+  const listing = getListing(listingId);
+  if (!listing) throw new Error(`Unknown listing: ${listingId}`);
+  if (listing.runtime !== "generic-chat") {
+    throw new Error(`"${listing.name}" is not a generic-chat runtime listing.`);
+  }
+
+  const deploymentName = listing.deployment?.openshiftDeploymentName ?? genericAgentDeploymentName(listing.id);
+  await deleteGenericAgentDeployment(deploymentName);
+  return persistDeployment(listingId, { status: "not-deployed", updatedAt: now() });
 }

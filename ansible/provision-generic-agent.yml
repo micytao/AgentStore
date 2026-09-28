@@ -102,6 +102,21 @@
                   app.kubernetes.io/managed-by: agentstore
                   app.kubernetes.io/name: agent-runtime
                   agentstore/listing-id: "{{ listing_id }}"
+                annotations:
+                  # Forces a real rollout (new ReplicaSet -> new Pod) whenever
+                  # the persona/skills/MCP servers/provider config actually
+                  # changes on a "Redeploy" — without this, the Deployment's
+                  # pod template is byte-identical to before (same image,
+                  # same env var *names*, same volume mount; only the
+                  # Secret's *content* changed), so Kubernetes never notices
+                  # anything to roll, and the already-running Pod keeps its
+                  # stale env vars/cached config.json indefinitely. Same
+                  # trick Helm/Kustomize use (a config checksum annotation)
+                  # to tie a Deployment's rollout to a Secret/ConfigMap it
+                  # doesn't otherwise reference structurally.
+                  agentstore/config-checksum: >-
+                    {{ (config_json + provider_kind + provider_base_url + provider_default_model + provider_api_key)
+                       | hash('sha256') }}
               spec:
                 containers:
                   - name: agent-runtime

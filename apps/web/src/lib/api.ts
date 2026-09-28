@@ -47,10 +47,13 @@ export function createListingAdmin(input: ListingCreateInput): Promise<Listing> 
   }).then((r) => parse<Listing>(r));
 }
 
-export function deleteListingAdmin(id: string): Promise<void> {
-  return fetch(`/api/admin/listings/${id}`, { method: "DELETE" })
-    .then((r) => parse<{ ok: boolean }>(r))
-    .then(() => undefined);
+/** Deletes a listing. Also tears down any live deployment/session it owns
+ * (see the DELETE route) — `warning` is set (deletion still succeeds) if
+ * that teardown itself failed, e.g. the cluster was unreachable. */
+export function deleteListingAdmin(id: string): Promise<{ warning?: string }> {
+  return fetch(`/api/admin/listings/${id}`, { method: "DELETE" }).then((r) =>
+    parse<{ ok: boolean; warning?: string }>(r)
+  );
 }
 
 /** Starts (or re-starts) the "Deploy to OpenShift" AAP job for a
@@ -64,6 +67,16 @@ export function deployListingAdmin(id: string): Promise<Listing> {
 /** Polls an in-flight deploy for progress; safe to call on an interval. */
 export function fetchDeploymentStatus(id: string): Promise<Listing> {
   return fetch(`/api/admin/listings/${id}/deploy`).then((r) => parse<Listing>(r));
+}
+
+/** Tears down a generic-chat listing's deployment (Deployment/Service/
+ * Route/Secret on OpenShift) — same DELETE convention as
+ * stopOpenShellSession(). Resets to "not-deployed" so "Deploy to
+ * OpenShift" reappears. */
+export function stopDeploymentAdmin(id: string): Promise<Listing> {
+  return fetch(`/api/admin/listings/${id}/deploy`, { method: "DELETE" }).then((r) =>
+    parse<Listing>(r)
+  );
 }
 
 /** Starts (or re-starts) an openshell listing's persistent sandbox session. */

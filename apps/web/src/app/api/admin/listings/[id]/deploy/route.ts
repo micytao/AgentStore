@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireAdmin } from "@/server/auth";
-import { refreshDeployment, startDeployment } from "@/server/deployments";
+import { refreshDeployment, startDeployment, stopDeployment } from "@/server/deployments";
 
 /** Starts (or re-starts) the "deploy this generic-chat agent to OpenShift"
  * AAP job. Called once when an admin clicks "Deploy to OpenShift", and
@@ -33,6 +33,25 @@ export async function GET(
   const { id } = await context.params;
   try {
     return NextResponse.json(await refreshDeployment(id));
+  } catch (err) {
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : String(err) },
+      { status: 400 }
+    );
+  }
+}
+
+/** Tears down this listing's generic-chat deployment — same DELETE
+ * convention as the openshell-session route's stop action. */
+export async function DELETE(
+  request: Request,
+  context: { params: Promise<{ id: string }> }
+) {
+  const denied = requireAdmin(request);
+  if (denied) return denied;
+  const { id } = await context.params;
+  try {
+    return NextResponse.json(await stopDeployment(id));
   } catch (err) {
     return NextResponse.json(
       { error: err instanceof Error ? err.message : String(err) },

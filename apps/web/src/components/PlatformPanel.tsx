@@ -1,9 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import type { ComponentType, ReactNode } from "react";
 import {
-  EE_BUILD_LOG_TAIL_LINES,
   type AapNamedObject,
   type PlatformConnectionStatus,
   type PlatformSettings,
@@ -25,7 +24,6 @@ import {
   DescriptionListDescription,
   DescriptionListGroup,
   DescriptionListTerm,
-  ExpandableSection,
   Flex,
   FlexItem,
   Form,
@@ -42,9 +40,7 @@ import { Table, Tbody, Td, Th, Thead, Tr } from "@patternfly/react-table";
 import { SecretField } from "@/components/SecretField";
 import {
   createJobTemplates,
-  fetchAgentRuntimeBuildLog,
   fetchAgentRuntimeBuildStatus,
-  fetchEeBuildLog,
   fetchEeBuildStatus,
   fetchJobTemplateBootstrapStatus,
   fetchPlatformStatus,
@@ -245,10 +241,6 @@ function JobTemplatesCard({
   const eeBuildDone = eeBuild?.status === "running";
   const eeBuildFailed = eeBuild?.status === "failed";
 
-  const [showBuildLog, setShowBuildLog] = useState(false);
-  const [buildLog, setBuildLog] = useState("");
-  const [buildLogLoading, setBuildLogLoading] = useState(false);
-
   useEffect(() => {
     if (!running) return;
     const timer = setInterval(() => {
@@ -268,54 +260,6 @@ function JobTemplatesCard({
     }, 4000);
     return () => clearInterval(timer);
   }, [eeBuildRunning, onSettingsUpdate]);
-
-  // Polls the OpenShift Build log while a build is in flight. A build
-  // that fails very fast (e.g. within the first STEP, like the
-  // permission-denied case that motivated this) can flip to a terminal
-  // status before this ever polls a second time, leaving the viewer
-  // stuck on stale/partial content from just before the failure — so
-  // this keeps polling a few extra cycles after eeBuildRunning goes
-  // false instead of stopping immediately, to give the final log a
-  // moment to propagate. Auto-opens on failure (separate effect below)
-  // so the reason is visible without an extra click.
-  const logExtraPollsRef = useRef(0);
-  useEffect(() => {
-    if (!eeBuild?.buildName) return;
-    let cancelled = false;
-    logExtraPollsRef.current = 3;
-    function load() {
-      setBuildLogLoading(true);
-      fetchEeBuildLog()
-        .then(({ log }) => {
-          if (!cancelled) setBuildLog(log);
-        })
-        .catch((err: Error) => {
-          if (!cancelled) setBuildLog(`(failed to load build log: ${err.message})`);
-        })
-        .finally(() => {
-          if (!cancelled) setBuildLogLoading(false);
-        });
-    }
-    load();
-    const timer = setInterval(() => {
-      if (!eeBuildRunning) {
-        if (logExtraPollsRef.current <= 0) {
-          clearInterval(timer);
-          return;
-        }
-        logExtraPollsRef.current -= 1;
-      }
-      load();
-    }, 4000);
-    return () => {
-      cancelled = true;
-      clearInterval(timer);
-    };
-  }, [eeBuild?.buildName, eeBuildRunning]);
-
-  useEffect(() => {
-    if (eeBuildFailed) setShowBuildLog(true);
-  }, [eeBuildFailed]);
 
   async function create() {
     setBusy(true);
@@ -610,37 +554,6 @@ function JobTemplatesCard({
                   style={{ marginTop: "0.75rem", maxWidth: "420px" }}
                 />
               )}
-
-              {eeBuild?.buildName && (
-                <ExpandableSection
-                  toggleContent={`View build log${buildLogLoading ? " (loading…)" : ""}`}
-                  isExpanded={showBuildLog}
-                  onToggle={() => setShowBuildLog((v) => !v)}
-                  style={{ marginTop: "0.5rem" }}
-                >
-                  <Content component={ContentVariants.small}>
-                    Build <code>{eeBuild.buildName}</code> — same log{" "}
-                    <code>oc logs -f bc/agentstore-ee</code> or the OpenShift console&apos;s
-                    Build page would show, last {EE_BUILD_LOG_TAIL_LINES} lines.
-                  </Content>
-                  <pre
-                    style={{
-                      marginTop: "0.5rem",
-                      maxHeight: "320px",
-                      overflow: "auto",
-                      background: "var(--pf-t--global--background--color--floating--default, #151515)",
-                      color: "var(--pf-t--global--text--color--inverse, #f0f0f0)",
-                      padding: "0.75rem",
-                      borderRadius: "4px",
-                      fontSize: "0.8rem",
-                      whiteSpace: "pre-wrap",
-                      wordBreak: "break-word",
-                    }}
-                  >
-                    {buildLog || "(no output yet)"}
-                  </pre>
-                </ExpandableSection>
-              )}
             </CardBody>
           </Card>
         )}
@@ -721,8 +634,11 @@ function JobTemplatesCard({
  * no manual-register alternative like the Execution Environment does
  * (there's no AAP object for it to become) — "Start build" is the only
  * path, so this card is deliberately simpler than JobTemplatesCard's
- * EE section: no name/credential mini-form, just a build button, this
- * same progress bar, and log viewer.
+ * EE section: no name/credential mini-form, just a build button and
+ * this same progress bar. (No log viewer — see eeBuild.ts's removal
+ * history: OpenShift's Build log endpoint proved too unreliable to
+ * surface here; use `oc logs -f bc/agentstore-agent-runtime` or the
+ * OpenShift console's Build page instead.)
  */
 function AgentRuntimeCard({
   draft,
@@ -738,10 +654,6 @@ function AgentRuntimeCard({
   const done = build?.status === "running";
   const failed = build?.status === "failed";
 
-  const [showBuildLog, setShowBuildLog] = useState(false);
-  const [buildLog, setBuildLog] = useState("");
-  const [buildLogLoading, setBuildLogLoading] = useState(false);
-
   useEffect(() => {
     if (!running) return;
     const timer = setInterval(() => {
@@ -751,49 +663,6 @@ function AgentRuntimeCard({
     }, 4000);
     return () => clearInterval(timer);
   }, [running, onSettingsUpdate]);
-
-  // Same "poll a few extra cycles after completion" logic as
-  // JobTemplatesCard's EE log viewer — see that effect's comment for
-  // the rationale (a fast-failing build can flip to a terminal status
-  // before the log ever gets fetched a second time).
-  const logExtraPollsRef = useRef(0);
-  useEffect(() => {
-    if (!build?.buildName) return;
-    let cancelled = false;
-    logExtraPollsRef.current = 3;
-    function load() {
-      setBuildLogLoading(true);
-      fetchAgentRuntimeBuildLog()
-        .then(({ log }) => {
-          if (!cancelled) setBuildLog(log);
-        })
-        .catch((err: Error) => {
-          if (!cancelled) setBuildLog(`(failed to load build log: ${err.message})`);
-        })
-        .finally(() => {
-          if (!cancelled) setBuildLogLoading(false);
-        });
-    }
-    load();
-    const timer = setInterval(() => {
-      if (!running) {
-        if (logExtraPollsRef.current <= 0) {
-          clearInterval(timer);
-          return;
-        }
-        logExtraPollsRef.current -= 1;
-      }
-      load();
-    }, 4000);
-    return () => {
-      cancelled = true;
-      clearInterval(timer);
-    };
-  }, [build?.buildName, running]);
-
-  useEffect(() => {
-    if (failed) setShowBuildLog(true);
-  }, [failed]);
 
   async function startBuild() {
     setStarting(true);
@@ -871,37 +740,6 @@ function AgentRuntimeCard({
             measureLocation="inside"
             style={{ marginTop: "0.75rem", maxWidth: "420px" }}
           />
-        )}
-
-        {build?.buildName && (
-          <ExpandableSection
-            toggleContent={`View build log${buildLogLoading ? " (loading…)" : ""}`}
-            isExpanded={showBuildLog}
-            onToggle={() => setShowBuildLog((v) => !v)}
-            style={{ marginTop: "0.5rem" }}
-          >
-            <Content component={ContentVariants.small}>
-              Build <code>{build.buildName}</code> — same log{" "}
-              <code>oc logs -f bc/agentstore-agent-runtime</code> or the OpenShift
-              console&apos;s Build page would show, last {EE_BUILD_LOG_TAIL_LINES} lines.
-            </Content>
-            <pre
-              style={{
-                marginTop: "0.5rem",
-                maxHeight: "320px",
-                overflow: "auto",
-                background: "var(--pf-t--global--background--color--floating--default, #151515)",
-                color: "var(--pf-t--global--text--color--inverse, #f0f0f0)",
-                padding: "0.75rem",
-                borderRadius: "4px",
-                fontSize: "0.8rem",
-                whiteSpace: "pre-wrap",
-                wordBreak: "break-word",
-              }}
-            >
-              {buildLog || "(no output yet)"}
-            </pre>
-          </ExpandableSection>
         )}
       </CardBody>
     </Card>
