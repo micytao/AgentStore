@@ -1,4 +1,4 @@
-import type { OpenshiftJobSummary } from "@agentstore/shared";
+import type { OpenshiftDeploymentSummary } from "@agentstore/shared";
 import {
   isOpenshiftConfigured,
   openshiftApiUrl,
@@ -68,7 +68,7 @@ export async function pingOpenshift(): Promise<{ ok: boolean; error?: string }> 
   }
 }
 
-export interface K8sJob {
+export interface K8sDeployment {
   metadata?: {
     name?: string;
     namespace?: string;
@@ -76,30 +76,39 @@ export interface K8sJob {
     labels?: Record<string, string>;
   };
   status?: {
-    active?: number;
-    succeeded?: number;
-    failed?: number;
-    completionTime?: string;
+    replicas?: number;
+    readyReplicas?: number;
+    availableReplicas?: number;
   };
 }
 
-export async function listAgentJobs(): Promise<OpenshiftJobSummary[]> {
+/** Lists the actual running agent workloads on OpenShift — every
+ * generic-chat agent is a `Deployment` (see
+ * provision-generic-agent.yml's "Create/update the agent Deployment"
+ * task), never a batch/v1 `Job`, so this queries the apps/v1 Deployments
+ * API rather than Jobs (a previous version of this function queried
+ * Jobs, which no playbook here has ever created — it was always
+ * guaranteed to return empty). Scoped to the configured namespace only;
+ * the OpenShell gateway lives in its own admin-chosen namespace and is
+ * installed via a third-party Helm chart with no guaranteed AgentStore
+ * label, so it intentionally isn't included here — its status is
+ * already surfaced per-listing in the Catalog. */
+export async function listAgentDeployments(): Promise<OpenshiftDeploymentSummary[]> {
   const ns = openshiftNamespace();
   const selector = encodeURIComponent("app.kubernetes.io/managed-by=agentstore");
   const response = await ocpFetch(
-    `/apis/batch/v1/namespaces/${ns}/jobs?labelSelector=${selector}`
+    `/apis/apps/v1/namespaces/${ns}/deployments?labelSelector=${selector}`
   );
-  if (!response.ok) throw new Error(`OpenShift list jobs: HTTP ${response.status}`);
-  const body = (await response.json()) as { items?: K8sJob[] };
-  return (body.items ?? []).map((job) => ({
-    name: job.metadata?.name ?? "",
-    namespace: job.metadata?.namespace ?? ns,
-    active: job.status?.active,
-    succeeded: job.status?.succeeded,
-    failed: job.status?.failed,
-    completionTime: job.status?.completionTime,
-    creationTimestamp: job.metadata?.creationTimestamp,
-    taskId: job.metadata?.labels?.["agentstore/task-id"],
+  if (!response.ok) throw new Error(`OpenShift list deployments: HTTP ${response.status}`);
+  const body = (await response.json()) as { items?: K8sDeployment[] };
+  return (body.items ?? []).map((deployment) => ({
+    name: deployment.metadata?.name ?? "",
+    namespace: deployment.metadata?.namespace ?? ns,
+    replicas: deployment.status?.replicas ?? 0,
+    readyReplicas: deployment.status?.readyReplicas ?? 0,
+    availableReplicas: deployment.status?.availableReplicas ?? 0,
+    creationTimestamp: deployment.metadata?.creationTimestamp,
+    listingId: deployment.metadata?.labels?.["agentstore/listing-id"],
   }));
 }
 

@@ -5,7 +5,7 @@ import {
   applyPlatformEnv,
   isAapConfigured,
   isOpenshiftConfigured,
-  listAgentJobs,
+  listAgentDeployments,
   listCredentialsByKind,
   listExecutionEnvironments,
   listJobTemplates,
@@ -157,20 +157,20 @@ async function probeAap(): Promise<PlatformStatus["aap"]> {
 async function probeOpenshift(): Promise<PlatformStatus["openshift"]> {
   const configured = isOpenshiftConfigured();
   if (!configured) {
-    return { configured: false, connected: false, error: "Not configured", jobs: [] };
+    return { configured: false, connected: false, error: "Not configured", deployments: [] };
   }
   const ping = await pingOpenshift();
   if (!ping.ok) {
-    return { configured: true, connected: false, error: ping.error, jobs: [] };
+    return { configured: true, connected: false, error: ping.error, deployments: [] };
   }
   try {
-    return { configured: true, connected: true, jobs: await listAgentJobs() };
+    return { configured: true, connected: true, deployments: await listAgentDeployments() };
   } catch (err) {
     return {
       configured: true,
       connected: false,
       error: err instanceof Error ? err.message : String(err),
-      jobs: [],
+      deployments: [],
     };
   }
 }

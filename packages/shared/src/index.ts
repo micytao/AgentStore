@@ -462,15 +462,19 @@ export interface AapJobSummary {
   url?: string;
 }
 
-export interface OpenshiftJobSummary {
+/** A running generic-chat agent Deployment on OpenShift (see
+ * listAgentDeployments() in packages/engine-ansible/src/openshift.ts).
+ * Scoped to Deployments only — the OpenShell gateway (a Helm-installed
+ * Deployment/StatefulSet in its own namespace) isn't included; see that
+ * function's doc comment. */
+export interface OpenshiftDeploymentSummary {
   name: string;
   namespace: string;
-  active?: number;
-  succeeded?: number;
-  failed?: number;
-  completionTime?: string;
+  replicas: number;
+  readyReplicas: number;
+  availableReplicas: number;
   creationTimestamp?: string;
-  taskId?: string;
+  listingId?: string;
 }
 
 export interface PlatformConnectionStatus {
@@ -503,7 +507,7 @@ export interface PlatformStatus {
     registryCredentials: AapNamedObject[];
   };
   openshift: PlatformConnectionStatus & {
-    jobs: OpenshiftJobSummary[];
+    deployments: OpenshiftDeploymentSummary[];
   };
   /** Agent Sandbox Service reachability (GET /health), independent of
    * whether any listing currently uses it. */

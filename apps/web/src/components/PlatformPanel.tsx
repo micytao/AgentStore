@@ -33,6 +33,9 @@ import {
   Label,
   Progress,
   Spinner,
+  Tab,
+  Tabs,
+  TabTitleText,
   TextInput,
   Title,
 } from "@patternfly/react-core";
@@ -94,73 +97,59 @@ function IconTitle({ icon: Icon, children }: { icon: ComponentType; children: Re
   );
 }
 
-function ConnectionCard({
-  name,
-  icon,
-  connection,
-  url,
-  details,
-  result,
-}: {
-  name: string;
-  icon: ComponentType;
-  connection: PlatformConnectionStatus;
-  url?: string;
-  details?: { label: string; value: string }[];
-  result?: TestOutcome;
-}) {
-  const statusLabel = connection.connected
-    ? "Connected"
-    : connection.configured
-      ? "Disconnected"
-      : "Not configured";
-  const statusColor: "green" | "red" | "grey" = connection.connected
-    ? "green"
-    : connection.configured
-      ? "red"
-      : "grey";
-  const errorMessage = result && !result.ok ? result.message : connection.error;
-  const showError = Boolean(errorMessage && !connection.connected);
-  const showSuccess = Boolean(result?.ok);
+function connectionStripState(connection: PlatformConnectionStatus): {
+  color: "green" | "red" | "grey";
+  text: string;
+} {
+  if (connection.connected) return { color: "green", text: "Connected" };
+  if (connection.configured) return { color: "red", text: "Disconnected" };
+  return { color: "grey", text: "Not configured" };
+}
+
+/** Compact, always-visible "at a glance" status row shown above the Tabs.
+ * Tabs necessarily hide each other's detail behind a click, so this row
+ * keeps the handful of questions an admin actually needs answered right
+ * away (is AAP/OpenShift reachable? is there a built image? are job
+ * templates ready?) visible no matter which tab is open — replaces the
+ * old full-width "Connections" summary Card, which just duplicated the
+ * AAP/OpenShift cards directly below it. */
+function PlatformStatusStrip({ status, draft }: { status: PlatformStatus; draft: PlatformSettings }) {
+  const aap = connectionStripState(status.aap);
+  const openshift = connectionStripState(status.openshift);
+  const eeSet = draft.aapExecutionEnvironmentId !== "";
+  const runtimeBuilt = Boolean(draft.agentRuntimeImage);
+  const templatesReady = draft.aapJobTemplateId !== "" && draft.openshellGatewayJobTemplateId !== "";
 
   return (
-    <Card isCompact style={{ height: "100%" }}>
-      <CardTitle>
-        <IconTitle icon={icon}>{name}</IconTitle>
-      </CardTitle>
+    <Card isCompact>
       <CardBody>
-        <DescriptionList isCompact>
-          <DescriptionListGroup>
-            <DescriptionListTerm>Status</DescriptionListTerm>
-            <DescriptionListDescription>
-              <Label color={statusColor} isCompact>
-                {statusLabel}
-              </Label>
-            </DescriptionListDescription>
-          </DescriptionListGroup>
-          <DescriptionListGroup>
-            <DescriptionListTerm>URL</DescriptionListTerm>
-            <DescriptionListDescription>
-              {url ? (
-                <span title={url}>{url}</span>
-              ) : (
-                <Content component={ContentVariants.small}>Not configured</Content>
-              )}
-            </DescriptionListDescription>
-          </DescriptionListGroup>
-          {details?.map((item) => (
-            <DescriptionListGroup key={item.label}>
-              <DescriptionListTerm>{item.label}</DescriptionListTerm>
-              <DescriptionListDescription>{item.value}</DescriptionListDescription>
-            </DescriptionListGroup>
-          ))}
-        </DescriptionList>
-        {showSuccess && (
-          <Alert variant="success" isInline isPlain title={result!.message} style={{ marginTop: "0.5rem" }} />
-        )}
-        {showError && (
-          <Alert variant="danger" isInline isPlain title={errorMessage} style={{ marginTop: "0.5rem" }} />
-        )}
+        <Flex spaceItems={{ default: "spaceItemsMd" }} flexWrap={{ default: "wrap" }} alignItems={{ default: "alignItemsCenter" }}>
+          <FlexItem>
+            <Label color={aap.color} icon={<AnsibleTowerIcon />} isCompact>
+              AAP: {aap.text}
+            </Label>
+          </FlexItem>
+          <FlexItem>
+            <Label color={openshift.color} icon={<OpenshiftIcon />} isCompact>
+              OpenShift: {openshift.text}
+            </Label>
+          </FlexItem>
+          <FlexItem>
+            <Label color={eeSet ? "green" : "grey"} isCompact>
+              Execution environment: {eeSet ? "Set" : "Not set"}
+            </Label>
+          </FlexItem>
+          <FlexItem>
+            <Label color={runtimeBuilt ? "green" : "grey"} isCompact>
+              Agent runtime image: {runtimeBuilt ? "Built" : "Not built"}
+            </Label>
+          </FlexItem>
+          <FlexItem>
+            <Label color={templatesReady ? "green" : "grey"} isCompact>
+              Job templates: {templatesReady ? "Created" : "Not created"}
+            </Label>
+          </FlexItem>
+        </Flex>
       </CardBody>
     </Card>
   );
@@ -224,23 +213,6 @@ function JobTemplatesCard({
   const running = bootstrap?.status === "deploying";
   const done = bootstrap?.status === "running";
 
-  const [showRegisterEe, setShowRegisterEe] = useState(false);
-  const [newEeName, setNewEeName] = useState("AgentStore execution environment");
-  const [newEeImage, setNewEeImage] = useState("");
-  const [newEeCredentialId, setNewEeCredentialId] = useState("");
-  const [registering, setRegistering] = useState(false);
-  const [registerError, setRegisterError] = useState<string | null>(null);
-
-  const [showBuildEe, setShowBuildEe] = useState(false);
-  const [buildEeName, setBuildEeName] = useState("AgentStore execution environment");
-  const [buildEeCredentialId, setBuildEeCredentialId] = useState("");
-  const [starting, setStarting] = useState(false);
-  const [startError, setStartError] = useState<string | null>(null);
-  const eeBuild = draft.eeBuild;
-  const eeBuildRunning = eeBuild?.status === "deploying";
-  const eeBuildDone = eeBuild?.status === "running";
-  const eeBuildFailed = eeBuild?.status === "failed";
-
   useEffect(() => {
     if (!running) return;
     const timer = setInterval(() => {
@@ -250,16 +222,6 @@ function JobTemplatesCard({
     }, 4000);
     return () => clearInterval(timer);
   }, [running, onSettingsUpdate]);
-
-  useEffect(() => {
-    if (!eeBuildRunning) return;
-    const timer = setInterval(() => {
-      fetchEeBuildStatus()
-        .then(onSettingsUpdate)
-        .catch((err: Error) => setStartError(err.message));
-    }, 4000);
-    return () => clearInterval(timer);
-  }, [eeBuildRunning, onSettingsUpdate]);
 
   async function create() {
     setBusy(true);
@@ -278,45 +240,6 @@ function JobTemplatesCard({
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setBusy(false);
-    }
-  }
-
-  async function registerEe() {
-    setRegistering(true);
-    setRegisterError(null);
-    try {
-      const next = await registerExecutionEnvironment({
-        name: newEeName,
-        image: newEeImage,
-        credentialId: newEeCredentialId ? Number(newEeCredentialId) : undefined,
-      });
-      onSettingsUpdate(next);
-      setShowRegisterEe(false);
-      setNewEeImage("");
-    } catch (err) {
-      setRegisterError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setRegistering(false);
-    }
-  }
-
-  async function startBuild() {
-    setStarting(true);
-    setStartError(null);
-    try {
-      const next = await startEeImageBuild({
-        name: buildEeName,
-        credentialId: buildEeCredentialId ? Number(buildEeCredentialId) : undefined,
-        settings: {
-          aapProjectGitUrl: draft.aapProjectGitUrl,
-          aapProjectGitBranch: draft.aapProjectGitBranch,
-        },
-      });
-      onSettingsUpdate(next);
-    } catch (err) {
-      setStartError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setStarting(false);
     }
   }
 
@@ -454,32 +377,129 @@ function JobTemplatesCard({
                 </FormSelect>
               </FormGroup>
             </FlexItem>
-            <FlexItem>
-              <Button
-                variant="link"
-                isInline
-                onClick={() => {
-                  setShowBuildEe((v) => !v);
-                  setShowRegisterEe(false);
-                }}
-              >
-                {showBuildEe ? "Cancel" : "+ Build from source"}
-              </Button>
-            </FlexItem>
-            <FlexItem>
-              <Button
-                variant="link"
-                isInline
-                onClick={() => {
-                  setShowRegisterEe((v) => !v);
-                  setShowBuildEe(false);
-                }}
-              >
-                {showRegisterEe ? "Cancel" : "+ Register a new image…"}
-              </Button>
-            </FlexItem>
           </Flex>
+          <Content component={ContentVariants.small} style={{ marginTop: "0.5rem" }}>
+            Need to build or register a new one? See the <strong>Container images</strong> tab.
+          </Content>
         </Form>
+
+        <div style={{ marginTop: "0.75rem" }}>
+          <Button variant="primary" isDisabled={busy || running} onClick={() => void create()}>
+            {busy ? "Starting…" : running ? `Creating… (${bootstrap?.phase ?? "in progress"})` : "Create job templates"}
+          </Button>
+        </div>
+      </CardBody>
+    </Card>
+  );
+}
+
+/**
+ * The Execution Environment's "Build from source" / "Register an
+ * existing image" admin actions (Admin -> Platform -> Container images
+ * tab). An EE is the container image AAP actually runs the two Job
+ * Templates' playbooks in — it needs the `kubernetes.core` collection
+ * (and `helm`, for the collaborative template). This card only
+ * builds/registers the image; the Job templates tab's own "Execution
+ * environment" `FormSelect` is where an admin actually picks one of the
+ * results here to use. Split out of JobTemplatesCard (which used to own
+ * this as two nested toggle-able sub-forms) since it's a different kind
+ * of task — building/registering an image, not creating AAP objects.
+ */
+function ExecutionEnvironmentCard({
+  draft,
+  aap,
+  onSettingsUpdate,
+}: {
+  draft: PlatformSettings;
+  aap: PlatformStatus["aap"];
+  onSettingsUpdate: (next: PlatformSettings) => void;
+}) {
+  const [showRegisterEe, setShowRegisterEe] = useState(false);
+  const [newEeName, setNewEeName] = useState("AgentStore execution environment");
+  const [newEeImage, setNewEeImage] = useState("");
+  const [newEeCredentialId, setNewEeCredentialId] = useState("");
+  const [registering, setRegistering] = useState(false);
+  const [registerError, setRegisterError] = useState<string | null>(null);
+
+  const [showBuildEe, setShowBuildEe] = useState(false);
+  const [buildEeName, setBuildEeName] = useState("AgentStore execution environment");
+  const [buildEeCredentialId, setBuildEeCredentialId] = useState("");
+  const [starting, setStarting] = useState(false);
+  const [startError, setStartError] = useState<string | null>(null);
+  const eeBuild = draft.eeBuild;
+  const eeBuildRunning = eeBuild?.status === "deploying";
+  const eeBuildDone = eeBuild?.status === "running";
+  const eeBuildFailed = eeBuild?.status === "failed";
+
+  useEffect(() => {
+    if (!eeBuildRunning) return;
+    const timer = setInterval(() => {
+      fetchEeBuildStatus()
+        .then(onSettingsUpdate)
+        .catch((err: Error) => setStartError(err.message));
+    }, 4000);
+    return () => clearInterval(timer);
+  }, [eeBuildRunning, onSettingsUpdate]);
+
+  async function registerEe() {
+    setRegistering(true);
+    setRegisterError(null);
+    try {
+      const next = await registerExecutionEnvironment({
+        name: newEeName,
+        image: newEeImage,
+        credentialId: newEeCredentialId ? Number(newEeCredentialId) : undefined,
+      });
+      onSettingsUpdate(next);
+      setShowRegisterEe(false);
+      setNewEeImage("");
+    } catch (err) {
+      setRegisterError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setRegistering(false);
+    }
+  }
+
+  async function startBuild() {
+    setStarting(true);
+    setStartError(null);
+    try {
+      const next = await startEeImageBuild({
+        name: buildEeName,
+        credentialId: buildEeCredentialId ? Number(buildEeCredentialId) : undefined,
+        settings: {
+          aapProjectGitUrl: draft.aapProjectGitUrl,
+          aapProjectGitBranch: draft.aapProjectGitBranch,
+        },
+      });
+      onSettingsUpdate(next);
+    } catch (err) {
+      setStartError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setStarting(false);
+    }
+  }
+
+  return (
+    <Card>
+      <CardTitle>
+        <IconTitle icon={AnsibleTowerIcon}>Execution Environment</IconTitle>
+      </CardTitle>
+      <CardBody>
+        <Content component={ContentVariants.small}>
+          The selected execution environment must already include the{" "}
+          <code>kubernetes.core</code> collection (and the <code>helm</code> CLI, for
+          the collaborative template) — see{" "}
+          <code>ansible/execution-environment/</code> for a ready-to-build
+          definition if you don&apos;t have one yet. Build or register one below,
+          then pick it on the <strong>Job templates</strong> tab.
+        </Content>
+
+        <Content component={ContentVariants.small} style={{ marginTop: "0.5rem" }}>
+          {aap.executionEnvironments.length > 0
+            ? `Currently registered: ${aap.executionEnvironments.map((e) => `${e.name} (#${e.id})`).join(" · ")}`
+            : "None registered yet."}
+        </Content>
 
         {(eeBuild?.error || eeBuildDone) && (
           <Alert
@@ -488,21 +508,46 @@ function JobTemplatesCard({
             title={
               eeBuild?.error
                 ? eeBuild.error
-                : `Built and registered execution environment #${eeBuild?.executionEnvironmentId} — selected below.`
+                : `Built and registered execution environment #${eeBuild?.executionEnvironmentId} — select it on the Job templates tab.`
             }
             style={{ marginTop: "0.5rem" }}
           />
         )}
+
+        <Flex spaceItems={{ default: "spaceItemsMd" }} style={{ marginTop: "0.75rem" }}>
+          <FlexItem>
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setShowBuildEe((v) => !v);
+                setShowRegisterEe(false);
+              }}
+            >
+              {showBuildEe ? "Cancel" : "+ Build from source"}
+            </Button>
+          </FlexItem>
+          <FlexItem>
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setShowRegisterEe((v) => !v);
+                setShowBuildEe(false);
+              }}
+            >
+              {showRegisterEe ? "Cancel" : "+ Register a new image…"}
+            </Button>
+          </FlexItem>
+        </Flex>
 
         {showBuildEe && (
           <Card isCompact isPlain style={{ marginTop: "0.5rem", border: "1px dashed var(--pf-t--global--border--color--100, #ccc)" }}>
             <CardBody>
               <Content component={ContentVariants.small}>
                 Builds <code>ansible/execution-environment/Containerfile</code> as an
-                OpenShift BuildConfig — source: the Project Git URL/branch above — and
-                pushes the result to OpenShift&apos;s internal registry, then registers it
-                in AAP automatically. No local <code>ansible-builder</code>/
-                <code>podman</code> needed; see{" "}
+                OpenShift BuildConfig — source: the Project Git URL/branch on the Job
+                templates tab — and pushes the result to OpenShift&apos;s internal
+                registry, then registers it in AAP automatically. No local{" "}
+                <code>ansible-builder</code>/<code>podman</code> needed; see{" "}
                 <code>ansible/execution-environment/README.md</code> (&quot;Option
                 B&quot;) for the caveats (AAP must be able to pull from that registry).
               </Content>
@@ -609,20 +654,6 @@ function JobTemplatesCard({
             </CardBody>
           </Card>
         )}
-
-        <Content component={ContentVariants.small} style={{ marginTop: "0.5rem" }}>
-          The selected execution environment must already include the{" "}
-          <code>kubernetes.core</code> collection (and the <code>helm</code> CLI, for
-          the collaborative template) — see{" "}
-          <code>ansible/execution-environment/</code> for a ready-to-build
-          definition if you don&apos;t have one yet.
-        </Content>
-
-        <div style={{ marginTop: "0.75rem" }}>
-          <Button variant="primary" isDisabled={busy || running} onClick={() => void create()}>
-            {busy ? "Starting…" : running ? `Creating… (${bootstrap?.phase ?? "in progress"})` : "Create job templates"}
-          </Button>
-        </div>
       </CardBody>
     </Card>
   );
@@ -756,6 +787,7 @@ export function PlatformPanel() {
     aap?: TestOutcome;
     openshift?: TestOutcome;
   }>({});
+  const [activeTabKey, setActiveTabKey] = useState<string | number>("connections");
 
   function loadSecrets() {
     fetchSecrets()
@@ -895,234 +927,224 @@ export function PlatformPanel() {
       ) : null}
 
       <FlexItem>
-        <Card>
-          <CardTitle>Connections</CardTitle>
-          <CardBody>
-            <Content component={ContentVariants.p}>
-              AgentStore is a console. It talks to Ansible Automation Platform to
-              provision, and to OpenShift to watch the Job that actually
-              runs. URLs and tokens for both are configured below.
-            </Content>
-            <Flex
-              spaceItems={{ default: "spaceItemsMd" }}
-              alignItems={{ default: "alignItemsStretch" }}
-              flexWrap={{ default: "wrap" }}
-            >
-              <FlexItem flex={{ default: "flex_1" }} style={{ minWidth: "300px" }}>
-                <ConnectionCard
-                  name="Ansible Automation Platform"
-                  icon={AnsibleTowerIcon}
-                  connection={status.aap}
-                  url={status.aap.configured ? status.settings.aapControllerUrl : undefined}
-                  result={testResults.aap}
+        <PlatformStatusStrip status={status} draft={draft} />
+      </FlexItem>
+
+      <FlexItem>
+        <Tabs
+          activeKey={activeTabKey}
+          onSelect={(_e, key) => setActiveTabKey(key)}
+          aria-label="Platform sections"
+          isBox
+        >
+          <Tab eventKey="connections" title={<TabTitleText>Connections</TabTitleText>}>
+            <Flex direction={{ default: "column" }} spaceItems={{ default: "spaceItemsLg" }} style={{ marginTop: "1rem" }}>
+              <FlexItem>
+                <Card>
+                  <CardTitle>
+                    <Flex justifyContent={{ default: "justifyContentSpaceBetween" }} alignItems={{ default: "alignItemsCenter" }}>
+                      <FlexItem>
+                        <IconTitle icon={AnsibleTowerIcon}>AAP controller</IconTitle>
+                      </FlexItem>
+                      <FlexItem>
+                        <Button variant="secondary" isDisabled={testing !== null} onClick={() => void test("aap")}>
+                          {testing === "aap" ? "Testing…" : "Test"}
+                        </Button>
+                      </FlexItem>
+                    </Flex>
+                  </CardTitle>
+                  <CardBody>
+                    <TestBanner result={testResults.aap} pending={testing === "aap"} />
+                    <Form>
+                      <Flex spaceItems={{ default: "spaceItemsMd" }}>
+                        <FlexItem flex={{ default: "flex_1" }}>
+                          {field("aapControllerUrl", "Controller URL", "https://aap.example.com")}
+                        </FlexItem>
+                        <FlexItem flex={{ default: "flex_1" }}>
+                          {field("aapConsoleUrl", "Console URL (deep links)", "https://aap.example.com")}
+                        </FlexItem>
+                        <FlexItem flex={{ default: "flex_1" }}>{field("aapJobTemplateId", "Default job template id", "42")}</FlexItem>
+                      </Flex>
+                    </Form>
+                    {status.aap.jobTemplates.length > 0 ? (
+                      <Content component={ContentVariants.small}>
+                        Templates:{" "}
+                        {status.aap.jobTemplates
+                          .slice(0, 8)
+                          .map((t) => `${t.name} (#${t.id})`)
+                          .join(" · ")}
+                      </Content>
+                    ) : null}
+                    {insecureTlsToggle("aapInsecureTls")}
+                    {aapToken && <SecretField secret={aapToken} onChange={loadSecrets} />}
+                  </CardBody>
+                </Card>
+              </FlexItem>
+
+              <FlexItem>
+                <Card>
+                  <CardTitle>
+                    <Flex justifyContent={{ default: "justifyContentSpaceBetween" }} alignItems={{ default: "alignItemsCenter" }}>
+                      <FlexItem>
+                        <IconTitle icon={OpenshiftIcon}>OpenShift</IconTitle>
+                      </FlexItem>
+                      <FlexItem>
+                        <Button variant="secondary" isDisabled={testing !== null} onClick={() => void test("openshift")}>
+                          {testing === "openshift" ? "Testing…" : "Test"}
+                        </Button>
+                      </FlexItem>
+                    </Flex>
+                  </CardTitle>
+                  <CardBody>
+                    <TestBanner result={testResults.openshift} pending={testing === "openshift"} />
+                    <Content component={ContentVariants.small}>
+                      This must be the <strong>API server</strong> URL, not the web console — usually{" "}
+                      <code>https://api.&lt;cluster-domain&gt;:6443</code>. It is a different hostname from the console
+                      (which starts with <code>console-openshift-console.apps.</code>) and almost always needs an explicit
+                      <code>:6443</code> port.
+                    </Content>
+                    <Form>
+                      <Flex spaceItems={{ default: "spaceItemsMd" }}>
+                        <FlexItem flex={{ default: "flex_1" }}>
+                          {field("openshiftApiUrl", "API URL", "https://api.cluster.example.com:6443")}
+                        </FlexItem>
+                        <FlexItem flex={{ default: "flex_1" }}>{field("openshiftNamespace", "Namespace", "agent-workloads")}</FlexItem>
+                        <FlexItem flex={{ default: "flex_1" }}>
+                          {field("openshiftConsoleUrl", "Console URL", "https://console-openshift-console.apps.example.com")}
+                        </FlexItem>
+                      </Flex>
+                    </Form>
+                    {insecureTlsToggle("openshiftInsecureTls")}
+                    {openshiftToken && <SecretField secret={openshiftToken} onChange={loadSecrets} />}
+                  </CardBody>
+                </Card>
+              </FlexItem>
+            </Flex>
+          </Tab>
+
+          <Tab eventKey="images" title={<TabTitleText>Container images</TabTitleText>}>
+            <Flex direction={{ default: "column" }} spaceItems={{ default: "spaceItemsLg" }} style={{ marginTop: "1rem" }}>
+              <FlexItem>
+                <ExecutionEnvironmentCard draft={draft} aap={status.aap} onSettingsUpdate={applyBootstrapUpdate} />
+              </FlexItem>
+              <FlexItem>
+                <AgentRuntimeCard draft={draft} onSettingsUpdate={applyBootstrapUpdate} />
+              </FlexItem>
+            </Flex>
+          </Tab>
+
+          <Tab eventKey="templates" title={<TabTitleText>Job templates</TabTitleText>}>
+            <Flex direction={{ default: "column" }} spaceItems={{ default: "spaceItemsLg" }} style={{ marginTop: "1rem" }}>
+              <FlexItem>
+                <JobTemplatesCard
+                  draft={draft}
+                  aap={status.aap}
+                  onFieldChange={updateDraftField}
+                  onSettingsUpdate={applyBootstrapUpdate}
                 />
               </FlexItem>
-              <FlexItem flex={{ default: "flex_1" }} style={{ minWidth: "300px" }}>
-                <ConnectionCard
-                  name="OpenShift"
-                  icon={OpenshiftIcon}
-                  connection={status.openshift}
-                  url={status.openshift.configured ? status.settings.openshiftApiUrl : undefined}
-                  details={
-                    status.openshift.configured
-                      ? [{ label: "Namespace", value: status.settings.openshiftNamespace || "agent-workloads" }]
-                      : undefined
-                  }
-                  result={testResults.openshift}
-                />
+            </Flex>
+          </Tab>
+
+          <Tab eventKey="activity" title={<TabTitleText>Activity</TabTitleText>}>
+            <Flex direction={{ default: "column" }} spaceItems={{ default: "spaceItemsLg" }} style={{ marginTop: "1rem" }}>
+              <FlexItem>
+                <Card>
+                  <CardTitle>
+                    <IconTitle icon={AnsibleTowerIcon}>Recent AAP jobs</IconTitle>
+                  </CardTitle>
+                  <CardBody>
+                    {status.aap.recentJobs.length === 0 ? (
+                      <Content component={ContentVariants.small}>No jobs yet — or AAP is not connected.</Content>
+                    ) : (
+                      <Table aria-label="Recent AAP jobs" variant="compact">
+                        <Thead>
+                          <Tr>
+                            <Th>Job</Th>
+                            <Th>Status</Th>
+                            <Th>Link</Th>
+                          </Tr>
+                        </Thead>
+                        <Tbody>
+                          {status.aap.recentJobs.map((job) => (
+                            <Tr key={job.id}>
+                              <Td dataLabel="Job">
+                                #{job.id} {job.name}
+                              </Td>
+                              <Td dataLabel="Status">
+                                <Label isCompact>{job.status}</Label>
+                              </Td>
+                              <Td dataLabel="Link">
+                                {job.url ? (
+                                  <a href={job.url} target="_blank" rel="noreferrer">
+                                    Open in AAP
+                                  </a>
+                                ) : (
+                                  job.started ?? ""
+                                )}
+                              </Td>
+                            </Tr>
+                          ))}
+                        </Tbody>
+                      </Table>
+                    )}
+                  </CardBody>
+                </Card>
+              </FlexItem>
+
+              <FlexItem>
+                <Card>
+                  <CardTitle>
+                    <IconTitle icon={OpenshiftIcon}>Deployed agents on OpenShift</IconTitle>
+                  </CardTitle>
+                  <CardBody>
+                    <Content component={ContentVariants.small} style={{ marginBottom: "0.5rem" }}>
+                      Generic-chat agent Deployments only — the OpenShell gateway installs via a
+                      separate Helm chart into its own namespace and isn&apos;t shown here; see its
+                      status per-listing in the Catalog instead.
+                    </Content>
+                    {status.openshift.deployments.length === 0 ? (
+                      <Content component={ContentVariants.small}>
+                        No agent Deployments in {status.settings.openshiftNamespace || "agent-workloads"}.
+                      </Content>
+                    ) : (
+                      <Table aria-label="Deployed agents on OpenShift" variant="compact">
+                        <Thead>
+                          <Tr>
+                            <Th>Deployment</Th>
+                            <Th>Listing</Th>
+                            <Th>Replicas</Th>
+                            <Th>Created</Th>
+                          </Tr>
+                        </Thead>
+                        <Tbody>
+                          {status.openshift.deployments.map((d) => {
+                            const ready = d.replicas > 0 && d.readyReplicas >= d.replicas;
+                            const statusColor: "green" | "grey" = ready ? "green" : "grey";
+                            return (
+                              <Tr key={`${d.namespace}/${d.name}`}>
+                                <Td dataLabel="Deployment">{d.name}</Td>
+                                <Td dataLabel="Listing">{d.listingId ?? "—"}</Td>
+                                <Td dataLabel="Replicas">
+                                  <Label color={statusColor} isCompact>
+                                    {d.readyReplicas}/{d.replicas} ready
+                                  </Label>
+                                </Td>
+                                <Td dataLabel="Created">
+                                  {d.creationTimestamp ? new Date(d.creationTimestamp).toLocaleString() : ""}
+                                </Td>
+                              </Tr>
+                            );
+                          })}
+                        </Tbody>
+                      </Table>
+                    )}
+                  </CardBody>
+                </Card>
               </FlexItem>
             </Flex>
-          </CardBody>
-        </Card>
-      </FlexItem>
-
-      <FlexItem>
-        <Card>
-          <CardTitle>
-            <Flex justifyContent={{ default: "justifyContentSpaceBetween" }} alignItems={{ default: "alignItemsCenter" }}>
-              <FlexItem>
-                <IconTitle icon={AnsibleTowerIcon}>AAP controller</IconTitle>
-              </FlexItem>
-              <FlexItem>
-                <Button variant="secondary" isDisabled={testing !== null} onClick={() => void test("aap")}>
-                  {testing === "aap" ? "Testing…" : "Test"}
-                </Button>
-              </FlexItem>
-            </Flex>
-          </CardTitle>
-          <CardBody>
-            <TestBanner result={testResults.aap} pending={testing === "aap"} />
-            <Form>
-              <Flex spaceItems={{ default: "spaceItemsMd" }}>
-                <FlexItem flex={{ default: "flex_1" }}>
-                  {field("aapControllerUrl", "Controller URL", "https://aap.example.com")}
-                </FlexItem>
-                <FlexItem flex={{ default: "flex_1" }}>
-                  {field("aapConsoleUrl", "Console URL (deep links)", "https://aap.example.com")}
-                </FlexItem>
-                <FlexItem flex={{ default: "flex_1" }}>{field("aapJobTemplateId", "Default job template id", "42")}</FlexItem>
-              </Flex>
-            </Form>
-            {status.aap.jobTemplates.length > 0 ? (
-              <Content component={ContentVariants.small}>
-                Templates:{" "}
-                {status.aap.jobTemplates
-                  .slice(0, 8)
-                  .map((t) => `${t.name} (#${t.id})`)
-                  .join(" · ")}
-              </Content>
-            ) : null}
-            {insecureTlsToggle("aapInsecureTls")}
-            {aapToken && <SecretField secret={aapToken} onChange={loadSecrets} />}
-          </CardBody>
-        </Card>
-      </FlexItem>
-
-      <FlexItem>
-        <Card>
-          <CardTitle>
-            <Flex justifyContent={{ default: "justifyContentSpaceBetween" }} alignItems={{ default: "alignItemsCenter" }}>
-              <FlexItem>
-                <IconTitle icon={OpenshiftIcon}>OpenShift</IconTitle>
-              </FlexItem>
-              <FlexItem>
-                <Button variant="secondary" isDisabled={testing !== null} onClick={() => void test("openshift")}>
-                  {testing === "openshift" ? "Testing…" : "Test"}
-                </Button>
-              </FlexItem>
-            </Flex>
-          </CardTitle>
-          <CardBody>
-            <TestBanner result={testResults.openshift} pending={testing === "openshift"} />
-            <Content component={ContentVariants.small}>
-              This must be the <strong>API server</strong> URL, not the web console — usually{" "}
-              <code>https://api.&lt;cluster-domain&gt;:6443</code>. It is a different hostname from the console
-              (which starts with <code>console-openshift-console.apps.</code>) and almost always needs an explicit
-              <code>:6443</code> port.
-            </Content>
-            <Form>
-              <Flex spaceItems={{ default: "spaceItemsMd" }}>
-                <FlexItem flex={{ default: "flex_1" }}>
-                  {field("openshiftApiUrl", "API URL", "https://api.cluster.example.com:6443")}
-                </FlexItem>
-                <FlexItem flex={{ default: "flex_1" }}>{field("openshiftNamespace", "Namespace", "agent-workloads")}</FlexItem>
-                <FlexItem flex={{ default: "flex_1" }}>
-                  {field("openshiftConsoleUrl", "Console URL", "https://console-openshift-console.apps.example.com")}
-                </FlexItem>
-              </Flex>
-            </Form>
-            {insecureTlsToggle("openshiftInsecureTls")}
-            {openshiftToken && <SecretField secret={openshiftToken} onChange={loadSecrets} />}
-          </CardBody>
-        </Card>
-      </FlexItem>
-
-      <FlexItem>
-        <JobTemplatesCard
-          draft={draft}
-          aap={status.aap}
-          onFieldChange={updateDraftField}
-          onSettingsUpdate={applyBootstrapUpdate}
-        />
-      </FlexItem>
-
-      <FlexItem>
-        <AgentRuntimeCard draft={draft} onSettingsUpdate={applyBootstrapUpdate} />
-      </FlexItem>
-
-      <FlexItem>
-        <Card>
-          <CardTitle>
-            <IconTitle icon={AnsibleTowerIcon}>Recent AAP jobs</IconTitle>
-          </CardTitle>
-          <CardBody>
-            {status.aap.recentJobs.length === 0 ? (
-              <Content component={ContentVariants.small}>No jobs yet — or AAP is not connected.</Content>
-            ) : (
-              <Table aria-label="Recent AAP jobs" variant="compact">
-                <Thead>
-                  <Tr>
-                    <Th>Job</Th>
-                    <Th>Status</Th>
-                    <Th>Link</Th>
-                  </Tr>
-                </Thead>
-                <Tbody>
-                  {status.aap.recentJobs.map((job) => (
-                    <Tr key={job.id}>
-                      <Td dataLabel="Job">
-                        #{job.id} {job.name}
-                      </Td>
-                      <Td dataLabel="Status">
-                        <Label isCompact>{job.status}</Label>
-                      </Td>
-                      <Td dataLabel="Link">
-                        {job.url ? (
-                          <a href={job.url} target="_blank" rel="noreferrer">
-                            Open in AAP
-                          </a>
-                        ) : (
-                          job.started ?? ""
-                        )}
-                      </Td>
-                    </Tr>
-                  ))}
-                </Tbody>
-              </Table>
-            )}
-          </CardBody>
-        </Card>
-      </FlexItem>
-
-      <FlexItem>
-        <Card>
-          <CardTitle>
-            <IconTitle icon={OpenshiftIcon}>Agent Jobs on OpenShift</IconTitle>
-          </CardTitle>
-          <CardBody>
-            {status.openshift.jobs.length === 0 ? (
-              <Content component={ContentVariants.small}>
-                No <code>agent-*</code> Jobs in {status.settings.openshiftNamespace || "agent-workloads"}.
-              </Content>
-            ) : (
-              <Table aria-label="Agent jobs on OpenShift" variant="compact">
-                <Thead>
-                  <Tr>
-                    <Th>Job</Th>
-                    <Th>Namespace</Th>
-                    <Th>Status</Th>
-                  </Tr>
-                </Thead>
-                <Tbody>
-                  {status.openshift.jobs.map((job) => {
-                    const statusLabel = job.succeeded ? "succeeded" : job.failed ? "failed" : job.active ? "active" : "pending";
-                    const statusColor: "green" | "red" | "blue" | "grey" = job.succeeded
-                      ? "green"
-                      : job.failed
-                        ? "red"
-                        : job.active
-                          ? "blue"
-                          : "grey";
-                    return (
-                      <Tr key={`${job.namespace}/${job.name}`}>
-                        <Td dataLabel="Job">
-                          {job.name}
-                          {job.taskId ? ` · task ${job.taskId}` : ""}
-                        </Td>
-                        <Td dataLabel="Namespace">{job.namespace}</Td>
-                        <Td dataLabel="Status">
-                          <Label color={statusColor} isCompact>
-                            {statusLabel}
-                          </Label>
-                        </Td>
-                      </Tr>
-                    );
-                  })}
-                </Tbody>
-              </Table>
-            )}
-          </CardBody>
-        </Card>
+          </Tab>
+        </Tabs>
       </FlexItem>
     </Flex>
   );

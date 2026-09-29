@@ -20,7 +20,7 @@ export {
   findOrCreateExecutionEnvironment,
   type FindOrCreateExecutionEnvironmentInput,
 } from "./aap";
-export { pingOpenshift, listAgentJobs } from "./openshift";
+export { pingOpenshift, listAgentDeployments } from "./openshift";
 export {
   startEeImageBuild,
   getEeImageBuildResult,
