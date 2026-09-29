@@ -428,9 +428,15 @@ export interface FindOrCreateJobTemplateInput {
  * autonomous template, platform-scoped for the collaborative one), the
  * same way this Job Template would need it if hand-created in the AAP
  * UI per ansible/README.md. */
+/** `created` tells the caller whether this call actually made a new
+ * object (a fresh AAP `POST`) or just found-and-verified one that was
+ * already there (an existing-by-name `PATCH`) — surfaced up through
+ * `AapBootstrapStatus` so the "Create job templates" UI can tell the
+ * admin which one happened, instead of a generic "ready" that reads the
+ * same whether anything changed or not. */
 export async function findOrCreateJobTemplate(
   input: FindOrCreateJobTemplateInput
-): Promise<{ id: number }> {
+): Promise<{ id: number; created: boolean }> {
   const fields = {
     name: input.name,
     job_type: "run",
@@ -450,7 +456,7 @@ export async function findOrCreateJobTemplate(
       const text = await patched.text();
       throw new Error(`AAP update job template failed (${patched.status}): ${text.slice(0, 400)}`);
     }
-    return existing;
+    return { id: existing.id, created: false };
   }
   const response = await aapFetch("/v2/job_templates/", {
     method: "POST",
@@ -460,15 +466,30 @@ export async function findOrCreateJobTemplate(
     const text = await response.text();
     throw new Error(`AAP create job template failed (${response.status}): ${text.slice(0, 400)}`);
   }
-  return (await response.json()) as { id: number };
+  const row = (await response.json()) as { id: number };
+  return { id: row.id, created: true };
 }
 
-/** Idempotent: AAP responds 204 when the association already exists and
- * 201 when newly created — both are treated as success. */
+/** Idempotent by checking first, not by relying on AAP to treat a repeat
+ * POST as a no-op: for credential types that only allow one per job
+ * template — like the Kubernetes/OpenShift API Bearer Token type used
+ * here — AAP's `/credentials/` association endpoint enforces that
+ * uniqueness rule on *every* POST, even when the id being posted is the
+ * exact same credential already attached. So re-running this (e.g. the
+ * admin clicks "Create job templates" again once it's already
+ * bootstrapped) throws `400 Cannot assign multiple OpenShift or
+ * Kubernetes API Bearer Token credentials.` instead of a no-op 204/201 —
+ * this checks the current associations first and skips the POST if
+ * `credentialId` is already among them. */
 export async function attachCredentialToJobTemplate(
   jobTemplateId: number,
   credentialId: number
 ): Promise<void> {
+  const existing = await aapFetch(`/v2/job_templates/${jobTemplateId}/credentials/?page_size=200`);
+  if (existing.ok) {
+    const body = (await existing.json()) as { results?: { id: number }[] };
+    if (body.results?.some((c) => c.id === credentialId)) return;
+  }
   const response = await aapFetch(`/v2/job_templates/${jobTemplateId}/credentials/`, {
     method: "POST",
     body: JSON.stringify({ id: credentialId }),

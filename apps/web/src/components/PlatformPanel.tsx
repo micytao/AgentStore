@@ -3,13 +3,20 @@
 import { useEffect, useState } from "react";
 import type { ComponentType, ReactNode } from "react";
 import {
+  type AapJobTemplate,
   type AapNamedObject,
   type PlatformConnectionStatus,
   type PlatformSettings,
   type PlatformStatus,
   type SecretSummary,
 } from "@agentstore/shared";
-import { AnsibleTowerIcon, OpenshiftIcon } from "@patternfly/react-icons";
+import {
+  AnsibleTowerIcon,
+  BuilderImageIcon,
+  CubeIcon,
+  OpenshiftIcon,
+  PficonTemplateIcon,
+} from "@patternfly/react-icons";
 import {
   Alert,
   Bullseye,
@@ -24,12 +31,14 @@ import {
   DescriptionListDescription,
   DescriptionListGroup,
   DescriptionListTerm,
+  Divider,
   Flex,
   FlexItem,
   Form,
   FormGroup,
   FormSelect,
   FormSelectOption,
+  Icon,
   Label,
   Progress,
   Spinner,
@@ -106,48 +115,179 @@ function connectionStripState(connection: PlatformConnectionStatus): {
   return { color: "grey", text: "Not configured" };
 }
 
+/** Resolves a stored job template id against the *live* list of AAP job
+ * templates (`status.aap.jobTemplates`, refetched from AAP on every
+ * status load) rather than just checking the id is non-empty. This is
+ * what catches a template that was deleted directly in AAP after being
+ * created/entered here — the id would still be saved in settings, but it
+ * no longer resolves to a real template. */
+function findJobTemplate(list: AapJobTemplate[], id: number | ""): AapJobTemplate | undefined {
+  if (id === "") return undefined;
+  return list.find((t) => t.id === Number(id));
+}
+
+/** Precise "what just happened" message for the ready state — distinguishes
+ * "created new" from "already existed, nothing changed" instead of one
+ * generic "ready" message either way (the ambiguity an admin otherwise has
+ * no way to resolve after clicking "Create job templates" when they were
+ * already there). Falls back to the generic message unless `bootstrap`
+ * both succeeded and clearly describes *this exact* pair of ids — guards
+ * against showing stale outcome language from a previous run if the ids
+ * were since hand-edited, or from settings persisted before this field
+ * existed (`autonomousCreated`/`collaborativeCreated` are undefined). */
+function describeJobTemplatesReady(
+  autonomousTemplate: AapJobTemplate,
+  collaborativeTemplate: AapJobTemplate,
+  bootstrap: PlatformSettings["aapBootstrap"]
+): string {
+  const outcomeKnown =
+    bootstrap?.status === "running" &&
+    bootstrap.autonomousJobTemplateId === autonomousTemplate.id &&
+    bootstrap.collaborativeJobTemplateId === collaborativeTemplate.id &&
+    bootstrap.autonomousCreated !== undefined &&
+    bootstrap.collaborativeCreated !== undefined;
+
+  if (!outcomeKnown) {
+    return `Job templates ready — autonomous #${autonomousTemplate.id} ("${autonomousTemplate.name}"), collaborative #${collaborativeTemplate.id} ("${collaborativeTemplate.name}").`;
+  }
+
+  const { autonomousCreated, collaborativeCreated } = bootstrap;
+  if (autonomousCreated && collaborativeCreated) {
+    return `Created 2 new job templates — autonomous #${autonomousTemplate.id}, collaborative #${collaborativeTemplate.id}. Both are ready.`;
+  }
+  if (!autonomousCreated && !collaborativeCreated) {
+    return `Both job templates already existed — autonomous #${autonomousTemplate.id}, collaborative #${collaborativeTemplate.id} — nothing needed to change. They're ready.`;
+  }
+  const createdRole = autonomousCreated ? "autonomous" : "collaborative";
+  const createdId = autonomousCreated ? autonomousTemplate.id : collaborativeTemplate.id;
+  const existingRole = autonomousCreated ? "collaborative" : "autonomous";
+  return `Created the missing ${createdRole} template (#${createdId}) — the ${existingRole} template already existed. Both are ready now.`;
+}
+
+/** Deep link to a Job Template's detail page in the AAP web console,
+ * mirroring the `aapJobUrl()` convention in
+ * packages/engine-ansible/src/config.ts (which links a job *run*, not the
+ * template definition). Returns undefined if no console URL is set. */
+function jobTemplateConsoleUrl(consoleUrl: string, id: number): string | undefined {
+  const base = consoleUrl.trim().replace(/\/$/, "");
+  if (!base) return undefined;
+  return `${base}/#/templates/job_template/${id}/details`;
+}
+
+/** Maps a strip color to the PatternFly `Icon` status token. "grey" has no
+ * built-in status token, so it's left undefined and colored manually via
+ * the `--pf-t--global--icon--color--subtle` design token instead. */
+const STRIP_ICON_STATUS: Record<"green" | "red" | "grey", "success" | "danger" | undefined> = {
+  green: "success",
+  red: "danger",
+  grey: undefined,
+};
+const STRIP_ICON_COLOR: Record<"green" | "red" | "grey", string | undefined> = {
+  green: undefined,
+  red: undefined,
+  grey: "var(--pf-t--global--icon--color--subtle)",
+};
+
+/** Maps a strip color to the PatternFly design token used to color the
+ * status *value* text itself (e.g. "Connected" renders in green, not just
+ * its icon) — matches the same success/danger/subtle palette PatternFly
+ * uses for alerts and labels elsewhere in the app. */
+const STRIP_TEXT_COLOR: Record<"green" | "red" | "grey", string> = {
+  green: "var(--pf-t--global--text--color--status--success--default)",
+  red: "var(--pf-t--global--text--color--status--danger--default)",
+  grey: "var(--pf-t--global--text--color--subtle)",
+};
+
+/** One entry in the status strip: a category icon, a muted label, and a
+ * bold status value colored green/red/grey to match its state — all on a
+ * single line, so the strip stays compact instead of wrapping each item
+ * onto two lines. */
+function PlatformStatusStat({
+  icon,
+  label,
+  value,
+  color,
+}: {
+  icon: ReactNode;
+  label: string;
+  value: string;
+  color: "green" | "red" | "grey";
+}) {
+  return (
+    <Flex spaceItems={{ default: "spaceItemsSm" }} alignItems={{ default: "alignItemsCenter" }} flexWrap={{ default: "nowrap" }}>
+      <FlexItem>
+        <Icon size="md" status={STRIP_ICON_STATUS[color]} style={{ color: STRIP_ICON_COLOR[color] }}>
+          {icon}
+        </Icon>
+      </FlexItem>
+      <FlexItem>
+        <Content component={ContentVariants.small} style={{ color: "var(--pf-t--global--text--color--subtle)" }}>
+          {label}
+        </Content>
+      </FlexItem>
+      <FlexItem>
+        <span style={{ fontWeight: 600, color: STRIP_TEXT_COLOR[color] }}>{value}</span>
+      </FlexItem>
+    </Flex>
+  );
+}
+
 /** Compact, always-visible "at a glance" status row shown above the Tabs.
  * Tabs necessarily hide each other's detail behind a click, so this row
  * keeps the handful of questions an admin actually needs answered right
  * away (is AAP/OpenShift reachable? is there a built image? are job
  * templates ready?) visible no matter which tab is open — replaces the
  * old full-width "Connections" summary Card, which just duplicated the
- * AAP/OpenShift cards directly below it. */
+ * AAP/OpenShift cards directly below it. Rendered as single-line
+ * icon + label + color-coded value stats separated by vertical dividers,
+ * rather than a run of uniform "Label: Value" pill badges. */
 function PlatformStatusStrip({ status, draft }: { status: PlatformStatus; draft: PlatformSettings }) {
   const aap = connectionStripState(status.aap);
   const openshift = connectionStripState(status.openshift);
   const eeSet = draft.aapExecutionEnvironmentId !== "";
   const runtimeBuilt = Boolean(draft.agentRuntimeImage);
-  const templatesReady = draft.aapJobTemplateId !== "" && draft.openshellGatewayJobTemplateId !== "";
+  const templatesReady = Boolean(
+    findJobTemplate(status.aap.jobTemplates, draft.aapJobTemplateId) &&
+      findJobTemplate(status.aap.jobTemplates, draft.openshellGatewayJobTemplateId)
+  );
 
   return (
     <Card isCompact>
       <CardBody>
-        <Flex spaceItems={{ default: "spaceItemsMd" }} flexWrap={{ default: "wrap" }} alignItems={{ default: "alignItemsCenter" }}>
+        <Flex spaceItems={{ default: "spaceItemsLg" }} flexWrap={{ default: "wrap" }} alignItems={{ default: "alignItemsCenter" }}>
           <FlexItem>
-            <Label color={aap.color} icon={<AnsibleTowerIcon />} isCompact>
-              AAP: {aap.text}
-            </Label>
+            <PlatformStatusStat icon={<AnsibleTowerIcon />} label="AAP" value={aap.text} color={aap.color} />
           </FlexItem>
+          <Divider orientation={{ default: "vertical" }} />
           <FlexItem>
-            <Label color={openshift.color} icon={<OpenshiftIcon />} isCompact>
-              OpenShift: {openshift.text}
-            </Label>
+            <PlatformStatusStat icon={<OpenshiftIcon />} label="OpenShift" value={openshift.text} color={openshift.color} />
           </FlexItem>
+          <Divider orientation={{ default: "vertical" }} />
           <FlexItem>
-            <Label color={eeSet ? "green" : "grey"} isCompact>
-              Execution environment: {eeSet ? "Set" : "Not set"}
-            </Label>
+            <PlatformStatusStat
+              icon={<CubeIcon />}
+              label="Execution environment"
+              value={eeSet ? "Set" : "Not set"}
+              color={eeSet ? "green" : "grey"}
+            />
           </FlexItem>
+          <Divider orientation={{ default: "vertical" }} />
           <FlexItem>
-            <Label color={runtimeBuilt ? "green" : "grey"} isCompact>
-              Agent runtime image: {runtimeBuilt ? "Built" : "Not built"}
-            </Label>
+            <PlatformStatusStat
+              icon={<BuilderImageIcon />}
+              label="Agent runtime image"
+              value={runtimeBuilt ? "Built" : "Not built"}
+              color={runtimeBuilt ? "green" : "grey"}
+            />
           </FlexItem>
+          <Divider orientation={{ default: "vertical" }} />
           <FlexItem>
-            <Label color={templatesReady ? "green" : "grey"} isCompact>
-              Job templates: {templatesReady ? "Created" : "Not created"}
-            </Label>
+            <PlatformStatusStat
+              icon={<PficonTemplateIcon />}
+              label="Job templates"
+              value={templatesReady ? "Created" : "Not created"}
+              color={templatesReady ? "green" : "grey"}
+            />
           </FlexItem>
         </Flex>
       </CardBody>
@@ -211,7 +351,14 @@ function JobTemplatesCard({
   const [error, setError] = useState<string | null>(null);
   const bootstrap = draft.aapBootstrap;
   const running = bootstrap?.status === "deploying";
-  const done = bootstrap?.status === "running";
+
+  // Live readiness: resolved against `aap.jobTemplates` (refetched from AAP
+  // on every status load), not just "is an id saved" — catches a template
+  // that was deleted directly in AAP after being created/entered here.
+  const autonomousTemplate = findJobTemplate(aap.jobTemplates, draft.aapJobTemplateId);
+  const collaborativeTemplate = findJobTemplate(aap.jobTemplates, draft.openshellGatewayJobTemplateId);
+  const bothReady = Boolean(autonomousTemplate && collaborativeTemplate);
+  const noneReady = !autonomousTemplate && !collaborativeTemplate;
 
   useEffect(() => {
     if (!running) return;
@@ -257,15 +404,11 @@ function JobTemplatesCard({
           the AAP web UI.
         </Content>
 
-        {error && <Alert variant="danger" isInline title={error} style={{ marginTop: "0.5rem" }} />}
-        {bootstrap?.error && (
-          <Alert variant="danger" isInline title={bootstrap.error} style={{ marginTop: "0.5rem" }} />
-        )}
-        {done && (
+        {noneReady && (
           <Alert
-            variant="success"
+            variant="warning"
             isInline
-            title={`Created job template #${bootstrap?.autonomousJobTemplateId} (autonomous) and #${bootstrap?.collaborativeJobTemplateId} (collaborative) — both fields below are now filled in.`}
+            title={`Job templates aren't created yet — fill in the fields below and click "Create job templates".`}
             style={{ marginTop: "0.5rem" }}
           />
         )}
@@ -388,6 +531,80 @@ function JobTemplatesCard({
             {busy ? "Starting…" : running ? `Creating… (${bootstrap?.phase ?? "in progress"})` : "Create job templates"}
           </Button>
         </div>
+
+        {/* Result of the button above — placed right next to it (not up
+            near the description) so it's impossible to miss what just
+            happened after clicking, instead of requiring a scroll back up
+            to a banner near the top of a long form. */}
+        {error && <Alert variant="danger" isInline title={error} style={{ marginTop: "0.75rem" }} />}
+        {bootstrap?.error && (
+          <Alert variant="danger" isInline title={bootstrap.error} style={{ marginTop: "0.75rem" }} />
+        )}
+        {bothReady ? (
+          <Alert
+            variant="success"
+            isInline
+            title={describeJobTemplatesReady(autonomousTemplate!, collaborativeTemplate!, bootstrap)}
+            style={{ marginTop: "0.75rem" }}
+          />
+        ) : (
+          !noneReady && (
+            <Alert
+              variant="warning"
+              isInline
+              title={
+                autonomousTemplate
+                  ? `Autonomous template #${autonomousTemplate.id} is ready, but the collaborative template is missing (deleted in AAP, or never created). Click "Create job templates" to (re)create it.`
+                  : `Collaborative template #${collaborativeTemplate!.id} is ready, but the autonomous template is missing (deleted in AAP, or never created). Click "Create job templates" to (re)create it.`
+              }
+              style={{ marginTop: "0.75rem" }}
+            />
+          )
+        )}
+
+        {(autonomousTemplate || collaborativeTemplate) && (
+          <div style={{ marginTop: "1rem" }}>
+            <Content component={ContentVariants.small} style={{ marginBottom: "0.25rem" }}>
+              Current job templates
+            </Content>
+            <Table aria-label="Current job templates" variant="compact">
+              <Thead>
+                <Tr>
+                  <Th>Role</Th>
+                  <Th>Name</Th>
+                  <Th>ID</Th>
+                  <Th>Link</Th>
+                </Tr>
+              </Thead>
+              <Tbody>
+                {[
+                  autonomousTemplate ? { role: "Autonomous", template: autonomousTemplate } : null,
+                  collaborativeTemplate ? { role: "Collaborative", template: collaborativeTemplate } : null,
+                ]
+                  .filter((row): row is { role: string; template: AapJobTemplate } => row !== null)
+                  .map(({ role, template }) => {
+                    const url = jobTemplateConsoleUrl(draft.aapConsoleUrl, template.id);
+                    return (
+                      <Tr key={role}>
+                        <Td dataLabel="Role">{role}</Td>
+                        <Td dataLabel="Name">{template.name}</Td>
+                        <Td dataLabel="ID">#{template.id}</Td>
+                        <Td dataLabel="Link">
+                          {url ? (
+                            <a href={url} target="_blank" rel="noreferrer">
+                              Open in AAP
+                            </a>
+                          ) : (
+                            "—"
+                          )}
+                        </Td>
+                      </Tr>
+                    );
+                  })}
+              </Tbody>
+            </Table>
+          </div>
+        )}
       </CardBody>
     </Card>
   );

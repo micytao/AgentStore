@@ -45,6 +45,12 @@ export interface JobTemplateBootstrapHandle {
 export interface JobTemplateBootstrapResult {
   autonomousJobTemplateId: number;
   collaborativeJobTemplateId: number;
+  /** Whether this run actually created each template (vs. finding one
+   * that already existed by name and just verifying/patching it) — lets
+   * the UI say "created 2 new templates" vs. "both already existed,
+   * nothing changed" instead of one generic "ready" message either way. */
+  autonomousCreated: boolean;
+  collaborativeCreated: boolean;
 }
 
 const AUTONOMOUS_TEMPLATE_NAME = "AgentStore - provision generic agent";
@@ -132,5 +138,7 @@ export async function finishJobTemplateBootstrap(
   return {
     autonomousJobTemplateId: autonomous.id,
     collaborativeJobTemplateId: collaborative.id,
+    autonomousCreated: autonomous.created,
+    collaborativeCreated: collaborative.created,
   };
 }

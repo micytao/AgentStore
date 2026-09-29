@@ -130,6 +130,8 @@ export async function refreshBootstrap(): Promise<PlatformSettings> {
         phase: "done",
         autonomousJobTemplateId: result.autonomousJobTemplateId,
         collaborativeJobTemplateId: result.collaborativeJobTemplateId,
+        autonomousCreated: result.autonomousCreated,
+        collaborativeCreated: result.collaborativeCreated,
         updatedAt: now(),
       },
       {

@@ -449,6 +449,14 @@ export interface AapBootstrapStatus {
   autonomousJobTemplateId?: number;
   /** Mirrors PlatformSettings.openshellGatewayJobTemplateId. */
   collaborativeJobTemplateId?: number;
+  /** Whether this run actually created the autonomous/collaborative Job
+   * Template (a fresh AAP object) vs. finding one that already existed by
+   * name and just verifying/patching it in place. Lets the "Create job
+   * templates" UI say what actually happened instead of a generic
+   * "ready" that reads the same either way. Undefined on older persisted
+   * state from before this field existed. */
+  autonomousCreated?: boolean;
+  collaborativeCreated?: boolean;
   error?: string;
   updatedAt?: string;
 }
