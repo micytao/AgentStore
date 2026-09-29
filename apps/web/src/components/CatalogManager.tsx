@@ -377,6 +377,8 @@ function useListingRowState(listing: Listing, onChange: () => void) {
   const [saved, setSaved] = useState(false);
   const [showConfig, setShowConfig] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+  const [deleteWarning, setDeleteWarning] = useState<string | null>(null);
 
   function update(patch: ListingUpdate) {
     setDraft((prev) => ({ ...prev, ...patch }));
@@ -394,24 +396,49 @@ function useListingRowState(listing: Listing, onChange: () => void) {
     }
   }
 
-  async function remove() {
-    if (
-      !window.confirm(
-        `Delete "${listing.name}"? It disappears from the catalog immediately and any running deployment/session is torn down.`
-      )
-    )
-      return;
+  // Delete is a two-step flow through DeleteConfirmModal (an in-app Modal)
+  // instead of window.confirm/window.alert, so it matches the rest of the
+  // UI instead of popping up the browser's own native dialog chrome.
+  function requestDelete() {
+    setConfirmDeleteOpen(true);
+  }
+
+  function cancelDelete() {
+    setConfirmDeleteOpen(false);
+  }
+
+  async function confirmDelete() {
     setDeleting(true);
     try {
       const { warning } = await deleteListingAdmin(listing.id);
-      if (warning) window.alert(warning);
+      setConfirmDeleteOpen(false);
       onChange();
+      if (warning) setDeleteWarning(warning);
     } finally {
       setDeleting(false);
     }
   }
 
-  return { draft, update, save, remove, saving, saved, showConfig, setShowConfig, deleting };
+  function dismissDeleteWarning() {
+    setDeleteWarning(null);
+  }
+
+  return {
+    draft,
+    update,
+    save,
+    saving,
+    saved,
+    showConfig,
+    setShowConfig,
+    deleting,
+    confirmDeleteOpen,
+    requestDelete,
+    cancelDelete,
+    confirmDelete,
+    deleteWarning,
+    dismissDeleteWarning,
+  };
 }
 
 /** Shared action buttons (Open agent/terminal, Save, Agent config,
@@ -520,6 +547,67 @@ function ListingConfigModal({
   );
 }
 
+/** Shared delete confirmation — an in-app Modal instead of
+ * window.confirm/window.alert, so it looks and behaves like the rest of
+ * the UI. Doubles as the post-delete warning dialog: if the teardown of
+ * live infra (deployment/OpenShell session) only partially succeeds,
+ * `warning` is set and this same Modal switches from "confirm?" to
+ * "here's what happened" instead of stacking a second dialog. */
+function DeleteConfirmModal({
+  listing,
+  isOpen,
+  deleting,
+  warning,
+  onCancel,
+  onConfirm,
+  onDismissWarning,
+}: {
+  listing: Listing;
+  isOpen: boolean;
+  deleting: boolean;
+  warning: string | null;
+  onCancel: () => void;
+  onConfirm: () => void;
+  onDismissWarning: () => void;
+}) {
+  if (!isOpen && !warning) return null;
+
+  if (warning) {
+    return (
+      <Modal variant="small" isOpen onClose={onDismissWarning} aria-label={`Delete warning — ${listing.name}`}>
+        <ModalHeader title={`"${listing.name}" was deleted`} />
+        <ModalBody>
+          <Alert variant="warning" isInline title="Removed from the catalog, but with a problem tearing down its live infrastructure">
+            {warning}
+          </Alert>
+        </ModalBody>
+        <ModalFooter>
+          <Button variant="primary" onClick={onDismissWarning}>
+            Close
+          </Button>
+        </ModalFooter>
+      </Modal>
+    );
+  }
+
+  return (
+    <Modal variant="small" isOpen onClose={onCancel} aria-label={`Delete ${listing.name}`}>
+      <ModalHeader title={`Delete "${listing.name}"?`} titleIconVariant="warning" />
+      <ModalBody>
+        It disappears from the catalog immediately, and any running deployment or OpenShell session for it is torn down.
+      </ModalBody>
+      <ModalFooter>
+        <Button variant="danger" isLoading={deleting} isDisabled={deleting} onClick={onConfirm}>
+          Delete
+        </Button>
+        <Button variant="link" onClick={onCancel} isDisabled={deleting}>
+          Cancel
+        </Button>
+      </ModalFooter>
+    </Modal>
+  );
+}
+
 function riskLabelColor(tier: RiskTier): "red" | "orange" | "green" {
   return tier === "high" ? "red" : tier === "medium" ? "orange" : "green";
 }
@@ -537,8 +625,22 @@ function ListingRow({
   skills: Skill[];
   onChange: () => void;
 }) {
-  const { draft, update, save, remove, saving, saved, showConfig, setShowConfig, deleting } =
-    useListingRowState(listing, onChange);
+  const {
+    draft,
+    update,
+    save,
+    saving,
+    saved,
+    showConfig,
+    setShowConfig,
+    deleting,
+    confirmDeleteOpen,
+    requestDelete,
+    cancelDelete,
+    confirmDelete,
+    deleteWarning,
+    dismissDeleteWarning,
+  } = useListingRowState(listing, onChange);
 
   return (
     <>
@@ -606,7 +708,7 @@ function ListingRow({
               saved={saved}
               deleting={deleting}
               onSave={() => void save()}
-              onDelete={() => void remove()}
+              onDelete={requestDelete}
               onOpenConfig={() => setShowConfig(true)}
             />
           </Td>
@@ -620,6 +722,15 @@ function ListingRow({
         isOpen={showConfig}
         onClose={() => setShowConfig(false)}
         onChange={onChange}
+      />
+      <DeleteConfirmModal
+        listing={listing}
+        isOpen={confirmDeleteOpen}
+        deleting={deleting}
+        warning={deleteWarning}
+        onCancel={cancelDelete}
+        onConfirm={() => void confirmDelete()}
+        onDismissWarning={dismissDeleteWarning}
       />
     </>
   );
@@ -641,8 +752,22 @@ function ListingBadgeCard({
   skills: Skill[];
   onChange: () => void;
 }) {
-  const { draft, update, save, remove, saving, saved, showConfig, setShowConfig, deleting } =
-    useListingRowState(listing, onChange);
+  const {
+    draft,
+    update,
+    save,
+    saving,
+    saved,
+    showConfig,
+    setShowConfig,
+    deleting,
+    confirmDeleteOpen,
+    requestDelete,
+    cancelDelete,
+    confirmDelete,
+    deleteWarning,
+    dismissDeleteWarning,
+  } = useListingRowState(listing, onChange);
 
   return (
     <>
@@ -733,7 +858,7 @@ function ListingBadgeCard({
                   saved={saved}
                   deleting={deleting}
                   onSave={() => void save()}
-                  onDelete={() => void remove()}
+                  onDelete={requestDelete}
                   onOpenConfig={() => setShowConfig(true)}
                 />
               </FlexItem>
@@ -749,6 +874,15 @@ function ListingBadgeCard({
         isOpen={showConfig}
         onClose={() => setShowConfig(false)}
         onChange={onChange}
+      />
+      <DeleteConfirmModal
+        listing={listing}
+        isOpen={confirmDeleteOpen}
+        deleting={deleting}
+        warning={deleteWarning}
+        onCancel={cancelDelete}
+        onConfirm={() => void confirmDelete()}
+        onDismissWarning={dismissDeleteWarning}
       />
     </>
   );

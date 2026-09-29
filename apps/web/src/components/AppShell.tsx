@@ -83,16 +83,16 @@ export function AppShell({ children }: { children: ReactNode }) {
             <BarsIcon />
           </PageToggleButton>
         </MastheadToggle>
-        <MastheadBrand className="agentstore-masthead-brand">
-          <MastheadLogo component={(props) => <Link {...props} href="/" />}>
+        <MastheadBrand>
+          <MastheadLogo className="agentstore-masthead-logo" component={(props) => <Link {...props} href="/" />}>
             <Brand
               className="agentstore-brand-mark"
               src={BRAND_MARK_SRC}
               alt="AgentStore"
             />
             <span className="agentstore-brand-text">Agent Store</span>
+            <span className="agentstore-brand-subtitle">Agent-As-A-Service</span>
           </MastheadLogo>
-          <span className="agentstore-brand-subtitle">Agent-As-A-Service</span>
         </MastheadBrand>
       </MastheadMain>
       <MastheadContent>

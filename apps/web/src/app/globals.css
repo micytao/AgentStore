@@ -40,16 +40,36 @@ a {
  * and let its built-in tokens recolor Masthead, PageSidebar, Nav, Card,
  * etc. together, so the header and body are always in sync. */
 
-/* AppShell brand mark + masthead action row. */
-.pf-v6-c-masthead__logo {
+/* AppShell brand mark + masthead action row.
+ *
+ * PatternFly's own MastheadLogo slot (.pf-v6-c-masthead__logo) is a fixed
+ * ~189px/38px box by default — just wide enough for the icon + "AGENT
+ * STORE" alone. Widening it here (instead of putting the tagline in a
+ * separate flex sibling outside this box) keeps the icon, wordmark, and
+ * tagline as three children of ONE flex row that's guaranteed wide enough
+ * for all three, rather than fighting PatternFly's responsive masthead
+ * grid (which reflows brand/toggle/content differently below ~48rem
+ * viewport width) for extra horizontal space. */
+.pf-v6-c-masthead__logo.agentstore-masthead-logo {
   display: flex;
   align-items: center;
+  width: auto !important;
+  min-width: 11.8125rem;
+  max-width: none;
 }
 
-.agentstore-brand-mark {
+/* Same-specificity tiebreak: PatternFly's own .pf-v6-c-brand rule also sets
+ * width/height (to "auto"), so on plain `.agentstore-brand-mark` alone,
+ * whichever stylesheet happens to be concatenated later in the build wins
+ * the cascade tie — which can silently make the icon render at its raw,
+ * unconstrained SVG intrinsic size (huge) instead of our intended 28px.
+ * The compound selector below adds a class to the specificity so our size
+ * always wins regardless of import/bundle order. */
+.pf-v6-c-brand.agentstore-brand-mark {
   display: block;
-  width: 1.75rem;
-  height: 1.75rem;
+  flex: none;
+  width: 1.75rem !important;
+  height: 1.75rem !important;
 }
 
 .agentstore-brand-text {
@@ -67,22 +87,23 @@ a {
   color: #c9190b;
 }
 
-/* Lets the "Agent-As-A-Service" tagline sit to the right of the logo/
- * wordmark link instead of stacking under it. */
-.agentstore-masthead-brand {
-  display: flex;
-  align-items: center;
-}
-
+/* A punchy little "badge" tagline (not a muted caption) — same brand red as
+ * the wordmark but inverted onto a tinted pill, so it reads as a
+ * deliberate product tagline ("Agent-As-A-Service") rather than
+ * secondary/greyed-out metadata. */
 .agentstore-brand-subtitle {
-  margin-left: 0.75rem;
-  padding-left: 0.75rem;
-  border-left: 1px solid var(--pf-t--global--border--color--default, #d2d2d2);
-  font-size: 0.8rem;
-  font-weight: 500;
-  letter-spacing: 0.03em;
+  margin-left: 0.65rem;
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  background: rgba(201, 25, 11, 0.12);
+  border: 1px solid rgba(201, 25, 11, 0.35);
+  font-family: inherit;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
   white-space: nowrap;
-  color: var(--pf-t--global--text--color--subtle, #6a6e73);
+  color: #c9190b;
 }
 
 .agentstore-masthead-actions {
