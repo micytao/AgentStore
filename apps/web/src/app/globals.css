@@ -67,6 +67,24 @@ a {
   color: #c9190b;
 }
 
+/* Lets the "Agent-As-A-Service" tagline sit to the right of the logo/
+ * wordmark link instead of stacking under it. */
+.agentstore-masthead-brand {
+  display: flex;
+  align-items: center;
+}
+
+.agentstore-brand-subtitle {
+  margin-left: 0.75rem;
+  padding-left: 0.75rem;
+  border-left: 1px solid var(--pf-t--global--border--color--default, #d2d2d2);
+  font-size: 0.8rem;
+  font-weight: 500;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+  color: var(--pf-t--global--text--color--subtle, #6a6e73);
+}
+
 .agentstore-masthead-actions {
   display: flex;
   align-items: center;

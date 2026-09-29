@@ -83,7 +83,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <BarsIcon />
           </PageToggleButton>
         </MastheadToggle>
-        <MastheadBrand>
+        <MastheadBrand className="agentstore-masthead-brand">
           <MastheadLogo component={(props) => <Link {...props} href="/" />}>
             <Brand
               className="agentstore-brand-mark"
@@ -92,6 +92,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             />
             <span className="agentstore-brand-text">Agent Store</span>
           </MastheadLogo>
+          <span className="agentstore-brand-subtitle">Agent-As-A-Service</span>
         </MastheadBrand>
       </MastheadMain>
       <MastheadContent>
