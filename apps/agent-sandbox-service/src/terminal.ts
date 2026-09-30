@@ -9,10 +9,10 @@ import { getClient } from "./openshellClient.js";
 /**
  * Terminal relay: OpenShell SDK execInteractive + WebSocket.
  *
- * "Open terminal" calls `execInteractive(name, ["tmux","attach","-t","main"])`
- * — a sibling process that attaches to the tmux session wrapping the sandbox's
- * canonical main process. This achieves equivalent reattach semantics to the
- * CLI's `sandbox connect` without needing node-pty or the CLI binary at all.
+ * "Open terminal" calls `execInteractive(name, ["/bin/sh"])` to spawn
+ * a fresh interactive shell alongside the sandbox's canonical main
+ * process. Each terminal tab gets its own shell session — the agent
+ * process runs independently as the sandbox's canonical command.
  */
 
 interface SdkSession {
@@ -65,7 +65,7 @@ async function attach(sessionId: string): Promise<SdkSession> {
   const client = await getClient();
   const session = await client.sandbox.execInteractive(
     sessionId,
-    ["tmux", "attach", "-t", "main"],
+    ["/bin/sh"],
     { tty: true, cols: 80, rows: 24 },
   );
 

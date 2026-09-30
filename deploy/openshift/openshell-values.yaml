@@ -1,6 +1,10 @@
 # Eval-only overrides. Do not use as a production baseline.
 server:
   disableTls: true
+  auth:
+    # UNSAFE: accept unauthenticated requests as a local developer principal.
+    # Only for eval/dev clusters — production must use OIDC or mTLS.
+    allowUnauthenticatedUsers: true
 podSecurityContext:
   fsGroup: null
 securityContext:

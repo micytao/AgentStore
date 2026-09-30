@@ -91,20 +91,14 @@ export async function createSession(input: CreateSessionInput): Promise<SessionR
       providerNames.push(providerName);
     }
 
-    // Create sandbox with tmux wrapping the agent command so that
-    // "Open terminal" can later reattach to the same session via
-    // `execInteractive(name, ["tmux","attach","-t","main"])`.
-    // The command bootstraps tmux if missing (Alpine's opencode image
-    // doesn't ship it) before wrapping the agent in a named tmux session.
+    // Create sandbox with the agent command directly. Terminal access
+    // uses execInteractive to spawn a separate shell session alongside
+    // the running agent — no tmux needed.
     await client.sandbox.create({
       name: id,
       image: defaultSandboxImage(),
       providers: providerNames,
-      command: [
-        "sh", "-c",
-        "command -v tmux >/dev/null 2>&1 || apk add --no-cache tmux >/dev/null 2>&1; " +
-        `exec tmux new-session -s main -- ${input.agent}`,
-      ],
+      command: ["sh", "-c", input.agent],
       tty: true,
       restartPolicy: "on-failure",
     });
