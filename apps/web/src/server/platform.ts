@@ -3,6 +3,7 @@ import path from "node:path";
 import type { PlatformSettings, PlatformStatus } from "@agentstore/shared";
 import {
   applyPlatformEnv,
+  checkAgentSandboxController,
   isAapConfigured,
   isOpenshiftConfigured,
   listAgentDeployments,
@@ -16,6 +17,14 @@ import {
   pingOpenshift,
 } from "@agentstore/engine-ansible";
 import { applyOpenShellServiceEnv, isOpenShellServiceConfigured, pingOpenShellService } from "@agentstore/engine-openshell";
+// Note: deliberately calling checkAgentSandboxController() directly from
+// @agentstore/engine-ansible here, not the checkAgentSandboxStatus()
+// wrapper in ./agentSandbox — that module needs to import
+// getPlatformSettings/savePlatformSettings/ensurePlatformEnv from *this*
+// file for the "Install Agent Sandbox Service" build+deploy flow, and a
+// platform.ts <-> agentSandbox.ts circular import is easy to get wrong
+// silently (works until it doesn't, depending on evaluation order).
+// One-directional (agentSandbox.ts -> platform.ts) avoids that entirely.
 
 const DEFAULT_SETTINGS: PlatformSettings = {
   aapControllerUrl: "",
@@ -157,20 +166,43 @@ async function probeAap(): Promise<PlatformStatus["aap"]> {
 async function probeOpenshift(): Promise<PlatformStatus["openshift"]> {
   const configured = isOpenshiftConfigured();
   if (!configured) {
-    return { configured: false, connected: false, error: "Not configured", deployments: [] };
+    return {
+      configured: false,
+      connected: false,
+      error: "Not configured",
+      deployments: [],
+      agentSandboxController: { installed: false, error: "Not configured" },
+    };
   }
   const ping = await pingOpenshift();
   if (!ping.ok) {
-    return { configured: true, connected: false, error: ping.error, deployments: [] };
+    return {
+      configured: true,
+      connected: false,
+      error: ping.error,
+      deployments: [],
+      agentSandboxController: { installed: false, error: ping.error },
+    };
   }
   try {
-    return { configured: true, connected: true, deployments: await listAgentDeployments() };
+    // agentSandboxController is its own live check (a separate
+    // low-privilege GET /apis) rather than piggybacking on the
+    // deployments listing above — it needs to keep reporting a real
+    // installed/missing status even if listAgentDeployments() itself
+    // fails below (e.g. the configured token can list API groups but
+    // not this namespace's Deployments).
+    const [deployments, agentSandboxController] = await Promise.all([
+      listAgentDeployments(),
+      checkAgentSandboxController(),
+    ]);
+    return { configured: true, connected: true, deployments, agentSandboxController };
   } catch (err) {
     return {
       configured: true,
       connected: false,
       error: err instanceof Error ? err.message : String(err),
       deployments: [],
+      agentSandboxController: await checkAgentSandboxController(),
     };
   }
 }

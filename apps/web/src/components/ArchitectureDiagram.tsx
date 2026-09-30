@@ -4,12 +4,17 @@ import type { ComponentType, ReactNode } from "react";
 import { Card, CardBody, CardTitle, Content, ContentVariants, Flex, FlexItem } from "@patternfly/react-core";
 import {
   ArrowDownIcon,
+  ArrowLeftIcon,
+  ArrowRightIcon,
   ArrowsAltHIcon,
+  ArrowsAltVIcon,
   AutomationIcon,
   BookIcon,
   BrainIcon,
   CloudIcon,
   CogsIcon,
+  CubesIcon,
+  ListAltIcon,
   PlugIcon,
   PuzzlePieceIcon,
   ServerIcon,
@@ -27,17 +32,29 @@ import {
  * lib/theme.tsx) — only the icon accent color and top border per box are
  * tinted, everything else (card surface, text, borders) stays on
  * PatternFly's theme tokens.
+ *
+ * The trunk's middle row flanks OpenShift with Container Images (left;
+ * Execution Environment + Agent Runtime Image, via OpenShift Build/S2I —
+ * see eeBuild.ts/agentRuntimeBuild.ts) and Job Templates (right;
+ * Autonomous/Collaborative JTs — see jobTemplateBootstrap.ts). Directional
+ * PatternFly arrow icons connect AAP ↔ those boxes ↔ OpenShift, matching
+ * the rest of the diagram's connector style.
  */
 
 function DiagramBox({
   icon: Icon,
   title,
   description,
+  items,
   tint,
 }: {
   icon: ComponentType;
   title: string;
-  description: string;
+  description?: string;
+  /** Optional sub-items rendered as a compact bullet list — used for boxes
+   * that bundle a couple of concrete artifacts under one umbrella title
+   * (e.g. the two image kinds under "Container Images"). */
+  items?: string[];
   /** Accent color for the icon + a thin top border, ties each box to its
    * tier in the flow (inputs / shared trunk / one of the two end-user
    * columns). */
@@ -58,7 +75,16 @@ function DiagramBox({
         </Flex>
       </CardTitle>
       <CardBody>
-        <Content component={ContentVariants.small}>{description}</Content>
+        {description ? <Content component={ContentVariants.small}>{description}</Content> : null}
+        {items ? (
+          <Content component={ContentVariants.small}>
+            <ul style={{ margin: description ? "0.35rem 0 0" : 0, paddingLeft: "1.1rem" }}>
+              {items.map((item) => (
+                <li key={item}>{item}</li>
+              ))}
+            </ul>
+          </Content>
+        ) : null}
       </CardBody>
     </Card>
   );
@@ -85,6 +111,65 @@ function HorizontalConnector() {
   );
 }
 
+/** One-way horizontal arrow used between flanking boxes and OpenShift,
+ * with an optional caption (e.g. "OpenShift Build / S2I"). Fixed width
+ * keeps both sides of the OpenShift box symmetric. */
+function FlowArrow({
+  direction,
+  label,
+  tint,
+}: {
+  direction: "left" | "right";
+  label?: string;
+  tint: string;
+}) {
+  const Icon = direction === "right" ? ArrowRightIcon : ArrowLeftIcon;
+  return (
+    <Flex
+      direction={{ default: "column" }}
+      alignItems={{ default: "alignItemsCenter" }}
+      spaceItems={{ default: "spaceItemsNone" }}
+      alignSelf={{ default: "alignSelfCenter" }}
+      style={{ width: "6rem" }}
+    >
+      <FlexItem style={{ color: tint, display: "flex" }}>
+        <Icon />
+      </FlexItem>
+      <FlexItem style={{ marginTop: "0.35rem" }}>
+        <Content
+          component={ContentVariants.small}
+          style={{ textAlign: "center", color: tint, fontSize: "0.7rem", lineHeight: 1.2 }}
+        >
+          {label ?? "\u00A0"}
+        </Content>
+      </FlexItem>
+    </Flex>
+  );
+}
+
+/** Vertical bidirectional connector for AAP ↔ OpenShift. */
+function BidirectionalConnector() {
+  return (
+    <Flex justifyContent={{ default: "justifyContentCenter" }}>
+      <FlexItem>
+        <ArrowsAltVIcon />
+      </FlexItem>
+    </Flex>
+  );
+}
+
+/** Diagonal-looking one-way arrow (rotated ArrowRightIcon) for the corner
+ * legs AAP → Container Images and Job Templates → AAP. */
+function DiagonalArrow({ rotateDeg, tint }: { rotateDeg: number; tint: string }) {
+  return (
+    <Flex justifyContent={{ default: "justifyContentCenter" }}>
+      <FlexItem style={{ color: tint, display: "flex", transform: `rotate(${rotateDeg}deg)` }}>
+        <ArrowRightIcon />
+      </FlexItem>
+    </Flex>
+  );
+}
+
 function ColumnHeading({ children, tint }: { children: ReactNode; tint: string }) {
   return (
     <Content component={ContentVariants.h4} style={{ textAlign: "center", margin: 0, color: tint }}>
@@ -95,10 +180,11 @@ function ColumnHeading({ children, tint }: { children: ReactNode; tint: string }
 
 /** Accent palette: purple for the orchestrating console, blue/teal/green
  * for the shared inputs layer, amber/slate for the shared provisioning +
- * hosting trunk (AAP, OpenShift — both serve every agent type), and one
- * color per end-user column (orange for Autonomous, brand red for
- * Collaborative) so the two experiences stay visually distinct at the
- * bottom of the diagram. */
+ * hosting trunk (AAP, OpenShift — both serve every agent type), one color
+ * per artifact kind flanking that trunk (Container Images, Job
+ * Templates), and one color per end-user column (orange for Autonomous,
+ * brand red for Collaborative) so the two experiences stay visually
+ * distinct at the bottom of the diagram. */
 const TINT = {
   console: "#6753ac",
   providers: "#0066cc",
@@ -106,6 +192,8 @@ const TINT = {
   skills: "#3e8635",
   aap: "#b58100",
   openshift: "#4f5b66",
+  containerImages: "#8f4700",
+  jobTemplates: "#005f60",
   autonomous: "#ec7a08",
   collaborative: "#c9190b",
 } as const;
@@ -171,13 +259,65 @@ export function ArchitectureDiagram() {
         description="Shared provisioning + guardrail pipeline for every agent type"
         tint={TINT.aap}
       />
-      <Connector />
-      <DiagramBox
-        icon={CloudIcon}
-        title="OpenShift"
-        description="Persistent Deployment + Route — hosts both agent types"
-        tint={TINT.openshift}
-      />
+
+      {/* Corner legs of the AAP/OpenShift loop: AAP -> Container Images on
+       * the left, AAP <-> OpenShift bidirectional in the middle, Job
+       * Templates -> AAP on the right. Column widths mirror the box row
+       * below so everything lines up. */}
+      <Flex
+        justifyContent={{ default: "justifyContentCenter" }}
+        alignItems={{ default: "alignItemsCenter" }}
+        spaceItems={{ default: "spaceItemsNone" }}
+        flexWrap={{ default: "wrap" }}
+      >
+        <FlexItem style={{ width: "15rem" }}>
+          <DiagonalArrow rotateDeg={135} tint={TINT.containerImages} />
+        </FlexItem>
+        <FlexItem style={{ width: "6rem" }} />
+        <FlexItem style={{ width: "15rem" }}>
+          <BidirectionalConnector />
+        </FlexItem>
+        <FlexItem style={{ width: "6rem" }} />
+        <FlexItem style={{ width: "15rem" }}>
+          <DiagonalArrow rotateDeg={-135} tint={TINT.jobTemplates} />
+        </FlexItem>
+      </Flex>
+
+      {/* OpenShift flanked by Container Images (left) and Job Templates
+       * (right), with one-way FlowArrow icons between them. */}
+      <Flex
+        justifyContent={{ default: "justifyContentCenter" }}
+        alignItems={{ default: "alignItemsStretch" }}
+        spaceItems={{ default: "spaceItemsNone" }}
+        flexWrap={{ default: "wrap" }}
+      >
+        <FlexItem>
+          <DiagramBox
+            icon={CubesIcon}
+            title="Container Images"
+            items={["Execution Environment", "Agent Runtime Image"]}
+            tint={TINT.containerImages}
+          />
+        </FlexItem>
+        <FlowArrow direction="right" label="OpenShift Build / S2I" tint={TINT.containerImages} />
+        <FlexItem>
+          <DiagramBox
+            icon={CloudIcon}
+            title="OpenShift"
+            description="Persistent Deployment + Route — hosts both agent types"
+            tint={TINT.openshift}
+          />
+        </FlexItem>
+        <FlowArrow direction="right" tint={TINT.jobTemplates} />
+        <FlexItem>
+          <DiagramBox
+            icon={ListAltIcon}
+            title="Job Templates"
+            items={["Autonomous Agent JT", "Collaborative Agent JT"]}
+            tint={TINT.jobTemplates}
+          />
+        </FlexItem>
+      </Flex>
       <Connector />
 
       <Flex

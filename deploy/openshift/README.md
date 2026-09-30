@@ -66,11 +66,22 @@ elevated-privilege, one-time** bootstrap — treat it like installing
 OpenShift itself, not part of AgentStore's self-service AAP flow:
 
 ```bash
-kubectl apply -f https://github.com/kubernetes-sigs/agent-sandbox/releases/latest/download/sandbox.yaml
+oc apply -f https://github.com/kubernetes-sigs/agent-sandbox/releases/latest/download/sandbox.yaml
 ```
 
 A platform admin runs this once per cluster, outside AAP, before anyone
 uses **Admin → LLMs → OpenShell → "Install gateway"**.
+
+**Admin → LLMs → OpenShell** also shows a live "Agent Sandbox controller:
+installed/missing" check and a self-service **"Install Agent Sandbox
+controller"** button that applies a pinned copy of the same manifest
+([deploy/openshift/agent-sandbox-crds.yaml](agent-sandbox-crds.yaml))
+directly via the OpenShift API, reusing the already-configured
+`OPENSHIFT_TOKEN` — no separate AAP job template or credential. Try that
+first; it only works if that token already carries cluster-admin-equivalent
+RBAC (creating a CRD, ClusterRole and ClusterRoleBinding needs it), and
+fails with a clear error pointing back at the manual `oc apply` command
+above if it doesn't.
 
 ### 5b. Install the OpenShell gateway (self-service, via AAP)
 

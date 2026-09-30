@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import { serviceToken, terminalTokenSecret } from "./config";
+import { serviceToken, terminalTokenSecret } from "./config.js";
 
 function timingSafeEqual(a: string, b: string): boolean {
   const bufA = Buffer.from(a);

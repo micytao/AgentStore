@@ -1,69 +1,94 @@
 import type { IncomingMessage } from "node:http";
 import type { Duplex } from "node:stream";
-import * as pty from "node-pty";
+import type { ExecInteractiveSessionControl, ExecStreamEvent } from "@nvidia/openshell-sdk";
 import { WebSocket, WebSocketServer } from "ws";
-import { terminalIdleTimeoutMs } from "./config";
-import { verifyTerminalToken } from "./auth";
+import { terminalIdleTimeoutMs } from "./config.js";
+import { verifyTerminalToken } from "./auth.js";
+import { getClient } from "./openshellClient.js";
 
 /**
- * The node-pty + WebSocket relay. Confirmed CLI-based by design (per the
- * plan's Kaiden research: `sandbox connect` uses an SSH tunnel + node-pty
- * on their side too, with no typed-SDK alternative) — this spawns the
- * `openshell` CLI's `sandbox connect` under a pty rather than trying to
- * reimplement whatever transport it uses underneath.
+ * Terminal relay: OpenShell SDK execInteractive + WebSocket.
+ *
+ * "Open terminal" calls `execInteractive(name, ["tmux","attach","-t","main"])`
+ * — a sibling process that attaches to the tmux session wrapping the sandbox's
+ * canonical main process. This achieves equivalent reattach semantics to the
+ * CLI's `sandbox connect` without needing node-pty or the CLI binary at all.
  */
 
-interface PtySession {
-  proc: pty.IPty;
+interface SdkSession {
+  session: ExecInteractiveSessionControl;
   sockets: Set<WebSocket>;
   idleTimer?: NodeJS.Timeout;
+  /** Set to true once output consumption loop has been started. */
+  outputStarted: boolean;
 }
 
-const sessions = new Map<string, PtySession>();
+const sessions = new Map<string, SdkSession>();
 
-function clearIdleTimer(session: PtySession): void {
-  if (session.idleTimer) clearTimeout(session.idleTimer);
-  session.idleTimer = undefined;
+function clearIdleTimer(entry: SdkSession): void {
+  if (entry.idleTimer) clearTimeout(entry.idleTimer);
+  entry.idleTimer = undefined;
 }
 
-function armIdleTimer(sessionId: string, session: PtySession): void {
-  clearIdleTimer(session);
-  if (session.sockets.size > 0) return;
-  session.idleTimer = setTimeout(() => killPty(sessionId), terminalIdleTimeoutMs());
+function armIdleTimer(sessionId: string, entry: SdkSession): void {
+  clearIdleTimer(entry);
+  if (entry.sockets.size > 0) return;
+  entry.idleTimer = setTimeout(() => killSession(sessionId), terminalIdleTimeoutMs());
 }
 
-function attach(sessionId: string): PtySession {
+async function startOutputConsumer(sessionId: string, entry: SdkSession): Promise<void> {
+  if (entry.outputStarted) return;
+  entry.outputStarted = true;
+  try {
+    for await (const event of entry.session.output) {
+      if ("type" in event) {
+        // Exit event — session ended.
+        break;
+      }
+      const data = event.data;
+      for (const socket of entry.sockets) {
+        if (socket.readyState === WebSocket.OPEN) socket.send(data);
+      }
+    }
+  } catch {
+    // Stream ended or was cancelled — clean up below.
+  } finally {
+    for (const socket of entry.sockets) socket.close(1000, "sandbox session ended");
+    sessions.delete(sessionId);
+  }
+}
+
+async function attach(sessionId: string): Promise<SdkSession> {
   const existing = sessions.get(sessionId);
   if (existing) return existing;
 
-  const proc = pty.spawn("openshell", ["sandbox", "connect", sessionId], {
-    name: "xterm-256color",
-    cols: 80,
-    rows: 24,
-  });
-  const session: PtySession = { proc, sockets: new Set() };
-  sessions.set(sessionId, session);
+  const client = await getClient();
+  const session = await client.sandbox.execInteractive(
+    sessionId,
+    ["tmux", "attach", "-t", "main"],
+    { tty: true, cols: 80, rows: 24 },
+  );
 
-  proc.onData((data) => {
-    for (const socket of session.sockets) {
-      if (socket.readyState === WebSocket.OPEN) socket.send(data);
-    }
-  });
-  proc.onExit(() => {
-    for (const socket of session.sockets) socket.close(1000, "sandbox session ended");
-    sessions.delete(sessionId);
-  });
+  const entry: SdkSession = { session, sockets: new Set(), outputStarted: false };
+  sessions.set(sessionId, entry);
 
-  return session;
+  // Start consuming output in the background.
+  void startOutputConsumer(sessionId, entry);
+
+  return entry;
 }
 
 export function killPty(sessionId: string): void {
-  const session = sessions.get(sessionId);
-  if (!session) return;
-  clearIdleTimer(session);
-  for (const socket of session.sockets) socket.close(1000, "session terminated");
+  killSession(sessionId);
+}
+
+function killSession(sessionId: string): void {
+  const entry = sessions.get(sessionId);
+  if (!entry) return;
+  clearIdleTimer(entry);
+  for (const socket of entry.sockets) socket.close(1000, "session terminated");
   try {
-    session.proc.kill();
+    entry.session.cancel();
   } catch {
     /* already gone */
   }
@@ -102,27 +127,34 @@ export function handleTerminalUpgrade(
   }
 
   wss.handleUpgrade(request, socket as never, head, (ws) => {
-    const session = attach(sessionId);
-    session.sockets.add(ws);
-    clearIdleTimer(session);
-
-    ws.on("message", (raw) => {
-      const text = raw.toString();
+    // The SDK's execInteractive is async — handle it within the callback.
+    void (async () => {
       try {
-        const parsed = JSON.parse(text);
-        if (isControlFrame(parsed)) {
-          session.proc.resize(Math.max(1, parsed.cols), Math.max(1, parsed.rows));
-          return;
-        }
-      } catch {
-        /* not a control frame — fall through and treat as raw input below */
-      }
-      session.proc.write(text);
-    });
+        const entry = await attach(sessionId);
+        entry.sockets.add(ws);
+        clearIdleTimer(entry);
 
-    ws.on("close", () => {
-      session.sockets.delete(ws);
-      armIdleTimer(sessionId, session);
-    });
+        ws.on("message", (raw) => {
+          const text = raw.toString();
+          try {
+            const parsed = JSON.parse(text);
+            if (isControlFrame(parsed)) {
+              entry.session.resize(Math.max(1, parsed.cols), Math.max(1, parsed.rows));
+              return;
+            }
+          } catch {
+            /* not a control frame — fall through and treat as raw input below */
+          }
+          entry.session.write(Buffer.from(text));
+        });
+
+        ws.on("close", () => {
+          entry.sockets.delete(ws);
+          armIdleTimer(sessionId, entry);
+        });
+      } catch (err) {
+        ws.close(1011, err instanceof Error ? err.message.slice(0, 120) : "Failed to attach");
+      }
+    })();
   });
 }

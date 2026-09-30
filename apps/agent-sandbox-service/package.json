@@ -2,6 +2,7 @@
   "name": "@agentstore/agent-sandbox-service",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "scripts": {
     "build": "tsc",
     "start": "node dist/server.js",
@@ -9,7 +10,7 @@
   },
   "dependencies": {
     "@agentstore/shared": "*",
-    "node-pty": "^1.0.0",
+    "@nvidia/openshell-sdk": "0.1.2",
     "ws": "^8.18.0"
   },
   "devDependencies": {

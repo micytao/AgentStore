@@ -1,10 +1,8 @@
-import fs from "node:fs/promises";
-import os from "node:os";
-import path from "node:path";
 import type { OpenShellMcpServerConfig, OpenShellModelConfig } from "@agentstore/shared";
-import { extraCreateArgs } from "./config";
-import { buildOpenCodeConfig, isNativeProvider, nativeProviderEnvVar } from "./opencodeConfig";
-import { parseJsonOutput, runOpenshell } from "./openshellCli";
+import { SdkError } from "@nvidia/openshell-sdk";
+import { defaultSandboxImage } from "./config.js";
+import { buildOpenCodeConfig, isNativeProvider, nativeProviderEnvVar } from "./opencodeConfig.js";
+import { getClient } from "./openshellClient.js";
 
 export type SessionPhase = "Provisioning" | "Running" | "Failed" | "Cancelled";
 
@@ -41,17 +39,21 @@ function sandboxNameFor(taskId: string): string {
 
 /** Registers (or reuses) an OpenShell "provider" carrying a native
  * provider's API key, so `sandbox create --provider <name>` attaches the
- * credential without it ever passing through `--env` (OpenShell's docs
- * explicitly warn against that). Exact flag shape is per the plan's Stage
- * B1 CLI spike — adjust here if the real CLI differs. */
+ * credential without it ever passing through `--env`. Uses the raw gRPC
+ * escape hatch since provider CRUD is not yet curated in the SDK. */
 async function ensureNativeProviderRegistered(kind: string, apiKey: string): Promise<string> {
   const providerName = `agentstore-${kind}`;
   const envVar = nativeProviderEnvVar(kind);
+  const client = await getClient();
   try {
-    await runOpenshell(
-      ["provider", "create", "--name", providerName, "--type", kind, "--from-existing"],
-      { env: envVar ? { [envVar]: apiKey } : {} }
-    );
+    await client.raw.createProvider({
+      workspaceScope: { selection: { case: "workspace", value: "default" } },
+      provider: {
+        metadata: { name: providerName },
+        type: kind,
+        credentials: envVar ? { [envVar]: apiKey } : {},
+      },
+    });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     if (!/exists|already/i.test(message)) {
@@ -59,13 +61,6 @@ async function ensureNativeProviderRegistered(kind: string, apiKey: string): Pro
     }
   }
   return providerName;
-}
-
-async function writeTempConfig(sessionId: string, config: Record<string, unknown>): Promise<string> {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-"));
-  const file = path.join(dir, `${sessionId}.json`);
-  await fs.writeFile(file, JSON.stringify(config, null, 2), "utf8");
-  return file;
 }
 
 function withEmbeddedToken(gitUrl: string, gitToken?: string): string {
@@ -87,54 +82,44 @@ export async function createSession(input: CreateSessionInput): Promise<SessionR
   sessionStore().set(id, record);
 
   try {
+    const client = await getClient();
     const config = buildOpenCodeConfig(input.model, input.mcpServers);
-    const configFile = await writeTempConfig(id, config);
 
-    const providerArgs: string[] = [];
+    const providerNames: string[] = [];
     if (input.model && isNativeProvider(input.model.kind) && input.model.apiKey) {
       const providerName = await ensureNativeProviderRegistered(input.model.kind, input.model.apiKey);
-      providerArgs.push("--provider", providerName);
+      providerNames.push(providerName);
     }
 
-    // We key the session store by the --name we chose (id), not whatever
-    // id OpenShell's `--output json` result reports, so getSession() stays
-    // predictable for the console regardless of the CLI's own id scheme.
-    await runOpenshell([
-      "sandbox",
-      "create",
-      "--name",
-      id,
-      "--detach",
-      "--output",
-      "json",
-      "--upload",
-      `${configFile}:.config/opencode/opencode.json`,
-      ...providerArgs,
-      ...extraCreateArgs(),
-      "--",
-      input.agent,
-    ]);
+    // Create sandbox with tmux wrapping the agent command so that
+    // "Open terminal" can later reattach to the same session via
+    // `execInteractive(name, ["tmux","attach","-t","main"])`.
+    await client.sandbox.create({
+      name: id,
+      image: defaultSandboxImage(),
+      providers: providerNames,
+      command: ["tmux", "new-session", "-s", "main", "--", input.agent],
+      tty: true,
+      restartPolicy: "on-failure",
+    });
 
+    // Wait for the sandbox to become ready before uploading config.
+    await client.sandbox.waitReady(id, 120);
+
+    // Upload the opencode config via exec + stdin (replaces CLI --upload).
+    const configJson = JSON.stringify(config, null, 2);
+    await client.sandbox.exec(id, ["sh", "-c", "mkdir -p .config/opencode && cat > .config/opencode/opencode.json"], {
+      stdin: Buffer.from(configJson),
+    });
+
+    // Optionally clone a git repo into the sandbox.
     if (input.gitUrl) {
-      await runOpenshell([
-        "sandbox",
-        "exec",
-        "--name",
-        id,
-        "--",
-        "git",
-        "clone",
-        withEmbeddedToken(input.gitUrl, input.gitToken),
-        "/workspace",
-      ]).catch((err) => {
+      await client.sandbox.exec(id, ["git", "clone", withEmbeddedToken(input.gitUrl, input.gitToken), "/workspace"]).catch((err) => {
         record.message = `Sandbox created but git clone failed: ${err instanceof Error ? err.message : String(err)}`;
       });
     }
 
-    // `--detach` returns as soon as creation is kicked off, not once the
-    // sandbox is actually ready — leave phase as "Provisioning" here and
-    // let refreshSession()'s real `sandbox get` query (polled by the
-    // console) advance it to "Running" once it truly is.
+    record.phase = "Running";
     return record;
   } catch (err) {
     record.phase = "Failed";
@@ -143,24 +128,22 @@ export async function createSession(input: CreateSessionInput): Promise<SessionR
   }
 }
 
-/** Best-effort phase mapping — OpenShell's real `sandbox get --output json`
- * field names are pending confirmation against a live install (plan's
- * Stage B1 spike); this recognizes the field/value spellings most likely
- * per NVIDIA's published docs and falls back to treating "found and no
- * error" as Running. */
-function mapPhase(raw: Record<string, unknown> | undefined): { phase: SessionPhase; message?: string } {
-  if (!raw) return { phase: "Running" };
-  const value = String(raw.phase ?? raw.status ?? raw.state ?? "").toLowerCase();
-  if (["pending", "provisioning", "creating", "starting"].includes(value)) {
-    return { phase: "Provisioning" };
+/** Maps the SDK's SandboxPhaseName to our SessionPhase. */
+function mapPhase(sdkPhase: string): { phase: SessionPhase; message?: string } {
+  switch (sdkPhase) {
+    case "provisioning":
+    case "starting":
+      return { phase: "Provisioning" };
+    case "error":
+      return { phase: "Failed", message: sdkPhase };
+    case "deleting":
+    case "stopped":
+    case "completed":
+      return { phase: "Cancelled" };
+    case "ready":
+    default:
+      return { phase: "Running" };
   }
-  if (["failed", "error", "crashloopbackoff"].includes(value)) {
-    return { phase: "Failed", message: value };
-  }
-  if (["deleted", "terminated", "stopped", "cancelled", "canceled"].includes(value)) {
-    return { phase: "Cancelled" };
-  }
-  return { phase: "Running" };
 }
 
 export async function refreshSession(id: string): Promise<SessionRecord | undefined> {
@@ -169,14 +152,19 @@ export async function refreshSession(id: string): Promise<SessionRecord | undefi
   if (record.phase === "Failed" || record.phase === "Cancelled") return record;
 
   try {
-    const output = await runOpenshell(["sandbox", "get", id, "--output", "json"]);
-    const parsed = parseJsonOutput<Record<string, unknown>>(output);
-    const { phase, message } = mapPhase(parsed);
+    const client = await getClient();
+    const ref = await client.sandbox.get(id);
+    const { phase, message } = mapPhase(ref.phase);
     record.phase = phase;
     record.message = message;
   } catch (err) {
-    record.phase = "Failed";
-    record.message = err instanceof Error ? err.message : String(err);
+    if (err instanceof SdkError && err.code === "not_found") {
+      record.phase = "Cancelled";
+      record.message = "Sandbox no longer exists";
+    } else {
+      record.phase = "Failed";
+      record.message = err instanceof Error ? err.message : String(err);
+    }
   }
   return record;
 }
@@ -187,8 +175,9 @@ export async function deleteSession(id: string): Promise<void> {
     record.phase = "Cancelled";
   }
   try {
-    await runOpenshell(["sandbox", "delete", id]);
+    const client = await getClient();
+    await client.sandbox.delete(id, { allowMissing: true });
   } catch {
-    await runOpenshell(["sandbox", "rm", id]).catch(() => undefined);
+    // Best-effort — sandbox may already be gone.
   }
 }

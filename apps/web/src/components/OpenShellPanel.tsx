@@ -19,12 +19,15 @@ import {
   InputGroup,
   InputGroupItem,
   Label,
+  Progress,
   Spinner,
   TextInput,
 } from "@patternfly/react-core";
 import { Table, Tbody, Td, Th, Thead, Tr } from "@patternfly/react-table";
 import {
   departmentLabel,
+  type AgentSandboxControllerStatus,
+  type AgentSandboxServiceInstallStatus,
   type GatewayWorkloadKind,
   type Listing,
   type SecretSummary,
@@ -32,11 +35,15 @@ import {
 import { SecretField } from "@/components/SecretField";
 import {
   deployGateway,
+  fetchAgentSandboxServiceInstallStatus,
+  fetchAgentSandboxStatus,
   fetchEngineSettings,
   fetchGatewayStatus,
   fetchListings,
   fetchPlatformStatus,
   fetchSecrets,
+  installAgentSandboxController,
+  startAgentSandboxServiceInstall,
   updatePlatformSettings,
   type EngineSettings,
   type PlatformStatus,
@@ -69,6 +76,25 @@ export function OpenShellPanel() {
   const [savingGateway, setSavingGateway] = useState(false);
   const [deployingGateway, setDeployingGateway] = useState(false);
   const [gatewayError, setGatewayError] = useState<string | null>(null);
+
+  // Agent Sandbox controller preflight — live "installed/missing" check
+  // (platform.openshift.agentSandboxController, refreshed on every
+  // fetchPlatformStatus()) plus the "Install Agent Sandbox controller"
+  // button's own transient state. Unlike the gateway install above,
+  // there's no persisted PlatformSettings field for this — it's derived
+  // live, so installing/polling state only needs to live here.
+  const [installingAgentSandbox, setInstallingAgentSandbox] = useState(false);
+  const [agentSandboxPolling, setAgentSandboxPolling] = useState(false);
+  const [agentSandboxError, setAgentSandboxError] = useState<string | null>(null);
+
+  // Agent Sandbox Service install — apps/agent-sandbox-service has no
+  // public image, so unlike the controller preflight above, this is a
+  // genuine two-phase build-then-deploy flow persisted onto
+  // PlatformSettings.agentSandboxServiceInstall (platform.settings, not
+  // platform.openshift — it's this repo's own app, not a cluster-level
+  // capability check).
+  const [startingAgentSandboxServiceInstall, setStartingAgentSandboxServiceInstall] = useState(false);
+  const [agentSandboxServiceInstallError, setAgentSandboxServiceInstallError] = useState<string | null>(null);
 
   function loadSecrets() {
     fetchSecrets()
@@ -110,6 +136,109 @@ export function OpenShellPanel() {
     }, 4000);
     return () => clearInterval(timer);
   }, [gatewayDeployment?.status]);
+
+  function applyAgentSandboxStatus(status: AgentSandboxControllerStatus) {
+    setPlatform((prev) =>
+      prev ? { ...prev, openshift: { ...prev.openshift, agentSandboxController: status } } : prev
+    );
+  }
+
+  // Poll the live preflight check for a few seconds after a successful
+  // install call, in case the CRD hasn't finished becoming "Established"
+  // (and so isn't served under /apis yet) the instant the apply
+  // request returns — same interval-polling shape as the gateway poll
+  // above, just against the cheap synchronous status check instead of
+  // an in-flight AAP job.
+  useEffect(() => {
+    if (!agentSandboxPolling) return;
+    const timer = setInterval(() => {
+      fetchAgentSandboxStatus()
+        .then((status) => {
+          applyAgentSandboxStatus(status);
+          if (status.installed) setAgentSandboxPolling(false);
+        })
+        .catch((err: Error) => setAgentSandboxError(err.message));
+    }, 3000);
+    return () => clearInterval(timer);
+  }, [agentSandboxPolling]);
+
+  async function installAgentSandboxNow() {
+    setInstallingAgentSandbox(true);
+    setAgentSandboxError(null);
+    try {
+      const result = await installAgentSandboxController();
+      applyAgentSandboxStatus(result.status);
+      setAgentSandboxPolling(!result.status.installed);
+    } catch (err) {
+      setAgentSandboxError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setInstallingAgentSandbox(false);
+    }
+  }
+
+  const agentSandboxServiceInstall = platform?.settings.agentSandboxServiceInstall;
+
+  // Poll the in-flight build/deploy for progress — same interval-polling
+  // shape as the gateway poll above. Once it leaves "deploying" (either
+  // "running" or "failed"), do a full load() rather than just patching
+  // `platform.settings`: a successful install also changes the
+  // OPENSHELL_SERVICE_TOKEN secret and openshellServiceUrl, both of
+  // which need fresh fetchSecrets()/fetchPlatformStatus() calls to show
+  // up correctly (the connectivity Label, the URL field, the SecretField).
+  useEffect(() => {
+    if (agentSandboxServiceInstall?.status !== "deploying") return;
+    const timer = setInterval(() => {
+      fetchAgentSandboxServiceInstallStatus()
+        .then((nextSettings) => {
+          if (nextSettings.agentSandboxServiceInstall?.status === "deploying") {
+            setPlatform((prev) => (prev ? { ...prev, settings: nextSettings } : prev));
+          } else {
+            load();
+          }
+        })
+        .catch((err: Error) => setAgentSandboxServiceInstallError(err.message));
+    }, 4000);
+    return () => clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [agentSandboxServiceInstall?.status]);
+
+  async function installAgentSandboxServiceNow() {
+    setStartingAgentSandboxServiceInstall(true);
+    setAgentSandboxServiceInstallError(null);
+    try {
+      const nextSettings = await startAgentSandboxServiceInstall();
+      setPlatform((prev) => (prev ? { ...prev, settings: nextSettings } : prev));
+    } catch (err) {
+      setAgentSandboxServiceInstallError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setStartingAgentSandboxServiceInstall(false);
+    }
+  }
+
+  /** Coarse progress estimate for the install button's Progress bar —
+   * OpenShift doesn't expose a real build percentage (same limitation
+   * PlatformPanel.tsx's ocpBuildProgressPercent() works around), plus
+   * this has a second "waiting for rollout" phase that plain OpenShift
+   * Build phases don't cover. */
+  function agentSandboxServiceInstallPercent(
+    install: AgentSandboxServiceInstallStatus | undefined,
+    running: boolean,
+    done: boolean
+  ): number {
+    if (done) return 100;
+    if (!running) return 0;
+    if (install?.phase === "waiting-for-rollout") return 90;
+    switch (install?.ocpPhase) {
+      case "Pending":
+        return 15;
+      case "Running":
+        return 55;
+      case "Complete":
+        return 80;
+      default:
+        return 5;
+    }
+  }
 
   async function saveServiceUrl() {
     setSaving(true);
@@ -171,6 +300,7 @@ export function OpenShellPanel() {
   const gitPat = secrets.find((s) => s.key === "GIT_PAT");
   const gatewayStatusColor: "green" | "red" | "grey" =
     gatewayDeployment?.status === "running" ? "green" : gatewayDeployment?.status === "failed" ? "red" : "grey";
+  const agentSandboxController = platform.openshift.agentSandboxController;
 
   return (
     <Flex direction={{ default: "column" }} spaceItems={{ default: "spaceItemsLg" }}>
@@ -188,13 +318,62 @@ export function OpenShellPanel() {
               </a>
               .
             </Content>
+            <Flex
+              alignItems={{ default: "alignItemsCenter" }}
+              spaceItems={{ default: "spaceItemsSm" }}
+              style={{ marginTop: "0.75rem" }}
+            >
+              <FlexItem>
+                <strong>Agent Sandbox controller</strong>
+              </FlexItem>
+              <FlexItem>
+                <Label color={agentSandboxController.installed ? "green" : "red"} isCompact>
+                  {agentSandboxController.installed ? "Installed" : "Missing"}
+                </Label>
+              </FlexItem>
+            </Flex>
             <Content component={ContentVariants.small}>
-              <strong>Before you deploy:</strong> the cluster-scoped Agent Sandbox
-              controller + CRDs are a separate, one-time, elevated-privilege
-              prerequisite this job intentionally does not install — a
-              platform admin applies those once per cluster, outside this
-              self-service flow. See <em>deploy/openshift/README.md</em> for the exact command.
+              The cluster-scoped Agent Sandbox controller + CRDs are a separate,
+              elevated-privilege prerequisite the gateway install below depends
+              on — the OpenShell chart&apos;s own preflight refuses to install
+              without it.
             </Content>
+            {agentSandboxController.installed ? (
+              <Content component={ContentVariants.small}>
+                Detected on this cluster — the gateway install below should succeed.
+              </Content>
+            ) : (
+              <>
+                <Content component={ContentVariants.small}>
+                  Not detected on this cluster yet. Click <strong>Install Agent Sandbox
+                  controller</strong> below — it applies the pinned manifest at{" "}
+                  <em>deploy/openshift/agent-sandbox-crds.yaml</em> using the OpenShift token
+                  configured above, which needs cluster-admin-equivalent permissions. If it
+                  fails, apply it manually instead — see <em>deploy/openshift/README.md</em>{" "}
+                  for the exact command.
+                </Content>
+                {agentSandboxController.error && (
+                  <Content component={ContentVariants.small} style={{ color: "var(--pf-t--global--text--color--subtle)" }}>
+                    Preflight check couldn&apos;t confirm this either way: {agentSandboxController.error}
+                  </Content>
+                )}
+                {agentSandboxError && (
+                  <Alert variant="danger" isInline title={agentSandboxError} style={{ marginTop: "0.5rem" }} />
+                )}
+                <Button
+                  variant="secondary"
+                  isDisabled={installingAgentSandbox || agentSandboxPolling}
+                  style={{ marginTop: "0.5rem" }}
+                  onClick={() => void installAgentSandboxNow()}
+                >
+                  {installingAgentSandbox
+                    ? "Installing…"
+                    : agentSandboxPolling
+                      ? "Waiting for controller…"
+                      : "Install Agent Sandbox controller"}
+                </Button>
+              </>
+            )}
 
             {gatewayDeployment && (
               <Card isCompact style={{ marginTop: "1rem" }}>
@@ -330,6 +509,65 @@ export function OpenShellPanel() {
               the console never runs the openshell CLI or a terminal bridge
               itself, it only calls this service&apos;s REST + WebSocket API.
             </Content>
+
+            {!platform.openshellService.configured && (
+              <Content component={ContentVariants.small} style={{ marginTop: "0.5rem" }}>
+                Not deployed yet? <strong>Install Agent Sandbox Service</strong> below builds{" "}
+                <code>apps/agent-sandbox-service/Containerfile</code> as an OpenShift BuildConfig
+                (same Project Git URL/branch as the AAP Job Templates card on the Platform tab),
+                deploys it, and fills in the URL/token below automatically — no separate{" "}
+                <code>podman build</code>/<code>oc apply</code> needed. Needs the same OpenShift
+                token used elsewhere on this tab (namespace-scoped Deployment/Service/Route/Secret
+                permissions — no extra RBAC beyond what the gateway install already needs).
+              </Content>
+            )}
+            {agentSandboxServiceInstallError && (
+              <Alert variant="danger" isInline title={agentSandboxServiceInstallError} style={{ marginTop: "0.5rem" }} />
+            )}
+            {agentSandboxServiceInstall?.error && (
+              <Alert variant="danger" isInline title={agentSandboxServiceInstall.error} style={{ marginTop: "0.5rem" }} />
+            )}
+            {(() => {
+              const running = agentSandboxServiceInstall?.status === "deploying";
+              const done = agentSandboxServiceInstall?.status === "running";
+              const failed = agentSandboxServiceInstall?.status === "failed";
+              return (
+                <>
+                  <div style={{ marginTop: "0.5rem" }}>
+                    <Button
+                      variant="secondary"
+                      isDisabled={startingAgentSandboxServiceInstall || running}
+                      onClick={() => void installAgentSandboxServiceNow()}
+                    >
+                      {startingAgentSandboxServiceInstall
+                        ? "Starting…"
+                        : running
+                          ? `Installing… (${agentSandboxServiceInstall?.phase === "waiting-for-rollout" ? "waiting for rollout" : agentSandboxServiceInstall?.ocpPhase ?? "starting"})`
+                          : platform.openshellService.configured
+                            ? "Reinstall Agent Sandbox Service"
+                            : "Install Agent Sandbox Service"}
+                    </Button>
+                  </div>
+                  {(running || done || failed) && (
+                    <Progress
+                      value={agentSandboxServiceInstallPercent(agentSandboxServiceInstall, running, done)}
+                      title="Agent Sandbox Service install"
+                      label={
+                        failed
+                          ? "Failed"
+                          : agentSandboxServiceInstall?.phase === "waiting-for-rollout"
+                            ? "Waiting for pod rollout…"
+                            : agentSandboxServiceInstall?.ocpPhase ?? "Starting…"
+                      }
+                      variant={failed ? "danger" : done ? "success" : undefined}
+                      measureLocation="inside"
+                      style={{ marginTop: "0.5rem", maxWidth: "420px" }}
+                    />
+                  )}
+                </>
+              );
+            })()}
+
             <Flex
               justifyContent={{ default: "justifyContentSpaceBetween" }}
               alignItems={{ default: "alignItemsCenter" }}

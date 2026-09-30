@@ -20,7 +20,23 @@ export {
   findOrCreateExecutionEnvironment,
   type FindOrCreateExecutionEnvironmentInput,
 } from "./aap";
-export { pingOpenshift, listAgentDeployments } from "./openshift";
+export {
+  pingOpenshift,
+  listAgentDeployments,
+  checkAgentSandboxController,
+  applyAgentSandboxManifests,
+  findOrCreateAgentSandboxServiceTokenSecret,
+  getAgentSandboxServiceReadiness,
+  getAgentSandboxServiceRouteHost,
+  restartAgentSandboxServiceDeployment,
+} from "./openshift";
+export {
+  startAgentSandboxServiceImageBuild,
+  getAgentSandboxServiceImageBuildPhase,
+  getAgentSandboxServiceImageBuildResult,
+  type AgentSandboxServiceImageBuildInput,
+  type AgentSandboxServiceImageBuildResult,
+} from "./agentSandboxServiceBuild";
 export {
   startEeImageBuild,
   getEeImageBuildResult,

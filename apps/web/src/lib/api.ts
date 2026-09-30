@@ -1,4 +1,5 @@
 import type {
+  AgentSandboxControllerStatus,
   DepartmentId,
   EngineSettings,
   Listing,
@@ -132,6 +133,43 @@ export function deployGateway(): Promise<PlatformSettings> {
  * interval. */
 export function fetchGatewayStatus(): Promise<PlatformSettings> {
   return fetch("/api/admin/platform/gateway").then((r) => parse<PlatformSettings>(r));
+}
+
+/** Live "is the Agent Sandbox controller installed" preflight check for
+ * the OpenShell tab — cheap enough to poll on an interval right after
+ * an install click. */
+export function fetchAgentSandboxStatus(): Promise<AgentSandboxControllerStatus> {
+  return fetch("/api/admin/platform/agent-sandbox").then((r) => parse<AgentSandboxControllerStatus>(r));
+}
+
+/** Applies the vendored Agent Sandbox controller manifest via the
+ * OpenShift API (see deploy/openshift/agent-sandbox-crds.yaml). Reuses
+ * the already-configured OpenShift token — no separate AAP job
+ * template/credential, unlike the gateway install above. */
+export function installAgentSandboxController(): Promise<{
+  applied: string[];
+  status: AgentSandboxControllerStatus;
+}> {
+  return fetch("/api/admin/platform/agent-sandbox", { method: "POST" }).then((r) =>
+    parse<{ applied: string[]; status: AgentSandboxControllerStatus }>(r)
+  );
+}
+
+/** Starts (or re-starts) the "Install Agent Sandbox Service" build+deploy
+ * flow — builds apps/agent-sandbox-service/Containerfile as an OpenShift
+ * BuildConfig, then deploys it and auto-fills openshellServiceUrl + the
+ * OPENSHELL_SERVICE_TOKEN secret. Returns the updated PlatformSettings
+ * (holding `agentSandboxServiceInstall`). */
+export function startAgentSandboxServiceInstall(): Promise<PlatformSettings> {
+  return fetch("/api/admin/platform/agent-sandbox-service", { method: "POST" }).then((r) =>
+    parse<PlatformSettings>(r)
+  );
+}
+
+/** Polls the in-flight Agent Sandbox Service build/install for progress;
+ * safe to call on an interval. */
+export function fetchAgentSandboxServiceInstallStatus(): Promise<PlatformSettings> {
+  return fetch("/api/admin/platform/agent-sandbox-service").then((r) => parse<PlatformSettings>(r));
 }
 
 /** Starts (or re-starts) the one-time "Create job templates" AAP

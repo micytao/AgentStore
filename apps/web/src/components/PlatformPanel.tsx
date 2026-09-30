@@ -1156,86 +1156,86 @@ export function PlatformPanel() {
         >
           <Tab eventKey="connections" title={<TabTitleText>Connections</TabTitleText>}>
             <Flex direction={{ default: "column" }} spaceItems={{ default: "spaceItemsLg" }} style={{ marginTop: "1rem" }}>
+      <FlexItem>
+        <Card>
+          <CardTitle>
+            <Flex justifyContent={{ default: "justifyContentSpaceBetween" }} alignItems={{ default: "alignItemsCenter" }}>
               <FlexItem>
-                <Card>
-                  <CardTitle>
-                    <Flex justifyContent={{ default: "justifyContentSpaceBetween" }} alignItems={{ default: "alignItemsCenter" }}>
-                      <FlexItem>
-                        <IconTitle icon={AnsibleTowerIcon}>AAP controller</IconTitle>
-                      </FlexItem>
-                      <FlexItem>
-                        <Button variant="secondary" isDisabled={testing !== null} onClick={() => void test("aap")}>
-                          {testing === "aap" ? "Testing…" : "Test"}
-                        </Button>
-                      </FlexItem>
-                    </Flex>
-                  </CardTitle>
-                  <CardBody>
-                    <TestBanner result={testResults.aap} pending={testing === "aap"} />
-                    <Form>
-                      <Flex spaceItems={{ default: "spaceItemsMd" }}>
-                        <FlexItem flex={{ default: "flex_1" }}>
-                          {field("aapControllerUrl", "Controller URL", "https://aap.example.com")}
-                        </FlexItem>
-                        <FlexItem flex={{ default: "flex_1" }}>
-                          {field("aapConsoleUrl", "Console URL (deep links)", "https://aap.example.com")}
-                        </FlexItem>
-                        <FlexItem flex={{ default: "flex_1" }}>{field("aapJobTemplateId", "Default job template id", "42")}</FlexItem>
-                      </Flex>
-                    </Form>
-                    {status.aap.jobTemplates.length > 0 ? (
-                      <Content component={ContentVariants.small}>
-                        Templates:{" "}
-                        {status.aap.jobTemplates
-                          .slice(0, 8)
-                          .map((t) => `${t.name} (#${t.id})`)
-                          .join(" · ")}
-                      </Content>
-                    ) : null}
-                    {insecureTlsToggle("aapInsecureTls")}
-                    {aapToken && <SecretField secret={aapToken} onChange={loadSecrets} />}
-                  </CardBody>
-                </Card>
+                <IconTitle icon={AnsibleTowerIcon}>AAP controller</IconTitle>
               </FlexItem>
+              <FlexItem>
+                <Button variant="secondary" isDisabled={testing !== null} onClick={() => void test("aap")}>
+                  {testing === "aap" ? "Testing…" : "Test"}
+                </Button>
+              </FlexItem>
+            </Flex>
+          </CardTitle>
+          <CardBody>
+            <TestBanner result={testResults.aap} pending={testing === "aap"} />
+            <Form>
+              <Flex spaceItems={{ default: "spaceItemsMd" }}>
+                <FlexItem flex={{ default: "flex_1" }}>
+                  {field("aapControllerUrl", "Controller URL", "https://aap.example.com")}
+                </FlexItem>
+                <FlexItem flex={{ default: "flex_1" }}>
+                  {field("aapConsoleUrl", "Console URL (deep links)", "https://aap.example.com")}
+                </FlexItem>
+                <FlexItem flex={{ default: "flex_1" }}>{field("aapJobTemplateId", "Default job template id", "42")}</FlexItem>
+              </Flex>
+            </Form>
+            {status.aap.jobTemplates.length > 0 ? (
+              <Content component={ContentVariants.small}>
+                Templates:{" "}
+                {status.aap.jobTemplates
+                  .slice(0, 8)
+                  .map((t) => `${t.name} (#${t.id})`)
+                  .join(" · ")}
+              </Content>
+            ) : null}
+            {insecureTlsToggle("aapInsecureTls")}
+            {aapToken && <SecretField secret={aapToken} onChange={loadSecrets} />}
+          </CardBody>
+        </Card>
+      </FlexItem>
 
+      <FlexItem>
+        <Card>
+          <CardTitle>
+            <Flex justifyContent={{ default: "justifyContentSpaceBetween" }} alignItems={{ default: "alignItemsCenter" }}>
               <FlexItem>
-                <Card>
-                  <CardTitle>
-                    <Flex justifyContent={{ default: "justifyContentSpaceBetween" }} alignItems={{ default: "alignItemsCenter" }}>
-                      <FlexItem>
-                        <IconTitle icon={OpenshiftIcon}>OpenShift</IconTitle>
-                      </FlexItem>
-                      <FlexItem>
-                        <Button variant="secondary" isDisabled={testing !== null} onClick={() => void test("openshift")}>
-                          {testing === "openshift" ? "Testing…" : "Test"}
-                        </Button>
-                      </FlexItem>
-                    </Flex>
-                  </CardTitle>
-                  <CardBody>
-                    <TestBanner result={testResults.openshift} pending={testing === "openshift"} />
-                    <Content component={ContentVariants.small}>
-                      This must be the <strong>API server</strong> URL, not the web console — usually{" "}
-                      <code>https://api.&lt;cluster-domain&gt;:6443</code>. It is a different hostname from the console
-                      (which starts with <code>console-openshift-console.apps.</code>) and almost always needs an explicit
-                      <code>:6443</code> port.
-                    </Content>
-                    <Form>
-                      <Flex spaceItems={{ default: "spaceItemsMd" }}>
-                        <FlexItem flex={{ default: "flex_1" }}>
-                          {field("openshiftApiUrl", "API URL", "https://api.cluster.example.com:6443")}
-                        </FlexItem>
-                        <FlexItem flex={{ default: "flex_1" }}>{field("openshiftNamespace", "Namespace", "agent-workloads")}</FlexItem>
-                        <FlexItem flex={{ default: "flex_1" }}>
-                          {field("openshiftConsoleUrl", "Console URL", "https://console-openshift-console.apps.example.com")}
-                        </FlexItem>
-                      </Flex>
-                    </Form>
-                    {insecureTlsToggle("openshiftInsecureTls")}
-                    {openshiftToken && <SecretField secret={openshiftToken} onChange={loadSecrets} />}
-                  </CardBody>
-                </Card>
+                <IconTitle icon={OpenshiftIcon}>OpenShift</IconTitle>
               </FlexItem>
+              <FlexItem>
+                <Button variant="secondary" isDisabled={testing !== null} onClick={() => void test("openshift")}>
+                  {testing === "openshift" ? "Testing…" : "Test"}
+                </Button>
+              </FlexItem>
+            </Flex>
+          </CardTitle>
+          <CardBody>
+            <TestBanner result={testResults.openshift} pending={testing === "openshift"} />
+            <Content component={ContentVariants.small}>
+              This must be the <strong>API server</strong> URL, not the web console — usually{" "}
+              <code>https://api.&lt;cluster-domain&gt;:6443</code>. It is a different hostname from the console
+              (which starts with <code>console-openshift-console.apps.</code>) and almost always needs an explicit
+              <code>:6443</code> port.
+            </Content>
+            <Form>
+              <Flex spaceItems={{ default: "spaceItemsMd" }}>
+                <FlexItem flex={{ default: "flex_1" }}>
+                  {field("openshiftApiUrl", "API URL", "https://api.cluster.example.com:6443")}
+                </FlexItem>
+                <FlexItem flex={{ default: "flex_1" }}>{field("openshiftNamespace", "Namespace", "agent-workloads")}</FlexItem>
+                <FlexItem flex={{ default: "flex_1" }}>
+                  {field("openshiftConsoleUrl", "Console URL", "https://console-openshift-console.apps.example.com")}
+                </FlexItem>
+              </Flex>
+            </Form>
+            {insecureTlsToggle("openshiftInsecureTls")}
+            {openshiftToken && <SecretField secret={openshiftToken} onChange={loadSecrets} />}
+          </CardBody>
+        </Card>
+      </FlexItem>
             </Flex>
           </Tab>
 
@@ -1265,99 +1265,99 @@ export function PlatformPanel() {
 
           <Tab eventKey="activity" title={<TabTitleText>Activity</TabTitleText>}>
             <Flex direction={{ default: "column" }} spaceItems={{ default: "spaceItemsLg" }} style={{ marginTop: "1rem" }}>
-              <FlexItem>
-                <Card>
-                  <CardTitle>
-                    <IconTitle icon={AnsibleTowerIcon}>Recent AAP jobs</IconTitle>
-                  </CardTitle>
-                  <CardBody>
-                    {status.aap.recentJobs.length === 0 ? (
-                      <Content component={ContentVariants.small}>No jobs yet — or AAP is not connected.</Content>
-                    ) : (
-                      <Table aria-label="Recent AAP jobs" variant="compact">
-                        <Thead>
-                          <Tr>
-                            <Th>Job</Th>
-                            <Th>Status</Th>
-                            <Th>Link</Th>
-                          </Tr>
-                        </Thead>
-                        <Tbody>
-                          {status.aap.recentJobs.map((job) => (
-                            <Tr key={job.id}>
-                              <Td dataLabel="Job">
-                                #{job.id} {job.name}
-                              </Td>
-                              <Td dataLabel="Status">
-                                <Label isCompact>{job.status}</Label>
-                              </Td>
-                              <Td dataLabel="Link">
-                                {job.url ? (
-                                  <a href={job.url} target="_blank" rel="noreferrer">
-                                    Open in AAP
-                                  </a>
-                                ) : (
-                                  job.started ?? ""
-                                )}
-                              </Td>
-                            </Tr>
-                          ))}
-                        </Tbody>
-                      </Table>
-                    )}
-                  </CardBody>
-                </Card>
-              </FlexItem>
+      <FlexItem>
+        <Card>
+          <CardTitle>
+            <IconTitle icon={AnsibleTowerIcon}>Recent AAP jobs</IconTitle>
+          </CardTitle>
+          <CardBody>
+            {status.aap.recentJobs.length === 0 ? (
+              <Content component={ContentVariants.small}>No jobs yet — or AAP is not connected.</Content>
+            ) : (
+              <Table aria-label="Recent AAP jobs" variant="compact">
+                <Thead>
+                  <Tr>
+                    <Th>Job</Th>
+                    <Th>Status</Th>
+                    <Th>Link</Th>
+                  </Tr>
+                </Thead>
+                <Tbody>
+                  {status.aap.recentJobs.map((job) => (
+                    <Tr key={job.id}>
+                      <Td dataLabel="Job">
+                        #{job.id} {job.name}
+                      </Td>
+                      <Td dataLabel="Status">
+                        <Label isCompact>{job.status}</Label>
+                      </Td>
+                      <Td dataLabel="Link">
+                        {job.url ? (
+                          <a href={job.url} target="_blank" rel="noreferrer">
+                            Open in AAP
+                          </a>
+                        ) : (
+                          job.started ?? ""
+                        )}
+                      </Td>
+                    </Tr>
+                  ))}
+                </Tbody>
+              </Table>
+            )}
+          </CardBody>
+        </Card>
+      </FlexItem>
 
-              <FlexItem>
-                <Card>
-                  <CardTitle>
+      <FlexItem>
+        <Card>
+          <CardTitle>
                     <IconTitle icon={OpenshiftIcon}>Deployed agents on OpenShift</IconTitle>
-                  </CardTitle>
-                  <CardBody>
+          </CardTitle>
+          <CardBody>
                     <Content component={ContentVariants.small} style={{ marginBottom: "0.5rem" }}>
                       Generic-chat agent Deployments only — the OpenShell gateway installs via a
                       separate Helm chart into its own namespace and isn&apos;t shown here; see its
                       status per-listing in the Catalog instead.
                     </Content>
                     {status.openshift.deployments.length === 0 ? (
-                      <Content component={ContentVariants.small}>
+              <Content component={ContentVariants.small}>
                         No agent Deployments in {status.settings.openshiftNamespace || "agent-workloads"}.
-                      </Content>
-                    ) : (
+              </Content>
+            ) : (
                       <Table aria-label="Deployed agents on OpenShift" variant="compact">
-                        <Thead>
-                          <Tr>
+                <Thead>
+                  <Tr>
                             <Th>Deployment</Th>
                             <Th>Listing</Th>
                             <Th>Replicas</Th>
                             <Th>Created</Th>
-                          </Tr>
-                        </Thead>
-                        <Tbody>
+                  </Tr>
+                </Thead>
+                <Tbody>
                           {status.openshift.deployments.map((d) => {
                             const ready = d.replicas > 0 && d.readyReplicas >= d.replicas;
                             const statusColor: "green" | "grey" = ready ? "green" : "grey";
-                            return (
+                    return (
                               <Tr key={`${d.namespace}/${d.name}`}>
                                 <Td dataLabel="Deployment">{d.name}</Td>
                                 <Td dataLabel="Listing">{d.listingId ?? "—"}</Td>
                                 <Td dataLabel="Replicas">
-                                  <Label color={statusColor} isCompact>
+                          <Label color={statusColor} isCompact>
                                     {d.readyReplicas}/{d.replicas} ready
-                                  </Label>
-                                </Td>
+                          </Label>
+                        </Td>
                                 <Td dataLabel="Created">
                                   {d.creationTimestamp ? new Date(d.creationTimestamp).toLocaleString() : ""}
                                 </Td>
-                              </Tr>
-                            );
-                          })}
-                        </Tbody>
-                      </Table>
-                    )}
-                  </CardBody>
-                </Card>
+                      </Tr>
+                    );
+                  })}
+                </Tbody>
+              </Table>
+            )}
+          </CardBody>
+        </Card>
               </FlexItem>
             </Flex>
           </Tab>

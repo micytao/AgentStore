@@ -324,6 +324,21 @@ export interface PlatformSettings {
    * apps/agent-runtime/Containerfile instead, and with no AAP-
    * registration step tacked on. */
   agentRuntimeBuild?: OcpImageBuildStatus;
+
+  // --- Agent Sandbox Service install (Admin -> LLMs -> OpenShell) ------
+  //
+  // apps/agent-sandbox-service is AgentStore's own in-cluster microservice
+  // (see OpenShellGatewayDeployment above for the separate, third-party
+  // OpenShell gateway it talks to). Unlike that gateway, there's no public
+  // image to reference — "Install Agent Sandbox Service" builds it from
+  // source (same OpenShift BuildConfig mechanism as agentRuntimeBuild
+  // above), then deploys deploy/openshift/agent-sandbox-service.yaml's
+  // Deployment/Service/Route with that image, and auto-fills
+  // openshellServiceUrl + the OPENSHELL_SERVICE_TOKEN secret from the
+  // result — see AgentSandboxServiceInstallStatus below.
+  /** Progress/result of the "Install Agent Sandbox Service" admin
+   * action, once ever started. */
+  agentSandboxServiceInstall?: AgentSandboxServiceInstallStatus;
 }
 
 /** Progress/result of the "Build from source" admin action — builds
@@ -379,6 +394,28 @@ export interface EeBuildStatus extends OcpImageBuildStatus {
   registryCredentialId?: number;
   /** Mirrors PlatformSettings.aapExecutionEnvironmentId once registered. */
   executionEnvironmentId?: number;
+}
+
+/** Progress/result of "Install Agent Sandbox Service" (Admin -> LLMs ->
+ * OpenShell) — the same OpenShift BuildConfig/Build mechanism as
+ * OcpImageBuildStatus (building apps/agent-sandbox-service/Containerfile),
+ * plus a second phase once the image is ready: applying
+ * deploy/openshift/agent-sandbox-service.yaml's Deployment/Service/Route
+ * with that image, finding-or-creating the agent-sandbox-service-token
+ * Secret, and waiting for the Deployment to roll out. `phase` is
+ * "building" during the first phase (mirrors OcpImageBuildStatus.phase)
+ * or "waiting-for-rollout" during the second. */
+export interface AgentSandboxServiceInstallStatus extends OcpImageBuildStatus {
+  /** The Route's externally-reachable URL once applied — the same value
+   * auto-saved onto PlatformSettings.openshellServiceUrl, so the OpenShell
+   * tab's "Service configured" fields fill in without manual copy-pasting. */
+  routeUrl?: string;
+  /** Timestamp of the one automatic "rollout restart" nudge
+   * refreshAgentSandboxServiceInstall() gives a stalled Deployment (e.g.
+   * one whose ServiceAccount didn't exist yet on the first apply, but
+   * does now) before giving up and surfacing the stall as a failure —
+   * see that function's doc comment. Unset until the first nudge. */
+  restartNudgedAt?: string;
 }
 
 /** The OpenShell chart's workload kind for its main server: a
@@ -485,6 +522,17 @@ export interface OpenshiftDeploymentSummary {
   listingId?: string;
 }
 
+/** Live "is the Kubernetes SIG Agent Sandbox controller/CRDs installed on
+ * this cluster" preflight check (see checkAgentSandboxController() in
+ * packages/engine-ansible/src/openshift.ts) — the OpenShell Helm chart's
+ * own preflight template refuses to install without it (neither
+ * `agents.x-k8s.io/v1beta1` nor `v1alpha1` served). Re-checked on every
+ * `GET /api/admin/platform`, so this is always fresh, never persisted. */
+export interface AgentSandboxControllerStatus {
+  installed: boolean;
+  error?: string;
+}
+
 export interface PlatformConnectionStatus {
   configured: boolean;
   connected: boolean;
@@ -516,6 +564,9 @@ export interface PlatformStatus {
   };
   openshift: PlatformConnectionStatus & {
     deployments: OpenshiftDeploymentSummary[];
+    /** Preflight for the OpenShell tab's "Install Agent Sandbox
+     * controller" button — see AgentSandboxControllerStatus above. */
+    agentSandboxController: AgentSandboxControllerStatus;
   };
   /** Agent Sandbox Service reachability (GET /health), independent of
    * whether any listing currently uses it. */

@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import type { OpenshiftDeploymentSummary } from "@agentstore/shared";
 import {
   isOpenshiftConfigured,
@@ -66,6 +67,313 @@ export async function pingOpenshift(): Promise<{ ok: boolean; error?: string }> 
     }
     return { ok: false, error: cause ? `${message}: ${cause}` : message };
   }
+}
+
+/** Live preflight for the OpenShell tab's "Agent Sandbox controller"
+ * status (installed/missing) — GETs the cluster's API discovery root
+ * (`/apis`, the same general "ask the server what it serves" technique
+ * as controllerApiPrefix() in aap.ts, just against Kubernetes's own
+ * discovery endpoint instead of AAP's) and checks whether
+ * `agents.x-k8s.io` is among the served API groups — exactly what the
+ * OpenShell Helm chart's own preflight template checks for (see
+ * ansible/provision-openshell-gateway.yml's header comment: "neither
+ * agents.x-k8s.io/v1beta1 nor v1alpha1 is served"). Read-only,
+ * low-privilege (any authenticated user can list API groups), so this
+ * works regardless of whether the configured token can actually install
+ * the controller. Never throws — mirrors pingOpenshift()'s style. */
+export async function checkAgentSandboxController(): Promise<{ installed: boolean; error?: string }> {
+  if (!isOpenshiftConfigured()) {
+    return { installed: false, error: "OpenShift API URL or token is missing" };
+  }
+  try {
+    const response = await ocpFetch("/apis");
+    if (!response.ok) {
+      return { installed: false, error: `OpenShift API returned ${response.status} listing API groups` };
+    }
+    const body = (await response.json()) as { groups?: { name?: string }[] };
+    const installed = (body.groups ?? []).some((group) => group.name === "agents.x-k8s.io");
+    return { installed };
+  } catch (err) {
+    return { installed: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+// --- Generic small manifest apply (Agent Sandbox controller + service) -
+//
+// Shared by two unrelated "click a button, apply some YAML" admin
+// actions: "Install Agent Sandbox controller" (deploy/openshift/
+// agent-sandbox-crds.yaml, a pinned copy of kubernetes-sigs/
+// agent-sandbox's release manifest) and "Install Agent Sandbox Service"
+// (deploy/openshift/agent-sandbox-service.yaml, this repo's own
+// Deployment/Service/Route — see agentSandboxServiceBuild.ts one level
+// up for the OpenShift BuildConfig that builds its image first). Both
+// use the same OPENSHIFT_TOKEN as everything else in this file. Not a
+// generic dynamic-discovery "oc apply" engine — just the handful of
+// kinds those two vendored files actually contain. If either is ever
+// regenerated/edited with a different resource mix, extend
+// AGENT_SANDBOX_RESOURCE_ENDPOINTS below first; applyAgentSandboxManifests()
+// throws a clear error naming the unrecognized kind rather than silently
+// skipping it.
+
+interface AgentSandboxResourceEndpoint {
+  /** Cluster- or namespace-scoped REST collection path (without the
+   * trailing `/<name>` — appended per-call by applyOneAgentSandboxManifest). */
+  collectionPath: (namespace?: string) => string;
+  namespaced: boolean;
+}
+
+const AGENT_SANDBOX_RESOURCE_ENDPOINTS: Record<string, AgentSandboxResourceEndpoint> = {
+  "v1/Namespace": { namespaced: false, collectionPath: () => "/api/v1/namespaces" },
+  "v1/ServiceAccount": {
+    namespaced: true,
+    collectionPath: (ns) => `/api/v1/namespaces/${ns}/serviceaccounts`,
+  },
+  "v1/Service": {
+    namespaced: true,
+    collectionPath: (ns) => `/api/v1/namespaces/${ns}/services`,
+  },
+  "apps/v1/Deployment": {
+    namespaced: true,
+    collectionPath: (ns) => `/apis/apps/v1/namespaces/${ns}/deployments`,
+  },
+  "rbac.authorization.k8s.io/v1/ClusterRole": {
+    namespaced: false,
+    collectionPath: () => "/apis/rbac.authorization.k8s.io/v1/clusterroles",
+  },
+  "rbac.authorization.k8s.io/v1/ClusterRoleBinding": {
+    namespaced: false,
+    collectionPath: () => "/apis/rbac.authorization.k8s.io/v1/clusterrolebindings",
+  },
+  "apiextensions.k8s.io/v1/CustomResourceDefinition": {
+    namespaced: false,
+    collectionPath: () => "/apis/apiextensions.k8s.io/v1/customresourcedefinitions",
+  },
+  // Only needed by deploy/openshift/agent-sandbox-service.yaml, not the
+  // controller manifest — Routes are an OpenShift (not upstream
+  // Kubernetes) extension API.
+  "route.openshift.io/v1/Route": {
+    namespaced: true,
+    collectionPath: (ns) => `/apis/route.openshift.io/v1/namespaces/${ns}/routes`,
+  },
+};
+
+interface AgentSandboxManifestMetadata {
+  name?: string;
+  namespace?: string;
+  resourceVersion?: string;
+}
+
+/** Idempotent create-or-update of a single manifest document — GET by
+ * name first (same convention as findOrCreateEeBuildConfig() below),
+ * PUT with the fetched resourceVersion if it already exists, POST to
+ * create if not. Throws immediately (naming the object's kind/name) on
+ * any other failure, e.g. a 403 — applyAgentSandboxManifests() relies on
+ * this to fail fast rather than leaving a silent partial apply. */
+async function applyOneAgentSandboxManifest(doc: Record<string, unknown>): Promise<string> {
+  const apiVersion = doc.apiVersion as string | undefined;
+  const kind = doc.kind as string | undefined;
+  const metadata = doc.metadata as AgentSandboxManifestMetadata | undefined;
+  const name = metadata?.name;
+  if (!apiVersion || !kind || !name) {
+    throw new Error(`Manifest document is missing apiVersion/kind/metadata.name: ${JSON.stringify(doc).slice(0, 200)}`);
+  }
+  const label = `${kind}/${name}`;
+  const endpoint = AGENT_SANDBOX_RESOURCE_ENDPOINTS[`${apiVersion}/${kind}`];
+  if (!endpoint) {
+    throw new Error(
+      `Don't know how to apply ${label} (${apiVersion}) — extend AGENT_SANDBOX_RESOURCE_ENDPOINTS in openshift.ts.`
+    );
+  }
+  const namespace = metadata?.namespace;
+  if (endpoint.namespaced && !namespace) {
+    throw new Error(`${label} has no metadata.namespace but is a namespaced resource`);
+  }
+  const collectionPath = endpoint.collectionPath(namespace);
+  const itemPath = `${collectionPath}/${name}`;
+
+  const existing = await ocpFetch(itemPath);
+  if (existing.ok) {
+    const existingBody = (await existing.json()) as { metadata?: { resourceVersion?: string } };
+    const updated = await ocpFetch(itemPath, {
+      method: "PUT",
+      body: JSON.stringify({
+        ...doc,
+        metadata: { ...metadata, resourceVersion: existingBody.metadata?.resourceVersion },
+      }),
+    });
+    if (!updated.ok) {
+      const text = await updated.text();
+      throw new Error(`OpenShift update ${label} failed (${updated.status}): ${text.slice(0, 400)}`);
+    }
+    return label;
+  }
+  if (existing.status !== 404) {
+    throw new Error(`OpenShift get ${label}: HTTP ${existing.status}`);
+  }
+  const created = await ocpFetch(collectionPath, {
+    method: "POST",
+    body: JSON.stringify(doc),
+  });
+  if (!created.ok) {
+    const text = await created.text();
+    throw new Error(`OpenShift create ${label} failed (${created.status}): ${text.slice(0, 400)}`);
+  }
+  return label;
+}
+
+/** Applies the Agent Sandbox controller manifest — Namespace, CRD,
+ * ClusterRole/Binding, ServiceAccount, Service, Deployment (see
+ * deploy/openshift/agent-sandbox-crds.yaml) — one document at a time, in
+ * the order given (the vendored file's own document order already puts
+ * the Namespace/CRD ahead of the things that depend on them). Stops on
+ * the first failure — typically a 403 if the configured OPENSHIFT_TOKEN
+ * doesn't have cluster-admin-equivalent RBAC — rather than leaving a
+ * silent partial apply; the caller (installAgentSandboxController() in
+ * apps/web/src/server/agentSandbox.ts) surfaces that error verbatim,
+ * pointing the admin at the manual `oc apply` fallback documented in
+ * deploy/openshift/README.md section 5a. */
+export async function applyAgentSandboxManifests(docs: Record<string, unknown>[]): Promise<{ applied: string[] }> {
+  const applied: string[] = [];
+  for (const doc of docs) {
+    // yaml.loadAll() can yield null/undefined for stray "---" document
+    // separators (e.g. a leading one before the first real document) —
+    // skip those rather than treating them as malformed manifests.
+    if (!doc || !doc.kind) continue;
+    applied.push(await applyOneAgentSandboxManifest(doc));
+  }
+  return { applied };
+}
+
+// --- Agent Sandbox Service install (build+deploy, see agentSandboxServiceBuild.ts) -
+
+/** Finds-or-creates a Secret holding a single random bearer token — used
+ * for the "Install Agent Sandbox Service" action's `agent-sandbox-service-
+ * token` Secret (the pod's own OPENSHELL_SERVICE_TOKEN env var, via
+ * `secretKeyRef` in deploy/openshift/agent-sandbox-service.yaml). If the
+ * Secret already exists (e.g. a previous install, or one created manually
+ * per the old README instructions), its existing value is returned
+ * unchanged rather than being overwritten — the running pod's env var and
+ * any other client already holding that token would otherwise silently
+ * break. Only generates a fresh one when the Secret is genuinely absent. */
+export async function findOrCreateAgentSandboxServiceTokenSecret(
+  namespace: string,
+  name: string,
+  key: string
+): Promise<{ token: string; created: boolean }> {
+  const path = `/api/v1/namespaces/${namespace}/secrets/${name}`;
+  const existing = await ocpFetch(path);
+  if (existing.ok) {
+    const body = (await existing.json()) as { data?: Record<string, string> };
+    const encoded = body.data?.[key];
+    if (encoded) {
+      return { token: Buffer.from(encoded, "base64").toString("utf8"), created: false };
+    }
+    // Secret exists but doesn't have this key yet (e.g. created for a
+    // different purpose) — fall through and add it via a fresh POST
+    // would conflict (409), so this is the one case worth a clear error
+    // rather than silently generating a token nothing will ever read.
+    throw new Error(`Secret ${name} in namespace ${namespace} exists but has no "${key}" key.`);
+  }
+  if (existing.status !== 404) {
+    throw new Error(`OpenShift get secret ${name}: HTTP ${existing.status}`);
+  }
+  const token = randomBytes(32).toString("hex");
+  const response = await ocpFetch(`/api/v1/namespaces/${namespace}/secrets`, {
+    method: "POST",
+    body: JSON.stringify({
+      apiVersion: "v1",
+      kind: "Secret",
+      metadata: { name, namespace, labels: { "app.kubernetes.io/managed-by": "agentstore" } },
+      stringData: { [key]: token },
+    }),
+  });
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`OpenShift create secret ${name} failed (${response.status}): ${text.slice(0, 400)}`);
+  }
+  return { token, created: true };
+}
+
+/** Deployment readiness check for the "Install Agent Sandbox Service"
+ * action's final "waiting for pod rollout" phase — true once at least
+ * one replica is Ready, the same bar listAgentDeployments() uses for
+ * every other Deployment this file tracks. Also surfaces `stalledReason`
+ * from the Deployment's own status.conditions (a `ReplicaFailure` like
+ * "serviceaccount ... not found", or a `Progressing`/
+ * `ProgressDeadlineExceeded`) so a caller polling this can tell a
+ * genuinely-stuck rollout apart from one that's merely still pulling an
+ * image or waiting out its readinessProbe's initialDelaySeconds — see
+ * refreshAgentSandboxServiceInstall()'s use of this field. */
+export async function getAgentSandboxServiceReadiness(
+  namespace: string,
+  name: string
+): Promise<{ ready: boolean; readyReplicas: number; stalledReason?: string }> {
+  const response = await ocpFetch(`/apis/apps/v1/namespaces/${namespace}/deployments/${name}`);
+  if (!response.ok) throw new Error(`OpenShift get deployment ${name}: HTTP ${response.status}`);
+  const body = (await response.json()) as {
+    status?: {
+      readyReplicas?: number;
+      conditions?: Array<{ type?: string; status?: string; reason?: string; message?: string }>;
+    };
+  };
+  const readyReplicas = body.status?.readyReplicas ?? 0;
+  const conditions = body.status?.conditions ?? [];
+  const stalled = conditions.find(
+    (c) =>
+      (c.type === "ReplicaFailure" && c.status === "True") ||
+      (c.type === "Progressing" && c.status === "False" && c.reason === "ProgressDeadlineExceeded")
+  );
+  return {
+    ready: readyReplicas > 0,
+    readyReplicas,
+    stalledReason: stalled ? `${stalled.reason ?? "Unknown"}: ${stalled.message ?? ""}`.trim() : undefined,
+  };
+}
+
+/** Nudges a stalled Deployment into retrying pod creation right away —
+ * the same effect as `oc rollout restart`, done as a GET-then-PUT (this
+ * file's existing idempotent-update convention) rather than a separate
+ * PATCH content-type: stamps a `agentstore.io/restartedAt` annotation
+ * onto the pod template so the Deployment controller sees a changed
+ * template hash and rolls a fresh ReplicaSet immediately, instead of
+ * waiting out its own exponential backoff from a prior FailedCreate/
+ * ProgressDeadlineExceeded condition — e.g. one caused by a
+ * ServiceAccount that didn't exist yet when this Deployment was first
+ * applied, but does now (see getAgentSandboxServiceManifestDocs() in
+ * apps/web/src/server/agentSandbox.ts, which ensures it going forward). */
+export async function restartAgentSandboxServiceDeployment(namespace: string, name: string): Promise<void> {
+  const path = `/apis/apps/v1/namespaces/${namespace}/deployments/${name}`;
+  const existing = await ocpFetch(path);
+  if (!existing.ok) throw new Error(`OpenShift get deployment ${name}: HTTP ${existing.status}`);
+  const body = (await existing.json()) as {
+    spec?: { template?: { metadata?: { annotations?: Record<string, string> } } };
+  };
+  const template = body.spec?.template;
+  if (!template) throw new Error(`Deployment ${name} has no spec.template to restart`);
+  template.metadata = {
+    ...(template.metadata ?? {}),
+    annotations: {
+      ...(template.metadata?.annotations ?? {}),
+      "agentstore.io/restartedAt": new Date().toISOString(),
+    },
+  };
+  const updated = await ocpFetch(path, { method: "PUT", body: JSON.stringify(body) });
+  if (!updated.ok) {
+    const text = await updated.text();
+    throw new Error(`OpenShift restart deployment ${name} failed (${updated.status}): ${text.slice(0, 400)}`);
+  }
+}
+
+/** Reads back the Route's externally-reachable host once applied — the
+ * value auto-saved onto PlatformSettings.openshellServiceUrl. Returns
+ * undefined rather than throwing if the Route isn't there yet (the
+ * caller polls), same style as readGatewayDeployResult()/
+ * readDeploymentResult() above. */
+export async function getAgentSandboxServiceRouteHost(namespace: string, name: string): Promise<string | undefined> {
+  const response = await ocpFetch(`/apis/route.openshift.io/v1/namespaces/${namespace}/routes/${name}`);
+  if (!response.ok) return undefined;
+  const body = (await response.json()) as { spec?: { host?: string } };
+  return body.spec?.host ? `https://${body.spec.host}` : undefined;
 }
 
 export interface K8sDeployment {

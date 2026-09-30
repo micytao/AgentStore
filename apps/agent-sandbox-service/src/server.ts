@@ -1,10 +1,10 @@
 import http, { type IncomingMessage, type ServerResponse } from "node:http";
 import { URL } from "node:url";
 import type { OpenShellMcpServerConfig, OpenShellModelConfig } from "@agentstore/shared";
-import { checkBearerToken, mintTerminalToken } from "./auth";
-import { port, terminalPublicProtocol, terminalTokenTtlMs } from "./config";
-import { createSession, deleteSession, getSession, refreshSession } from "./sessions";
-import { handleTerminalUpgrade, killPty } from "./terminal";
+import { checkBearerToken, mintTerminalToken } from "./auth.js";
+import { port, terminalPublicProtocol, terminalTokenTtlMs } from "./config.js";
+import { createSession, deleteSession, getSession, refreshSession } from "./sessions.js";
+import { handleTerminalUpgrade, killPty } from "./terminal.js";
 
 /**
  * The Agent Sandbox Service's entire REST + WebSocket surface, per the
