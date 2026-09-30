@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import "@xterm/xterm/css/xterm.css";
 import { Alert } from "@patternfly/react-core";
 import { fetchListingTerminalEndpoint } from "@/lib/api";
@@ -11,8 +12,8 @@ import { fetchListingTerminalEndpoint } from "@/lib/api";
  * through the console — using a short-lived signed token minted just for
  * this connection (see /api/admin/listings/[id]/terminal-endpoint).
  *
- * Rendered as a dark overlay with a centered terminal pane; the user
- * closes it via the × button or the Escape key.
+ * Rendered as a React portal on document.body so it sits above PatternFly's
+ * sidebar/masthead stacking contexts. Closes via the × button or Escape.
  */
 export function LiveTerminal({
   listingId,
@@ -75,7 +76,14 @@ export function LiveTerminal({
       fitAddon.fit();
 
       socket = new WebSocket(endpoint.url);
-      socket.addEventListener("open", () => term?.focus());
+      socket.addEventListener("open", () => {
+        fitAddon.fit();
+        const dims = fitAddon.proposeDimensions();
+        if (dims) {
+          socket!.send(JSON.stringify({ type: "resize", cols: dims.cols, rows: dims.rows }));
+        }
+        term?.focus();
+      });
       socket.addEventListener("close", () => {
         if (!disposed) term?.writeln("\r\n\x1b[2m(session ended)\x1b[0m");
       });
@@ -106,9 +114,9 @@ export function LiveTerminal({
     };
   }, [listingId]);
 
-  return (
-    <div className="terminal-modal-backdrop" onClick={onClose}>
-      <div className="terminal-modal" onClick={(e) => e.stopPropagation()}>
+  const modal = (
+    <div className="terminal-modal-backdrop">
+      <div className="terminal-modal">
         <div className="terminal-modal-header">
           <span className="terminal-modal-title">{listingName}</span>
           <button className="terminal-modal-close" onClick={onClose} aria-label="Close terminal">
@@ -125,4 +133,6 @@ export function LiveTerminal({
       </div>
     </div>
   );
+
+  return createPortal(modal, document.body);
 }

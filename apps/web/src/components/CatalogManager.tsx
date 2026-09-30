@@ -376,6 +376,7 @@ function useListingRowState(listing: Listing, onChange: () => void) {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [showConfig, setShowConfig] = useState(false);
+  const [showTerminal, setShowTerminal] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [deleteWarning, setDeleteWarning] = useState<string | null>(null);
@@ -431,6 +432,8 @@ function useListingRowState(listing: Listing, onChange: () => void) {
     saved,
     showConfig,
     setShowConfig,
+    showTerminal,
+    setShowTerminal,
     deleting,
     confirmDeleteOpen,
     requestDelete,
@@ -451,6 +454,7 @@ function ListingActionsBar({
   onSave,
   onDelete,
   onOpenConfig,
+  onOpenTerminal,
 }: {
   listing: Listing;
   saving: boolean;
@@ -459,6 +463,7 @@ function ListingActionsBar({
   onSave: () => void;
   onDelete: () => void;
   onOpenConfig: () => void;
+  onOpenTerminal: () => void;
 }) {
   return (
     <Flex
@@ -468,7 +473,7 @@ function ListingActionsBar({
     >
       {listing.runtime === "openshell" && listing.openshellSession?.status === "running" ? (
         <FlexItem>
-          <Button variant="primary" size="sm" onClick={onOpenConfig}>
+          <Button variant="primary" size="sm" onClick={onOpenTerminal}>
             Open terminal
           </Button>
         </FlexItem>
@@ -633,6 +638,8 @@ function ListingRow({
     saved,
     showConfig,
     setShowConfig,
+    showTerminal,
+    setShowTerminal,
     deleting,
     confirmDeleteOpen,
     requestDelete,
@@ -710,10 +717,14 @@ function ListingRow({
               onSave={() => void save()}
               onDelete={requestDelete}
               onOpenConfig={() => setShowConfig(true)}
+              onOpenTerminal={() => setShowTerminal(true)}
             />
           </Td>
         </Tr>
       </Tbody>
+      {showTerminal && listing.runtime === "openshell" && (
+        <LiveTerminal listingId={listing.id} listingName={listing.name} onClose={() => setShowTerminal(false)} />
+      )}
       <ListingConfigModal
         listing={listing}
         providers={providers}
@@ -760,6 +771,8 @@ function ListingBadgeCard({
     saved,
     showConfig,
     setShowConfig,
+    showTerminal,
+    setShowTerminal,
     deleting,
     confirmDeleteOpen,
     requestDelete,
@@ -860,12 +873,16 @@ function ListingBadgeCard({
                   onSave={() => void save()}
                   onDelete={requestDelete}
                   onOpenConfig={() => setShowConfig(true)}
+                  onOpenTerminal={() => setShowTerminal(true)}
                 />
               </FlexItem>
             </Flex>
           </CardBody>
         </Card>
       </GalleryItem>
+      {showTerminal && listing.runtime === "openshell" && (
+        <LiveTerminal listingId={listing.id} listingName={listing.name} onClose={() => setShowTerminal(false)} />
+      )}
       <ListingConfigModal
         listing={listing}
         providers={providers}

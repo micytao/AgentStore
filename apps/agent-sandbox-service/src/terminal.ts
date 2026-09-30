@@ -150,7 +150,11 @@ export function handleTerminalUpgrade(
 
         ws.on("close", () => {
           entry.sockets.delete(ws);
-          armIdleTimer(sessionId, entry);
+          if (entry.sockets.size === 0) {
+            // Last viewer disconnected — kill the shell immediately so the
+            // next "Open terminal" gets a fresh session.
+            killSession(sessionId);
+          }
         });
       } catch (err) {
         ws.close(1011, err instanceof Error ? err.message.slice(0, 120) : "Failed to attach");

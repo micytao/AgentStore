@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireAdmin } from "@/server/auth";
 import { getOpenShellTerminalEndpoint } from "@/server/openshellDeploy";
+import { ensurePlatformEnv } from "@/server/platform";
 
 /** Mints a fresh terminal token/URL on every call rather than caching one
  * on the listing — LiveTerminal.tsx calls this once when it mounts. Since
@@ -14,6 +15,7 @@ export async function GET(
   const denied = requireAdmin(request);
   if (denied) return denied;
   try {
+    ensurePlatformEnv();
     const { id } = await context.params;
     const endpoint = await getOpenShellTerminalEndpoint(id);
     if (!endpoint) {
