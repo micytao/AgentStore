@@ -10,8 +10,7 @@
     "strict": true,
     "outDir": "dist",
     "rootDir": "src",
-    "declaration": false,
-    "incremental": true
+    "declaration": false
   },
   "include": ["src/**/*.ts"],
   "exclude": ["node_modules", "dist"]

@@ -12,7 +12,7 @@ COPY packages ./packages
 # from the OpenShift BuildConfig's dockerStrategy.env.
 ARG GITHUB_TOKEN
 RUN npm install
-RUN npm run build --workspace=@agentstore/agent-sandbox-service
+RUN rm -rf apps/agent-sandbox-service/dist && npm run build --workspace=@agentstore/agent-sandbox-service
 
 FROM registry.access.redhat.com/ubi9/nodejs-22:latest
 USER 0
