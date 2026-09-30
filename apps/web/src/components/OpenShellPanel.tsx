@@ -21,6 +21,9 @@ import {
   Label,
   Progress,
   Spinner,
+  Tab,
+  Tabs,
+  TabTitleText,
   TextInput,
 } from "@patternfly/react-core";
 import { Table, Tbody, Td, Th, Thead, Tr } from "@patternfly/react-table";
@@ -63,6 +66,7 @@ export function OpenShellPanel() {
   const [serviceUrlDraft, setServiceUrlDraft] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [activeTabKey, setActiveTabKey] = useState<string | number>("gateway");
 
   // Onboard gateway card — admin-supplied Helm chart ref + install params,
   // defaulting to NVIDIA's real published chart. Drafts mirror the
@@ -306,6 +310,15 @@ export function OpenShellPanel() {
   return (
     <Flex direction={{ default: "column" }} spaceItems={{ default: "spaceItemsLg" }}>
       <FlexItem>
+        <Tabs
+          activeKey={activeTabKey}
+          onSelect={(_e, key) => setActiveTabKey(key)}
+          aria-label="OpenShell sections"
+          isBox
+        >
+          <Tab eventKey="gateway" title={<TabTitleText>OpenShell Gateway</TabTitleText>}>
+            <Flex direction={{ default: "column" }} spaceItems={{ default: "spaceItemsLg" }} style={{ marginTop: "1rem" }}>
+      <FlexItem>
         <Card>
           <CardTitle>Onboard the OpenShell gateway</CardTitle>
           <CardBody>
@@ -499,7 +512,11 @@ export function OpenShellPanel() {
           </CardBody>
         </Card>
       </FlexItem>
+            </Flex>
+          </Tab>
 
+          <Tab eventKey="sandbox-service" title={<TabTitleText>Agent Sandbox Service</TabTitleText>}>
+            <Flex direction={{ default: "column" }} spaceItems={{ default: "spaceItemsLg" }} style={{ marginTop: "1rem" }}>
       <FlexItem>
         <Card>
           <CardTitle>Agent Sandbox Service</CardTitle>
@@ -610,6 +627,10 @@ export function OpenShellPanel() {
             {githubPackagesToken && <SecretField secret={githubPackagesToken} onChange={loadSecrets} />}
           </CardBody>
         </Card>
+      </FlexItem>
+            </Flex>
+          </Tab>
+        </Tabs>
       </FlexItem>
 
       <FlexItem>
