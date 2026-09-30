@@ -44,7 +44,7 @@ spec:
                   key: OPENSHELL_SERVICE_TOKEN
             # In-cluster gateway URL — required.
             - name: OPENSHELL_GATEWAY_URL
-              value: "http://openshell-gateway.openshell:8080"
+              value: "http://openshell.openshell:8080"
             # Optional: OIDC client-credentials for production gateways.
             # Uncomment and create the openshell-oidc Secret when moving
             # beyond the eval-mode (TLS-off) gateway.
