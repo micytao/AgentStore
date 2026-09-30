@@ -5,6 +5,7 @@ import type { AgentSandboxControllerStatus, AgentSandboxServiceInstallStatus, Pl
 import {
   applyAgentSandboxManifests,
   checkAgentSandboxController,
+  ensureSecretValue,
   findOrCreateAgentSandboxServiceTokenSecret,
   getAgentSandboxServiceImageBuildPhase,
   getAgentSandboxServiceImageBuildResult,
@@ -16,7 +17,7 @@ import {
   startAgentSandboxServiceImageBuild,
 } from "@agentstore/engine-ansible";
 import { ensurePlatformEnv, getPlatformSettings, savePlatformSettings } from "./platform";
-import { setSecret } from "./secrets";
+import { getSecret, setSecret } from "./secrets";
 
 /**
  * AgentStore-side wiring around packages/engine-ansible's openshift.ts
@@ -220,9 +221,16 @@ export async function startAgentSandboxServiceInstall(): Promise<PlatformSetting
     );
   }
   try {
+    // Push the user's GitHub Packages token into a Kubernetes Secret so the
+    // BuildConfig can reference it as a build env var for npm install.
+    const githubToken = getSecret("GITHUB_PACKAGES_TOKEN");
+    if (githubToken) {
+      await ensureSecretValue(openshiftNamespace(), "github-packages-token", "GITHUB_TOKEN", githubToken);
+    }
     const { buildName } = await startAgentSandboxServiceImageBuild({
       gitUrl: settings.aapProjectGitUrl,
       gitBranch: settings.aapProjectGitBranch || "main",
+      githubPackagesSecretName: githubToken ? "github-packages-token" : undefined,
     });
     return persistServiceInstall({ status: "deploying", phase: "building", buildName, updatedAt: now() });
   } catch (err) {

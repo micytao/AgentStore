@@ -26,6 +26,7 @@ export {
   checkAgentSandboxController,
   applyAgentSandboxManifests,
   findOrCreateAgentSandboxServiceTokenSecret,
+  ensureSecretValue,
   getAgentSandboxServiceReadiness,
   getAgentSandboxServiceRouteHost,
   restartAgentSandboxServiceDeployment,

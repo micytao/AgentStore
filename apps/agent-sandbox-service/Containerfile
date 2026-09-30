@@ -7,6 +7,10 @@ WORKDIR /app
 COPY package.json package-lock.json* .npmrc ./
 COPY apps/agent-sandbox-service ./apps/agent-sandbox-service
 COPY packages ./packages
+# GITHUB_TOKEN is needed for npm to authenticate to GitHub Packages
+# (where @nvidia/openshell-sdk is published). Passed as a build arg
+# from the OpenShift BuildConfig's dockerStrategy.env.
+ARG GITHUB_TOKEN
 RUN npm install
 RUN npm run build --workspace=@agentstore/agent-sandbox-service
 

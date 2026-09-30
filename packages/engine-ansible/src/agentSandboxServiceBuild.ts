@@ -43,6 +43,11 @@ export interface AgentSandboxServiceImageBuildInput {
   gitUrl: string;
   gitBranch: string;
   gitSecretName?: string;
+  /** Name of a Secret containing a GITHUB_TOKEN key with a `read:packages`
+   * PAT — needed because @nvidia/openshell-sdk is published on GitHub
+   * Packages, not npmjs.org. Omit to skip (build will fail if the .npmrc
+   * references GITHUB_TOKEN and this isn't provided). */
+  githubPackagesSecretName?: string;
 }
 
 /** Phase 1: finds-or-creates the ImageStream+BuildConfig and triggers a
@@ -61,6 +66,19 @@ export async function startAgentSandboxServiceImageBuild(
     contextDir: AGENT_SANDBOX_SERVICE_CONTEXT_DIR,
     dockerfilePath: AGENT_SANDBOX_SERVICE_DOCKERFILE_PATH,
     gitSecretName: input.gitSecretName,
+    buildEnv: input.githubPackagesSecretName
+      ? [
+          {
+            name: "GITHUB_TOKEN",
+            valueFrom: {
+              secretKeyRef: {
+                name: input.githubPackagesSecretName,
+                key: "GITHUB_TOKEN",
+              },
+            },
+          },
+        ]
+      : undefined,
   });
   return ocp.startEeBuild(AGENT_SANDBOX_SERVICE_BUILD_NAME);
 }

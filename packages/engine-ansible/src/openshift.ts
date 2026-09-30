@@ -294,6 +294,54 @@ export async function findOrCreateAgentSandboxServiceTokenSecret(
   return { token, created: true };
 }
 
+/** Creates or updates a Kubernetes Opaque Secret with the given key/value.
+ * Used to push a user-supplied token (e.g. GITHUB_TOKEN for npm registry
+ * auth) into the namespace so a BuildConfig can reference it via
+ * `secretKeyRef`. Idempotent: if the Secret already has the same value,
+ * it's left untouched. */
+export async function ensureSecretValue(
+  namespace: string,
+  name: string,
+  key: string,
+  value: string
+): Promise<void> {
+  const path = `/api/v1/namespaces/${namespace}/secrets/${name}`;
+  const existing = await ocpFetch(path);
+  if (existing.ok) {
+    const body = (await existing.json()) as { data?: Record<string, string>; metadata: { resourceVersion: string } };
+    const current = body.data?.[key] ? Buffer.from(body.data[key], "base64").toString("utf8") : undefined;
+    if (current === value) return;
+    const updated = await ocpFetch(path, {
+      method: "PUT",
+      body: JSON.stringify({
+        apiVersion: "v1",
+        kind: "Secret",
+        metadata: { name, namespace, resourceVersion: body.metadata.resourceVersion, labels: { "app.kubernetes.io/managed-by": "agentstore" } },
+        stringData: { ...Object.fromEntries(Object.entries(body.data ?? {}).map(([k, v]) => [k, Buffer.from(v, "base64").toString("utf8")])), [key]: value },
+      }),
+    });
+    if (!updated.ok) {
+      const text = await updated.text();
+      throw new Error(`OpenShift update secret ${name} failed (${updated.status}): ${text.slice(0, 400)}`);
+    }
+    return;
+  }
+  if (existing.status !== 404) throw new Error(`OpenShift get secret ${name}: HTTP ${existing.status}`);
+  const response = await ocpFetch(`/api/v1/namespaces/${namespace}/secrets`, {
+    method: "POST",
+    body: JSON.stringify({
+      apiVersion: "v1",
+      kind: "Secret",
+      metadata: { name, namespace, labels: { "app.kubernetes.io/managed-by": "agentstore" } },
+      stringData: { [key]: value },
+    }),
+  });
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`OpenShift create secret ${name} failed (${response.status}): ${text.slice(0, 400)}`);
+  }
+}
+
 /** Deployment readiness check for the "Install Agent Sandbox Service"
  * action's final "waiting for pod rollout" phase — true once at least
  * one replica is Ready, the same bar listAgentDeployments() uses for
@@ -469,6 +517,10 @@ export interface EeBuildConfigInput {
    * Secret already in this namespace, for a private repo. Omit for a
    * public one. */
   gitSecretName?: string;
+  /** Extra env vars injected into the Docker build strategy (e.g. tokens
+   * for private npm registries). Each entry is an OpenShift EnvVar object —
+   * either `{ name, value }` or `{ name, valueFrom: { secretKeyRef } }`. */
+  buildEnv?: Array<Record<string, unknown>>;
 }
 
 /** ImageStreams are what actually create the internal-registry
@@ -513,7 +565,10 @@ export async function findOrCreateEeBuildConfig(input: EeBuildConfigInput): Prom
     },
     strategy: {
       type: "Docker",
-      dockerStrategy: { dockerfilePath: input.dockerfilePath },
+      dockerStrategy: {
+        dockerfilePath: input.dockerfilePath,
+        ...(input.buildEnv?.length ? { env: input.buildEnv } : {}),
+      },
     },
     output: {
       to: { kind: "ImageStreamTag", name: `${input.imageStreamName}:latest` },

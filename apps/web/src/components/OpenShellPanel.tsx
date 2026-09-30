@@ -298,6 +298,7 @@ export function OpenShellPanel() {
   const wired = listings.filter((listing) => listing.openshellAgent);
   const serviceToken = secrets.find((s) => s.key === "OPENSHELL_SERVICE_TOKEN");
   const gitPat = secrets.find((s) => s.key === "GIT_PAT");
+  const githubPackagesToken = secrets.find((s) => s.key === "GITHUB_PACKAGES_TOKEN");
   const gatewayStatusColor: "green" | "red" | "grey" =
     gatewayDeployment?.status === "running" ? "green" : gatewayDeployment?.status === "failed" ? "red" : "grey";
   const agentSandboxController = platform.openshift.agentSandboxController;
@@ -606,6 +607,7 @@ export function OpenShellPanel() {
             </Content>
             {serviceToken && <SecretField secret={serviceToken} onChange={loadSecrets} />}
             {gitPat && <SecretField secret={gitPat} onChange={loadSecrets} />}
+            {githubPackagesToken && <SecretField secret={githubPackagesToken} onChange={loadSecrets} />}
           </CardBody>
         </Card>
       </FlexItem>

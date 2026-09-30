@@ -609,6 +609,14 @@ export const SECRET_SLOTS: SecretSlot[] = [
     group: "tooling",
   },
   {
+    key: "GITHUB_PACKAGES_TOKEN",
+    label: "GitHub Packages token (npm registry)",
+    description:
+      "GitHub personal access token with read:packages scope. Used at build time to install @nvidia/openshell-sdk from GitHub Packages (npm.pkg.github.com). Stored as a Kubernetes Secret and injected into the OpenShift BuildConfig.",
+    usedBy: "Agent Sandbox Service build (Containerfile npm install)",
+    group: "tooling",
+  },
+  {
     key: "AAP_TOKEN",
     label: "AAP controller token",
     description:
