@@ -3,7 +3,7 @@ import { URL } from "node:url";
 import type { OpenShellMcpServerConfig, OpenShellModelConfig } from "@agentstore/shared";
 import { checkBearerToken, mintTerminalToken } from "./auth.js";
 import { port, terminalPublicProtocol, terminalTokenTtlMs } from "./config.js";
-import { createSession, deleteSession, getSession, refreshSession } from "./sessions.js";
+import { createSession, deleteSession, getOrRecoverSession, getSession, refreshSession } from "./sessions.js";
 import { handleTerminalUpgrade, killPty } from "./terminal.js";
 
 /**
@@ -105,7 +105,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
     // POST /sessions/:id/terminal-token
     if (req.method === "POST" && segments.length === 3 && segments[2] === "terminal-token") {
       const id = segments[1];
-      const session = getSession(id);
+      const session = await getOrRecoverSession(id);
       if (!session) {
         sendJson(res, 404, { error: "Unknown session" });
         return;

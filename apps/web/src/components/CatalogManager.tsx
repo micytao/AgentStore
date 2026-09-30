@@ -1479,9 +1479,7 @@ function OpenShellDeploySection({ listing, onChange }: { listing: Listing; onCha
           </FlexItem>
 
           {showTerminal && status === "running" && (
-            <FlexItem>
-              <LiveTerminal listingId={listing.id} listingName={listing.name} />
-            </FlexItem>
+            <LiveTerminal listingId={listing.id} listingName={listing.name} onClose={() => setShowTerminal(false)} />
           )}
         </Flex>
       </CardBody>

@@ -182,6 +182,73 @@ a {
   padding: 8px 10px 12px;
 }
 
+/* ── Terminal modal ────────────────────────────────────────────────── */
+.terminal-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(2px);
+}
+
+.terminal-modal {
+  width: min(92vw, 1100px);
+  height: min(82vh, 700px);
+  display: flex;
+  flex-direction: column;
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.5);
+}
+
+.terminal-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  background: #161823;
+  color: #e8eaf4;
+  flex-shrink: 0;
+}
+
+.terminal-modal-title {
+  font-weight: 600;
+  font-size: 14px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  opacity: 0.85;
+}
+
+.terminal-modal-close {
+  background: none;
+  border: none;
+  color: #888;
+  font-size: 18px;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+  line-height: 1;
+  transition: color 0.15s, background 0.15s;
+}
+.terminal-modal-close:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.terminal-modal-body {
+  flex: 1;
+  min-height: 0;
+  background: #0b0d16;
+  padding: 6px 10px 10px;
+}
+
+.terminal-modal-xterm {
+  width: 100%;
+  height: 100%;
+}
+
 /* Renders skill/agent instructions inside ordinary PatternFly Cards (see
  * SkillsPanel.tsx), so — unlike the landing page's fixed-dark hero classes
  * above — this must track the site-wide light/dark theme toggle rather

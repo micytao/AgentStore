@@ -33,6 +33,40 @@ export function getSession(id: string): SessionRecord | undefined {
   return sessionStore().get(id);
 }
 
+/** Queries the OpenShell gateway for a sandbox we don't have in memory
+ * (e.g. after a service restart) and re-populates the in-memory map.
+ * Returns the recovered record, or undefined if the gateway doesn't
+ * know about it either. */
+async function recoverFromGateway(id: string): Promise<SessionRecord | undefined> {
+  try {
+    const client = await getClient();
+    const ref = await client.sandbox.get(id);
+    const { phase, message } = mapPhase(ref.phase);
+    const record: SessionRecord = {
+      id,
+      agent: "(recovered after restart)",
+      phase,
+      message,
+      createdAt: Date.now(),
+    };
+    sessionStore().set(id, record);
+    console.log(`[sessions] recovered sandbox ${id} from gateway (phase: ${ref.phase} → ${phase})`);
+    return record;
+  } catch (err) {
+    if (err instanceof SdkError && err.code === "not_found") {
+      return undefined;
+    }
+    console.error(`[sessions] failed to recover sandbox ${id} from gateway:`, err);
+    return undefined;
+  }
+}
+
+/** Async session lookup that falls back to the gateway if the session
+ * isn't in the in-memory map — handles service restarts transparently. */
+export async function getOrRecoverSession(id: string): Promise<SessionRecord | undefined> {
+  return sessionStore().get(id) ?? recoverFromGateway(id);
+}
+
 function sandboxNameFor(taskId: string): string {
   return `as-${taskId.replace(/-/g, "").slice(0, 12)}`;
 }
@@ -147,8 +181,12 @@ function mapPhase(sdkPhase: string): { phase: SessionPhase; message?: string } {
 }
 
 export async function refreshSession(id: string): Promise<SessionRecord | undefined> {
-  const record = sessionStore().get(id);
-  if (!record) return undefined;
+  let record = sessionStore().get(id);
+  if (!record) {
+    // Not in memory — try recovering from the gateway (handles restarts).
+    record = await recoverFromGateway(id);
+    if (!record) return undefined;
+  }
   if (record.phase === "Failed" || record.phase === "Cancelled") return record;
 
   try {

@@ -2,20 +2,38 @@
 
 import { useEffect, useRef, useState } from "react";
 import "@xterm/xterm/css/xterm.css";
-import { Alert, Card, CardBody, CardTitle } from "@patternfly/react-core";
+import { Alert } from "@patternfly/react-core";
 import { fetchListingTerminalEndpoint } from "@/lib/api";
 
 /**
- * Real interactive terminal for an OpenShell listing's persistent sandbox
+ * Full-screen modal terminal for an OpenShell listing's persistent sandbox
  * session. Connects directly to the Agent Sandbox Service's Route — not
  * through the console — using a short-lived signed token minted just for
  * this connection (see /api/admin/listings/[id]/terminal-endpoint).
- * Rendered inline in the Admin → Catalog Agent config panel once a
- * listing's `openshellSession.status === "running"`.
+ *
+ * Rendered as a dark overlay with a centered terminal pane; the user
+ * closes it via the × button or the Escape key.
  */
-export function LiveTerminal({ listingId, listingName }: { listingId: string; listingName: string }) {
+export function LiveTerminal({
+  listingId,
+  listingName,
+  onClose,
+}: {
+  listingId: string;
+  listingName: string;
+  onClose: () => void;
+}) {
   const hostRef = useRef<HTMLDivElement>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // Close on Escape key
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose();
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
 
   useEffect(() => {
     let disposed = false;
@@ -43,7 +61,7 @@ export function LiveTerminal({ listingId, listingName }: { listingId: string; li
         cursorBlink: true,
         convertEol: true,
         fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
-        fontSize: 13,
+        fontSize: 14,
         theme: {
           background: "#0b0d16",
           foreground: "#e8eaf4",
@@ -89,15 +107,22 @@ export function LiveTerminal({ listingId, listingName }: { listingId: string; li
   }, [listingId]);
 
   return (
-    <Card isCompact>
-      <CardTitle>{listingName}</CardTitle>
-      <CardBody>
-        {error ? (
-          <Alert variant="danger" isInline title={error} />
-        ) : (
-          <div ref={hostRef} className="store-terminal" />
-        )}
-      </CardBody>
-    </Card>
+    <div className="terminal-modal-backdrop" onClick={onClose}>
+      <div className="terminal-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="terminal-modal-header">
+          <span className="terminal-modal-title">{listingName}</span>
+          <button className="terminal-modal-close" onClick={onClose} aria-label="Close terminal">
+            ✕
+          </button>
+        </div>
+        <div className="terminal-modal-body">
+          {error ? (
+            <Alert variant="danger" isInline title={error} />
+          ) : (
+            <div ref={hostRef} className="terminal-modal-xterm" />
+          )}
+        </div>
+      </div>
+    </div>
   );
 }
