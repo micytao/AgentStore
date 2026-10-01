@@ -622,9 +622,11 @@ export function OpenShellPanel() {
               Service configured: <strong>{settings.openshellServiceConfigured ? "Yes" : "No"}</strong> (needs both this
               URL and the token below)
             </Content>
-            {serviceToken && <SecretField secret={serviceToken} onChange={loadSecrets} />}
-            {gitPat && <SecretField secret={gitPat} onChange={loadSecrets} />}
-            {githubPackagesToken && <SecretField secret={githubPackagesToken} onChange={loadSecrets} />}
+            <Flex direction={{ default: "column" }} spaceItems={{ default: "spaceItemsMd" }} style={{ marginTop: "0.75rem" }}>
+              {serviceToken && <FlexItem><SecretField secret={serviceToken} onChange={loadSecrets} badge="Runtime" /></FlexItem>}
+              {gitPat && <FlexItem><SecretField secret={gitPat} onChange={loadSecrets} badge="Runtime" /></FlexItem>}
+              {githubPackagesToken && <FlexItem><SecretField secret={githubPackagesToken} onChange={loadSecrets} badge="Build time" /></FlexItem>}
+            </Flex>
           </CardBody>
         </Card>
       </FlexItem>

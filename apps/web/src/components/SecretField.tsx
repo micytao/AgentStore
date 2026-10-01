@@ -36,9 +36,11 @@ const SOURCE_LABEL: Record<SecretSummary["source"], string> = {
 export function SecretField({
   secret,
   onChange,
+  badge,
 }: {
   secret: SecretSummary;
   onChange: () => void;
+  badge?: string;
 }) {
   const [value, setValue] = useState("");
   const [visible, setVisible] = useState(false);
@@ -81,6 +83,13 @@ export function SecretField({
             </Content>
           </FlexItem>
           <FlexItem>
+            {badge && (
+              <>
+                <Label color="blue" isCompact variant="outline">
+                  {badge}
+                </Label>{" "}
+              </>
+            )}
             <Label color={SOURCE_COLOR[secret.source]} isCompact>
               {SOURCE_LABEL[secret.source]}
             </Label>{" "}

@@ -142,6 +142,41 @@ export function chatPageHtml(listingName: string): string {
     padding: 0 1.5rem; border-radius: 999px;
   }
   button:disabled { opacity: 0.45; cursor: default; }
+  .reasoning {
+    margin-top: 0.65rem; border-top: 1px solid rgba(255, 255, 255, 0.08);
+    padding-top: 0.45rem;
+  }
+  .reasoning summary {
+    cursor: pointer; font-size: 0.78rem; font-weight: 600;
+    color: #8b90ac; list-style: none; display: flex; align-items: center; gap: 0.35rem;
+    user-select: none;
+  }
+  .reasoning summary::-webkit-details-marker { display: none; }
+  .reasoning summary::before {
+    content: "▶"; display: inline-block; font-size: 0.6rem; color: #6b7094;
+    transition: transform 0.15s ease;
+  }
+  .reasoning[open] summary::before { transform: rotate(90deg); }
+  .reasoning summary:hover { color: #b9fbe9; }
+  .reasoning .step-list {
+    margin: 0.4rem 0 0; padding: 0; list-style: none;
+    display: flex; flex-direction: column; gap: 0.3rem;
+  }
+  .reasoning .step {
+    font-size: 0.76rem; line-height: 1.45; color: #9499b5;
+    padding: 0.35rem 0.6rem; border-radius: 0.45rem;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+  }
+  .reasoning .step-name {
+    font-weight: 650; color: #b9fbe9; margin-right: 0.35rem;
+  }
+  .reasoning .step-result {
+    color: #8b90ac; display: block; margin-top: 0.15rem;
+    white-space: pre-wrap; max-height: 6rem; overflow-y: auto;
+  }
+  .reasoning .step-result::-webkit-scrollbar { width: 5px; }
+  .reasoning .step-result::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.1); border-radius: 999px; }
 </style>
 </head>
 <body>
@@ -338,6 +373,7 @@ const clientScript = String.raw`
     let gotFirstEvent = false;
     let rawText = "";
     const toolNames = [];
+    const toolSteps = [];
     // Some model calls (large context, busy shared endpoints) can take a
     // while before the first token arrives — tick a seconds counter so the
     // bubble visibly changes instead of looking frozen the whole time.
@@ -395,6 +431,8 @@ const clientScript = String.raw`
             toolNames.push(event.name);
             renderToolTrace();
             log.scrollTop = log.scrollHeight;
+          } else if (event.type === "tool_result") {
+            toolSteps.push({ name: event.name, result: event.result });
           } else if (event.type === "done") {
             finalReply = event.reply;
           } else if (event.type === "error") {
@@ -406,6 +444,32 @@ const clientScript = String.raw`
       if (finalReply !== null) {
         rawText = finalReply;
         renderContent();
+      }
+      if (toolSteps.length > 0) {
+        var details = document.createElement("details");
+        details.className = "reasoning";
+        var summary = document.createElement("summary");
+        summary.textContent = "Reasoning (" + toolSteps.length + " step" + (toolSteps.length === 1 ? "" : "s") + ")";
+        details.appendChild(summary);
+        var ul = document.createElement("ul");
+        ul.className = "step-list";
+        toolSteps.forEach(function (step) {
+          var li = document.createElement("li");
+          li.className = "step";
+          var nameSpan = document.createElement("span");
+          nameSpan.className = "step-name";
+          nameSpan.textContent = step.name;
+          li.appendChild(nameSpan);
+          var preview = step.result.length > 200 ? step.result.slice(0, 200) + "…" : step.result;
+          var resultSpan = document.createElement("span");
+          resultSpan.className = "step-result";
+          resultSpan.textContent = preview;
+          li.appendChild(resultSpan);
+          ul.appendChild(li);
+        });
+        details.appendChild(ul);
+        pending.el.appendChild(details);
+        pending.trace.style.display = "none";
       }
     } catch (err) {
       pending.el.classList.remove("pending");

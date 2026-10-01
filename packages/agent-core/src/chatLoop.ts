@@ -12,14 +12,12 @@ import { LOAD_SKILL_TOOL, LOAD_SKILL_TOOL_NAME, buildSystemPrompt, findSkill, vi
  */
 
 /**
- * Each skill load, each MCP tool call, and the final text-producing call are
- * all separate "hops" (one LLM round trip each). 4 was too tight in
- * practice: a listing with several bound skills can burn 3-4 hops just
- * loading skills one at a time (some models don't batch multiple tool
- * calls into a single response even when the API supports it), leaving no
- * hop left to actually answer — surfacing as HOP_LIMIT_FALLBACK_MESSAGE on
- * every single turn for that listing. 8 leaves headroom for a few skill
- * loads plus a couple of real tool calls plus the final answer.
+ * Each MCP tool call and the final text-producing call are separate "hops"
+ * (one LLM round trip each). Skill loads via the synthetic `load_skill`
+ * tool are "free" — they don't count against this limit because they're
+ * resolved locally with no external cost, and some models stubbornly load
+ * skills one at a time rather than batching parallel calls, which would
+ * otherwise exhaust the budget before the model ever answers.
  */
 const DEFAULT_MAX_HOPS = 8;
 
@@ -56,7 +54,10 @@ export interface ChatDeps {
  * a caller (apps/agent-runtime's /api/chat) forward assistant text to the
  * user as it's generated, plus a heads-up whenever a tool hop starts,
  * instead of the caller blocking silently until the whole turn resolves. */
-export type TurnEvent = { type: "delta"; text: string } | { type: "tool_call"; name: string };
+export type TurnEvent =
+  | { type: "delta"; text: string }
+  | { type: "tool_call"; name: string }
+  | { type: "tool_result"; name: string; result: string };
 
 export interface RunTurnOptions {
   maxHops?: number;
@@ -84,7 +85,12 @@ export async function runTurn(
   const systemPrompt = buildSystemPrompt(introLines, skills);
   state.messages.push({ role: "user", content: userMessage });
 
-  for (let hop = 0; hop < maxHops; hop++) {
+  // Skill-only rounds are free (don't increment `hop`), but we cap them
+  // separately so a misbehaving model can't loop forever loading skills.
+  const maxSkillOnlyRounds = skills.length * 2 + 2;
+  let skillOnlyRounds = 0;
+
+  for (let hop = 0; hop < maxHops; ) {
     const scopedTools = visibleTools(tools, skills, state.activeSkillIds);
     const toolsForModel = skills.length > 0 ? [...scopedTools, LOAD_SKILL_TOOL] : scopedTools;
     const callOpts: CallOptions = {
@@ -99,6 +105,7 @@ export async function runTurn(
         : await deps.callProvider(callOpts);
 
     if (response.toolCalls && response.toolCalls.length > 0) {
+      let hasRealToolCall = false;
       for (const call of response.toolCalls) {
         onEvent?.({ type: "tool_call", name: call.name });
         if (call.name === LOAD_SKILL_TOOL_NAME) {
@@ -109,8 +116,10 @@ export async function runTurn(
             : `No skill found with id "${skillId}". Available ids: ${skills.map((s) => s.id).join(", ")}`;
           if (skill) state.activeSkillIds.add(skill.id);
           state.messages.push({ role: "tool", toolName: call.name, content: result });
+          onEvent?.({ type: "tool_result", name: call.name, result: skill ? `Loaded skill: ${skill.name}` : result });
           continue;
         }
+        hasRealToolCall = true;
         let result: string;
         try {
           result = await deps.callTool(call.serverId, call.name, call.args);
@@ -122,6 +131,13 @@ export async function runTurn(
           toolName: call.name,
           content: `Result of ${call.name}(${JSON.stringify(call.args)}):\n${result}`,
         });
+        onEvent?.({ type: "tool_result", name: call.name, result });
+      }
+      if (hasRealToolCall) {
+        hop++;
+      } else {
+        skillOnlyRounds++;
+        if (skillOnlyRounds >= maxSkillOnlyRounds) break;
       }
       continue;
     }
