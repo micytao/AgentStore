@@ -228,11 +228,31 @@ export function OpenShellDiagram() {
   const downloadPng = useCallback(async () => {
     if (!captureRef.current) return;
     const { toPng } = await import("html-to-image");
-    const dataUrl = await toPng(captureRef.current, { pixelRatio: 2 });
-    const link = document.createElement("a");
-    link.download = "openshell-architecture.png";
-    link.href = dataUrl;
-    link.click();
+
+    const wrapper = document.createElement("div");
+    wrapper.style.cssText = "position:absolute;left:-9999px;top:0;width:max-content;overflow:visible;";
+    document.body.appendChild(wrapper);
+
+    const clone = captureRef.current.cloneNode(true) as HTMLElement;
+    clone.style.width = "max-content";
+    clone.style.overflow = "visible";
+    wrapper.appendChild(clone);
+
+    await new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r())));
+
+    try {
+      const dataUrl = await toPng(clone, {
+        pixelRatio: 2,
+        width: clone.scrollWidth,
+        height: clone.scrollHeight,
+      });
+      const link = document.createElement("a");
+      link.download = "openshell-architecture.png";
+      link.href = dataUrl;
+      link.click();
+    } finally {
+      document.body.removeChild(wrapper);
+    }
   }, []);
 
   return (
