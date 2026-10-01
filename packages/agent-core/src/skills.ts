@@ -31,35 +31,6 @@ export const LOAD_SKILL_TOOL: ModelTool = {
   },
 };
 
-/**
- * Threshold for inlining skill instructions directly into the system prompt
- * instead of using progressive disclosure (the `load_skill` tool). When the
- * listing has this many skills or fewer, every skill's full instructions are
- * baked into the prompt — the model can answer in a single LLM call with no
- * skill-loading hops. Above this threshold, the model sees a short menu and
- * must call `load_skill` on demand (saves prompt tokens at the cost of extra
- * LLM round-trips). Set high for demo/prototype use where response speed
- * matters more than token cost.
- */
-export const INLINE_SKILLS_THRESHOLD = 4;
-
-/** Returns true when skills should be inlined into the system prompt rather
- * than offered via the `load_skill` progressive-disclosure tool. */
-export function shouldInlineSkills(skills: Skill[]): boolean {
-  return skills.length > 0 && skills.length <= INLINE_SKILLS_THRESHOLD;
-}
-
-/** Full skill instructions block for inlining into the system prompt. */
-function inlinedSkillsBlock(skills: Skill[]): string {
-  const blocks = skills.map(
-    (s) => `## Skill: ${s.name}\n\n${s.instructions}`
-  );
-  return [
-    "The following skills are loaded and available. Follow their instructions when the user's request matches. Do NOT call the load_skill tool — all skill instructions are already provided below.",
-    ...blocks,
-  ].join("\n\n");
-}
-
 /** Menu text listing each bound skill's id/name/description — this is what
  * actually sits in the system prompt, instead of every skill's full body. */
 export function skillsMenu(skills: Skill[]): string {
@@ -71,16 +42,12 @@ export function skillsMenu(skills: Skill[]): string {
   ].join("\n");
 }
 
-/** Persona intro lines + skills (inlined or menu), joined the same way
+/** Persona intro lines + the skills menu, joined the same way
  * drafting.ts's old systemPromptFor() joined its parts. */
 export function buildSystemPrompt(introLines: string[], skills: Skill[]): string {
   const parts = [...introLines];
-  if (shouldInlineSkills(skills)) {
-    parts.push(inlinedSkillsBlock(skills));
-  } else {
-    const menu = skillsMenu(skills);
-    if (menu) parts.push(menu);
-  }
+  const menu = skillsMenu(skills);
+  if (menu) parts.push(menu);
   return parts.join("\n\n");
 }
 

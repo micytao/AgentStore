@@ -4,6 +4,7 @@ import { callProvider, callProviderStream, HOP_LIMIT_FALLBACK_MESSAGE, runTurn, 
 import { chatPageHtml } from "./chatPage";
 import { loadConfig, port } from "./config";
 import { logError, logInfo, logWarn } from "./log";
+import { BUILTINS_SERVER_ID, builtinToolDescriptors, callBuiltinTool } from "./builtinTools";
 import { callTool, connectConfiguredServers, listTools } from "./mcpTools";
 import { getOrCreateSession, setCookieHeader, touchSession } from "./sessionStore";
 
@@ -97,7 +98,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
 
     const config = loadConfig();
     const session = getOrCreateSession(req.headers.cookie);
-    const tools = listTools();
+    const tools = [...builtinToolDescriptors, ...listTools()];
     const sid = shortId(session.id);
     const startedAt = Date.now();
     logInfo("Turn started", { session: sid, message: truncate(message, 200) });
@@ -120,7 +121,10 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
       const reply = await runTurn(
         {
           callProvider: (opts) => callProvider(config.provider, opts),
-          callTool,
+          callTool: (serverId, name, args) =>
+            serverId === BUILTINS_SERVER_ID
+              ? callBuiltinTool(name, args)
+              : callTool(serverId, name, args),
           streamProvider: (opts, onDelta) => callProviderStream(config.provider, opts, onDelta),
         },
         config.introLines,
@@ -192,6 +196,7 @@ process.on("unhandledRejection", (reason) => {
 async function main(): Promise<void> {
   const config = loadConfig();
   await connectConfiguredServers(config.mcpServers);
+  logInfo("Built-in tools registered", { tools: builtinToolDescriptors.map((t) => t.name) });
   server.listen(port(), () => {
     logInfo(`"${config.listingName}" listening`, { port: port(), skills: config.skills.length });
   });

@@ -15,12 +15,10 @@ export {
 } from "./mcpClient";
 
 export {
-  INLINE_SKILLS_THRESHOLD,
   LOAD_SKILL_TOOL,
   LOAD_SKILL_TOOL_NAME,
   buildSystemPrompt,
   findSkill,
-  shouldInlineSkills,
   skillsMenu,
   visibleTools,
 } from "./skills";

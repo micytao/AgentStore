@@ -1,6 +1,6 @@
 import type { ModelMessage, ModelToolCall, ModelTool, Skill } from "@agentstore/shared";
 import type { CallOptions } from "./providers";
-import { LOAD_SKILL_TOOL, LOAD_SKILL_TOOL_NAME, buildSystemPrompt, findSkill, shouldInlineSkills, visibleTools } from "./skills";
+import { LOAD_SKILL_TOOL, LOAD_SKILL_TOOL_NAME, buildSystemPrompt, findSkill, visibleTools } from "./skills";
 
 /**
  * The tool-hop loop, extracted from apps/web/src/server/drafting.ts's
@@ -82,16 +82,8 @@ export async function runTurn(
 ): Promise<string> {
   const maxHops = opts?.maxHops ?? DEFAULT_MAX_HOPS;
   const onEvent = opts?.onEvent;
-  const inlined = shouldInlineSkills(skills);
   const systemPrompt = buildSystemPrompt(introLines, skills);
   state.messages.push({ role: "user", content: userMessage });
-
-  // When skills are inlined into the system prompt, pre-activate all of
-  // them so visibleTools() unlocks every claimed MCP tool from the start
-  // and the model never needs to call load_skill.
-  if (inlined) {
-    for (const skill of skills) state.activeSkillIds.add(skill.id);
-  }
 
   // Skill-only rounds are free (don't increment `hop`), but we cap them
   // separately so a misbehaving model can't loop forever loading skills.
@@ -107,7 +99,7 @@ export async function runTurn(
       cachedScopedTools = visibleTools(tools, skills, state.activeSkillIds);
       cachedSkillCount = state.activeSkillIds.size;
     }
-    const toolsForModel = (!inlined && skills.length > 0)
+    const toolsForModel = skills.length > 0
       ? [...cachedScopedTools, LOAD_SKILL_TOOL]
       : cachedScopedTools;
     const callOpts: CallOptions = {
