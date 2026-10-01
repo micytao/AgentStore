@@ -11,10 +11,12 @@
   "dependencies": {
     "@agentstore/agent-core": "*",
     "@agentstore/shared": "*",
-    "@modelcontextprotocol/sdk": "^1.30.0"
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "turndown": "^7.2.4"
   },
   "devDependencies": {
     "@types/node": "^22.15.18",
+    "@types/turndown": "^5.0.6",
     "esbuild": "^0.28.2",
     "typescript": "^5.8.3"
   }

@@ -177,11 +177,28 @@ export function chatPageHtml(listingName: string): string {
   }
   .reasoning .step-result::-webkit-scrollbar { width: 5px; }
   .reasoning .step-result::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.1); border-radius: 999px; }
+  /* Download buttons */
+  .dl-btn {
+    border: none; cursor: pointer; background: none; padding: 0.3rem;
+    color: #6b7094; border-radius: 0.4rem; display: inline-flex; align-items: center;
+    transition: color 0.15s, background 0.15s;
+  }
+  .dl-btn:hover { color: #9af6de; background: rgba(154, 246, 222, 0.1); }
+  .dl-btn svg { width: 1rem; height: 1rem; fill: currentColor; }
+  .msg.assistant { position: relative; }
+  .msg.assistant .dl-btn.dl-response {
+    position: absolute; top: 0.5rem; right: 0.5rem;
+    opacity: 0; transition: opacity 0.15s;
+  }
+  .msg.assistant:hover .dl-btn.dl-response,
+  .msg.assistant .dl-btn.dl-response:focus { opacity: 1; }
+  header .dl-btn { margin-left: auto; }
+  header .dl-btn span { font-size: 0.78rem; font-weight: 600; margin-left: 0.3rem; }
 </style>
 </head>
 <body>
   <div class="aurora"></div>
-  <header><span class="dot"></span><span class="title">${title}</span></header>
+  <header><span class="dot"></span><span class="title">${title}</span><button class="dl-btn" id="dl-chat" title="Download full chat as Markdown"><svg viewBox="0 0 16 16"><path d="M8 1v9.5m0 0L4.5 7M8 10.5L11.5 7M2 13h12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg><span>Export .md</span></button></header>
   <div id="log"><div class="empty">Say hello to get started.</div></div>
   <form id="form">
     <textarea id="input" placeholder="Message ${title}…" rows="1"></textarea>
@@ -216,6 +233,32 @@ const clientScript = String.raw`
   const form = document.getElementById("form");
   const input = document.getElementById("input");
   const send = document.getElementById("send");
+  const dlChat = document.getElementById("dl-chat");
+  var chatHistory = [];
+  var listingName = document.querySelector("header .title").textContent || "Chat";
+
+  var DL_SVG = '<svg viewBox="0 0 16 16"><path d="M8 1v9.5m0 0L4.5 7M8 10.5L11.5 7M2 13h12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>';
+
+  function downloadMd(filename, content) {
+    var blob = new Blob([content], { type: "text/markdown;charset=utf-8" });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    a.href = url; a.download = filename; a.style.display = "none";
+    document.body.appendChild(a); a.click();
+    setTimeout(function () { URL.revokeObjectURL(url); a.remove(); }, 100);
+  }
+
+  dlChat.addEventListener("click", function () {
+    if (chatHistory.length === 0) return;
+    var lines = ["# " + listingName + " -- Chat Export", ""];
+    chatHistory.forEach(function (entry, i) {
+      if (i > 0) lines.push("---", "");
+      lines.push("## " + (entry.role === "user" ? "User" : "Assistant"), "");
+      lines.push(entry.text, "");
+    });
+    var ts = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+    downloadMd(listingName.replace(/\s+/g, "-") + "-" + ts + ".md", lines.join("\n"));
+  });
 
   function escapeHtml(s) {
     return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -341,6 +384,7 @@ const clientScript = String.raw`
     div.textContent = text;
     log.appendChild(div);
     log.scrollTop = log.scrollHeight;
+    chatHistory.push({ role: "user", text: text });
     return div;
   }
 
@@ -445,6 +489,18 @@ const clientScript = String.raw`
         rawText = finalReply;
         renderContent();
       }
+      chatHistory.push({ role: "assistant", text: rawText });
+      var dlBtn = document.createElement("button");
+      dlBtn.className = "dl-btn dl-response";
+      dlBtn.title = "Download this response as Markdown";
+      dlBtn.innerHTML = DL_SVG;
+      var savedRaw = rawText;
+      dlBtn.addEventListener("click", function (ev) {
+        ev.stopPropagation();
+        var ts = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+        downloadMd("response-" + ts + ".md", savedRaw);
+      });
+      pending.el.appendChild(dlBtn);
       if (toolSteps.length > 0) {
         var details = document.createElement("details");
         details.className = "reasoning";
