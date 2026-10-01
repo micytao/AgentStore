@@ -87,7 +87,7 @@ export async function runTurn(
 
   // Skill-only rounds are free (don't increment `hop`), but we cap them
   // separately so a misbehaving model can't loop forever loading skills.
-  const maxSkillOnlyRounds = skills.length * 2 + 2;
+  const maxSkillOnlyRounds = skills.length + 4;
   let skillOnlyRounds = 0;
 
   for (let hop = 0; hop < maxHops; ) {
@@ -111,9 +111,14 @@ export async function runTurn(
         if (call.name === LOAD_SKILL_TOOL_NAME) {
           const skillId = String((call.args as Record<string, unknown> | undefined)?.skill_id ?? "");
           const skill = findSkill(skills, skillId);
-          const result = skill
-            ? `Skill "${skill.name}" loaded:\n${skill.instructions}`
-            : `No skill found with id "${skillId}". Available ids: ${skills.map((s) => s.id).join(", ")}`;
+          let result: string;
+          if (skill && state.activeSkillIds.has(skill.id)) {
+            result = `Skill "${skill.name}" is already loaded — its instructions are already in context above. Do NOT call load_skill for this skill again. Proceed to answer the user's question using the instructions you already have.`;
+          } else if (skill) {
+            result = `Skill "${skill.name}" loaded:\n${skill.instructions}`;
+          } else {
+            result = `No skill found with id "${skillId}". Available ids: ${skills.map((s) => s.id).join(", ")}`;
+          }
           if (skill) state.activeSkillIds.add(skill.id);
           state.messages.push({ role: "tool", toolName: call.name, content: result });
           onEvent?.({ type: "tool_result", name: call.name, result: skill ? `Loaded skill: ${skill.name}` : result });

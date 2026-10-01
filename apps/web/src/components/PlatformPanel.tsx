@@ -1263,8 +1263,9 @@ export function PlatformPanel() {
             </Flex>
           </Tab>
 
-          <Tab eventKey="activity" title={<TabTitleText>Activity</TabTitleText>}>
-            <Flex direction={{ default: "column" }} spaceItems={{ default: "spaceItemsLg" }} style={{ marginTop: "1rem" }}>
+        </Tabs>
+      </FlexItem>
+
       <FlexItem>
         <Card>
           <CardTitle>
@@ -1312,44 +1313,44 @@ export function PlatformPanel() {
       <FlexItem>
         <Card>
           <CardTitle>
-                    <IconTitle icon={OpenshiftIcon}>Deployed agents on OpenShift</IconTitle>
+            <IconTitle icon={OpenshiftIcon}>Deployed agents on OpenShift</IconTitle>
           </CardTitle>
           <CardBody>
-                    <Content component={ContentVariants.small} style={{ marginBottom: "0.5rem" }}>
-                      Generic-chat agent Deployments only — the OpenShell gateway installs via a
-                      separate Helm chart into its own namespace and isn&apos;t shown here; see its
-                      status per-listing in the Catalog instead.
-                    </Content>
-                    {status.openshift.deployments.length === 0 ? (
+            <Content component={ContentVariants.small} style={{ marginBottom: "0.5rem" }}>
+              Generic-chat agent Deployments only — the OpenShell gateway installs via a
+              separate Helm chart into its own namespace and isn&apos;t shown here; see its
+              status per-listing in the Catalog instead.
+            </Content>
+            {status.openshift.deployments.length === 0 ? (
               <Content component={ContentVariants.small}>
-                        No agent Deployments in {status.settings.openshiftNamespace || "agent-workloads"}.
+                No agent Deployments in {status.settings.openshiftNamespace || "agent-workloads"}.
               </Content>
             ) : (
-                      <Table aria-label="Deployed agents on OpenShift" variant="compact">
+              <Table aria-label="Deployed agents on OpenShift" variant="compact">
                 <Thead>
                   <Tr>
-                            <Th>Deployment</Th>
-                            <Th>Listing</Th>
-                            <Th>Replicas</Th>
-                            <Th>Created</Th>
+                    <Th>Deployment</Th>
+                    <Th>Listing</Th>
+                    <Th>Replicas</Th>
+                    <Th>Created</Th>
                   </Tr>
                 </Thead>
                 <Tbody>
-                          {status.openshift.deployments.map((d) => {
-                            const ready = d.replicas > 0 && d.readyReplicas >= d.replicas;
-                            const statusColor: "green" | "grey" = ready ? "green" : "grey";
+                  {status.openshift.deployments.map((d) => {
+                    const ready = d.replicas > 0 && d.readyReplicas >= d.replicas;
+                    const statusColor: "green" | "grey" = ready ? "green" : "grey";
                     return (
-                              <Tr key={`${d.namespace}/${d.name}`}>
-                                <Td dataLabel="Deployment">{d.name}</Td>
-                                <Td dataLabel="Listing">{d.listingId ?? "—"}</Td>
-                                <Td dataLabel="Replicas">
+                      <Tr key={`${d.namespace}/${d.name}`}>
+                        <Td dataLabel="Deployment">{d.name}</Td>
+                        <Td dataLabel="Listing">{d.listingId ?? "—"}</Td>
+                        <Td dataLabel="Replicas">
                           <Label color={statusColor} isCompact>
-                                    {d.readyReplicas}/{d.replicas} ready
+                            {d.readyReplicas}/{d.replicas} ready
                           </Label>
                         </Td>
-                                <Td dataLabel="Created">
-                                  {d.creationTimestamp ? new Date(d.creationTimestamp).toLocaleString() : ""}
-                                </Td>
+                        <Td dataLabel="Created">
+                          {d.creationTimestamp ? new Date(d.creationTimestamp).toLocaleString() : ""}
+                        </Td>
                       </Tr>
                     );
                   })}
@@ -1358,10 +1359,6 @@ export function PlatformPanel() {
             )}
           </CardBody>
         </Card>
-              </FlexItem>
-            </Flex>
-          </Tab>
-        </Tabs>
       </FlexItem>
     </Flex>
   );
