@@ -1,6 +1,6 @@
 import type { ModelMessage, ModelToolCall, ModelTool, Skill } from "@agentstore/shared";
 import type { CallOptions } from "./providers";
-import { LOAD_SKILL_TOOL, LOAD_SKILL_TOOL_NAME, buildSystemPrompt, findSkill, visibleTools } from "./skills";
+import { LOAD_SKILL_TOOL, LOAD_SKILL_TOOL_NAME, buildSystemPrompt, findSkill, shouldInlineSkills, visibleTools } from "./skills";
 
 /**
  * The tool-hop loop, extracted from apps/web/src/server/drafting.ts's
@@ -82,17 +82,34 @@ export async function runTurn(
 ): Promise<string> {
   const maxHops = opts?.maxHops ?? DEFAULT_MAX_HOPS;
   const onEvent = opts?.onEvent;
+  const inlined = shouldInlineSkills(skills);
   const systemPrompt = buildSystemPrompt(introLines, skills);
   state.messages.push({ role: "user", content: userMessage });
+
+  // When skills are inlined into the system prompt, pre-activate all of
+  // them so visibleTools() unlocks every claimed MCP tool from the start
+  // and the model never needs to call load_skill.
+  if (inlined) {
+    for (const skill of skills) state.activeSkillIds.add(skill.id);
+  }
 
   // Skill-only rounds are free (don't increment `hop`), but we cap them
   // separately so a misbehaving model can't loop forever loading skills.
   const maxSkillOnlyRounds = skills.length + 4;
   let skillOnlyRounds = 0;
 
+  // Cache visibleTools — only recompute when activeSkillIds changes.
+  let cachedSkillCount = state.activeSkillIds.size;
+  let cachedScopedTools = visibleTools(tools, skills, state.activeSkillIds);
+
   for (let hop = 0; hop < maxHops; ) {
-    const scopedTools = visibleTools(tools, skills, state.activeSkillIds);
-    const toolsForModel = skills.length > 0 ? [...scopedTools, LOAD_SKILL_TOOL] : scopedTools;
+    if (state.activeSkillIds.size !== cachedSkillCount) {
+      cachedScopedTools = visibleTools(tools, skills, state.activeSkillIds);
+      cachedSkillCount = state.activeSkillIds.size;
+    }
+    const toolsForModel = (!inlined && skills.length > 0)
+      ? [...cachedScopedTools, LOAD_SKILL_TOOL]
+      : cachedScopedTools;
     const callOpts: CallOptions = {
       system: systemPrompt,
       messages: state.messages,
@@ -105,40 +122,61 @@ export async function runTurn(
         : await deps.callProvider(callOpts);
 
     if (response.toolCalls && response.toolCalls.length > 0) {
-      let hasRealToolCall = false;
+      // Separate skill loads (local, sync) from real MCP tool calls so we
+      // can resolve skills first (they may unlock MCP tools via allowedTools)
+      // and then dispatch all real MCP calls in parallel.
+      const skillCalls: ModelToolCall[] = [];
+      const mcpCalls: ModelToolCall[] = [];
       for (const call of response.toolCalls) {
         onEvent?.({ type: "tool_call", name: call.name });
         if (call.name === LOAD_SKILL_TOOL_NAME) {
-          const skillId = String((call.args as Record<string, unknown> | undefined)?.skill_id ?? "");
-          const skill = findSkill(skills, skillId);
-          let result: string;
-          if (skill && state.activeSkillIds.has(skill.id)) {
-            result = `Skill "${skill.name}" is already loaded — its instructions are already in context above. Do NOT call load_skill for this skill again. Proceed to answer the user's question using the instructions you already have.`;
-          } else if (skill) {
-            result = `Skill "${skill.name}" loaded:\n${skill.instructions}`;
-          } else {
-            result = `No skill found with id "${skillId}". Available ids: ${skills.map((s) => s.id).join(", ")}`;
-          }
-          if (skill) state.activeSkillIds.add(skill.id);
-          state.messages.push({ role: "tool", toolName: call.name, content: result });
-          onEvent?.({ type: "tool_result", name: call.name, result: skill ? `Loaded skill: ${skill.name}` : result });
-          continue;
+          skillCalls.push(call);
+        } else {
+          mcpCalls.push(call);
         }
-        hasRealToolCall = true;
-        let result: string;
-        try {
-          result = await deps.callTool(call.serverId, call.name, call.args);
-        } catch (err) {
-          result = `Tool call failed: ${err instanceof Error ? err.message : String(err)}`;
-        }
-        state.messages.push({
-          role: "tool",
-          toolName: call.name,
-          content: `Result of ${call.name}(${JSON.stringify(call.args)}):\n${result}`,
-        });
-        onEvent?.({ type: "tool_result", name: call.name, result });
       }
-      if (hasRealToolCall) {
+
+      // Resolve skill loads first (local, no network).
+      for (const call of skillCalls) {
+        const skillId = String((call.args as Record<string, unknown> | undefined)?.skill_id ?? "");
+        const skill = findSkill(skills, skillId);
+        let result: string;
+        if (skill && state.activeSkillIds.has(skill.id)) {
+          result = `Skill "${skill.name}" is already loaded — its instructions are already in context above. Do NOT call load_skill for this skill again. Proceed to answer the user's question using the instructions you already have.`;
+        } else if (skill) {
+          result = `Skill "${skill.name}" loaded:\n${skill.instructions}`;
+        } else {
+          result = `No skill found with id "${skillId}". Available ids: ${skills.map((s) => s.id).join(", ")}`;
+        }
+        if (skill) state.activeSkillIds.add(skill.id);
+        state.messages.push({ role: "tool", toolName: call.name, content: result });
+        onEvent?.({ type: "tool_result", name: call.name, result: skill ? `Loaded skill: ${skill.name}` : result });
+      }
+
+      // Dispatch real MCP tool calls in parallel (latency = max, not sum).
+      if (mcpCalls.length > 0) {
+        const results = await Promise.all(
+          mcpCalls.map(async (call) => {
+            try {
+              return await deps.callTool(call.serverId, call.name, call.args);
+            } catch (err) {
+              return `Tool call failed: ${err instanceof Error ? err.message : String(err)}`;
+            }
+          })
+        );
+        for (let i = 0; i < mcpCalls.length; i++) {
+          const call = mcpCalls[i];
+          const result = results[i];
+          state.messages.push({
+            role: "tool",
+            toolName: call.name,
+            content: `Result of ${call.name}(${JSON.stringify(call.args)}):\n${result}`,
+          });
+          onEvent?.({ type: "tool_result", name: call.name, result });
+        }
+      }
+
+      if (mcpCalls.length > 0) {
         hop++;
       } else {
         skillOnlyRounds++;
