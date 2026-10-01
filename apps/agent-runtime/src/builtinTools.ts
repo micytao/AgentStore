@@ -64,7 +64,7 @@ async function getCveById(args: Record<string, unknown>): Promise<string> {
 async function listAdvisoriesByCve(args: Record<string, unknown>): Promise<string> {
   const cveId = String(args.cve_id ?? "");
   if (!cveId) return "Error: cve_id is required (e.g. CVE-2024-1234)";
-  const url = `https://access.redhat.com/hydra/rest/securitydata/cvrf.json?cve=${encodeURIComponent(cveId)}`;
+  const url = `https://access.redhat.com/hydra/rest/securitydata/cve.json?ids=${encodeURIComponent(cveId)}`;
   const startedAt = Date.now();
   try {
     const res = await fetchWithTimeout(url);
