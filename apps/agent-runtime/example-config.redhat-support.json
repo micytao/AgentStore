@@ -15,8 +15,6 @@
       "allowedTools": [
         "get_cve_by_id",
         "list_advisories_by_cve",
-        "get_errata_by_id",
-        "list_advisory_packages",
         "web_fetch"
       ],
       "source": "built-in"
