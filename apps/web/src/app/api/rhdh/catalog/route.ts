@@ -25,8 +25,13 @@ export async function GET() {
   );
 
   // Resolve the external AgentStore URL for links end users click in RHDH.
+  // On the deployed instance, AGENTSTORE_ROUTE_URL is injected by the
+  // deploy manifest; locally, fall back to platform settings.
   const settings = getPlatformSettings();
-  const agentStoreBaseUrl = settings.agentstoreDeploy?.routeUrl ?? "";
+  const agentStoreBaseUrl =
+    process.env.AGENTSTORE_ROUTE_URL
+    || settings.agentstoreDeploy?.routeUrl
+    || "";
 
   const systemEntity = `apiVersion: backstage.io/v1alpha1
 kind: System

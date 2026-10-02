@@ -62,14 +62,28 @@ function parseManifestDocs(file: string): Record<string, unknown>[] {
 function getAgentStoreManifestDocs(image: string): Record<string, unknown>[] {
   const file = resolveDeployFile("deploy/openshift/agentstore.yaml");
   const docs = parseManifestDocs(file);
+
+  // Derive the external Route URL so the deployed pod can include it
+  // in RHDH catalog links.  The Route follows the standard pattern
+  // <name>-<namespace>.apps.<cluster-domain>.
+  const settings = getPlatformSettings();
+  const routeUrl = settings.agentstoreDeploy?.routeUrl ?? "";
+
   for (const doc of docs) {
     if (doc.kind === "Deployment") {
       const spec = doc.spec as
-        | { template?: { spec?: { containers?: Array<{ image?: string }> } } }
+        | { template?: { spec?: { containers?: Array<{ image?: string; env?: Array<{ name: string; value: string }> }> } } }
         | undefined;
       const container = spec?.template?.spec?.containers?.[0];
       if (container) {
         container.image = image;
+        // Inject the external Route URL so /api/rhdh/catalog can build
+        // clickable links for RHDH component pages.
+        if (routeUrl) {
+          const envList = container.env ?? [];
+          envList.push({ name: "AGENTSTORE_ROUTE_URL", value: routeUrl });
+          container.env = envList;
+        }
       }
     }
   }
