@@ -35,8 +35,8 @@ What this repo is meant to keep:
 
 What's real, beyond the facade:
 
-- **AAP provisioner.** `packages/engine-ansible` launches AAP job templates when Admin → Platform + `AAP_TOKEN` are set. Otherwise it runs a labeled simulated AAP job — FakeEngine is no longer the business path.
-- **OpenShift watch.** The console can list/get/delete Jobs in `agent-workloads` with `OPENSHIFT_TOKEN`. AAP's playbook (`ansible/provision-agent.yml`) is what creates them.
+- **AAP provisioner.** `packages/engine-ansible` launches AAP job templates when Admin → Platform + `AAP_TOKEN` are set. Otherwise it runs a labeled simulated AAP job.
+- **OpenShift watch.** The console can list/get/delete Deployments in `agent-workloads` with `OPENSHIFT_TOKEN`. AAP's playbook (`ansible/provision-generic-agent.yml`) is what creates them.
 - Admin **Platform** tab: connect/test AAP and prod OpenShift, bind job templates, deep-link to both consoles.
 - Admin **Providers** tab: real vendor/MaaS calls for Autonomous drafts; canned fallback if unset.
 - Admin **MCP** tab: real MCP client (`@modelcontextprotocol/sdk`).
