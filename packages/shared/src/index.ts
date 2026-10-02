@@ -632,6 +632,14 @@ export const SECRET_SLOTS: SecretSlot[] = [
     usedBy: "engine-ansible adapter / Platform portal",
     group: "platform",
   },
+  {
+    key: "AGENTSTORE_SERVICE_TOKEN",
+    label: "RHDH service-to-service token",
+    description:
+      "Shared secret that Red Hat Developer Hub's proxy sends in the X-AgentStore-Token header for service-to-service authentication. When set, incoming requests bearing this token bypass the normal cookie-based admin check.",
+    usedBy: "RHDH proxy → AgentStore API (catalog-sync, listings)",
+    group: "platform",
+  },
 ];
 
 // --- Model providers -----------------------------------------------------

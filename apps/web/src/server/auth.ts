@@ -14,3 +14,26 @@ import { NextResponse } from "next/server";
 export function requireAdmin(_request: Request): NextResponse | null {
   return null;
 }
+
+/**
+ * Validates the X-AgentStore-Token header for service-to-service calls
+ * (e.g. from the Red Hat Developer Hub proxy).  Returns null when the
+ * token matches AGENTSTORE_SERVICE_TOKEN, or a 401 NextResponse otherwise.
+ *
+ * Unlike requireAdmin() this is **not** a no-op — it is only used on the
+ * RHDH-facing routes that are exposed without a browser session (e.g.
+ * /api/rhdh/catalog-sync).  If AGENTSTORE_SERVICE_TOKEN is unset the
+ * check is skipped (open access, same as the rest of the demo).
+ */
+export function requireServiceToken(request: Request): NextResponse | null {
+  const expected = process.env.AGENTSTORE_SERVICE_TOKEN;
+  if (!expected) return null; // not configured → open access (demo mode)
+
+  const provided = request.headers.get("x-agentstore-token");
+  if (provided === expected) return null;
+
+  return NextResponse.json(
+    { error: "Missing or invalid X-AgentStore-Token header" },
+    { status: 401 }
+  );
+}

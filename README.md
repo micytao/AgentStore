@@ -87,6 +87,7 @@ SSO — see `docs/DEFERRED.md`). Tabs:
 | `SESSION_SECRET` | Signs the Demo/Admin cookie |
 | `SECRETS_ENCRYPTION_KEY` | Vault key (auto-generated if unset) |
 | `SECRETS_DATA_DIR` | Vault / providers / tasks / platform.json (default `.data`) |
+| `AGENTSTORE_SERVICE_TOKEN` | Shared secret for RHDH service-to-service auth (or Admin → Secrets) |
 
 ## Layout
 
@@ -99,6 +100,19 @@ SSO — see `docs/DEFERRED.md`). Tabs:
 - `catalog/listings` — built-in YAML catalog
 - `ansible/` — AAP Project (one-shot draft + persistent chat playbooks, both against `apps/agent-runtime`)
 - `deploy/openshift` — `agent-workloads` namespace/RBAC, `agent-sandbox-service.yaml`, OpenShell gateway Helm values
+- `rhdh/` — Red Hat Developer Hub integration (Software Templates, catalog entities, app-config)
 - `docs/DEMO.md` / `docs/DEFERRED.md`
+
+### Optional: Red Hat Developer Hub (self-service portal)
+
+The `rhdh/` directory contains an optional integration with
+[Red Hat Developer Hub](https://developers.redhat.com/products/rhdh).
+RHDH adds end-user self-service on top of AgentStore — team leads can
+discover agents in the Software Catalog, request new ones through a
+wizard, and trigger deploys, without needing admin access to AgentStore
+itself.
+
+AgentStore keeps working without RHDH.  See [rhdh/README.md](rhdh/README.md)
+for setup instructions and [docs/DEMO.md](docs/DEMO.md) for the walkthrough.
 
 See [docs/DEMO.md](docs/DEMO.md) for the walkthrough.

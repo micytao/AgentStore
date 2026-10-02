@@ -11,6 +11,7 @@ import {
   AutomationIcon,
   BookIcon,
   BrainIcon,
+  CatalogIcon,
   CloudIcon,
   CogsIcon,
   CubesIcon,
@@ -196,6 +197,7 @@ const TINT = {
   jobTemplates: "#005f60",
   autonomous: "#ec7a08",
   collaborative: "#c9190b",
+  rhdh: "#0066cc",
 } as const;
 
 export function ArchitectureDiagram() {
@@ -381,6 +383,20 @@ export function ArchitectureDiagram() {
           </Flex>
         </FlexItem>
       </Flex>
+
+      {/* Self-service portal (optional) — sits below the agent delivery
+       * columns as an alternative entry point for end users who discover
+       * and request agents through RHDH instead of the admin console. */}
+      <Connector />
+      <DiagramBox
+        icon={CatalogIcon}
+        title="Red Hat Developer Hub"
+        description="Self-service portal — end users discover agents, request new ones, and trigger deploys via Software Templates"
+        tint={TINT.rhdh}
+      />
+      <Content component={ContentVariants.small} style={{ textAlign: "center", fontStyle: "italic" }}>
+        Optional overlay — AgentStore works without it
+      </Content>
     </Flex>
   );
 }

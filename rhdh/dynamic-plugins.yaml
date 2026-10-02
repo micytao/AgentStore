@@ -1,0 +1,21 @@
+# ---------------------------------------------------------------------------
+# RHDH dynamic-plugins.yaml for the AgentStore integration
+# ---------------------------------------------------------------------------
+# Mount this as a ConfigMap and reference it via
+# spec.application.dynamicPluginsConfigMapName in the Backstage CR:
+#
+#   oc create configmap agentstore-rhdh-dynamic-plugins \
+#     --from-file=dynamic-plugins.yaml=rhdh/dynamic-plugins.yaml \
+#     -n rhdh
+#
+#   oc patch backstage developer-hub -n rhdh --type merge \
+#     --patch '{"spec":{"application":{"dynamicPluginsConfigMapName":"agentstore-rhdh-dynamic-plugins"}}}'
+# ---------------------------------------------------------------------------
+includes:
+  - dynamic-plugins.default.yaml
+
+plugins:
+  # Enable the HTTP request scaffolder action so Software Templates can
+  # call AgentStore's REST API through the RHDH proxy.
+  - package: './dynamic-plugins/dist/roadiehq-scaffolder-backend-module-http-request-dynamic'
+    disabled: false

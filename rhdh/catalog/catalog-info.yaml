@@ -1,0 +1,148 @@
+# ---------------------------------------------------------------------------
+# RHDH Software Catalog entities for AgentStore
+# ---------------------------------------------------------------------------
+# This file registers AgentStore itself as a System, and each of its
+# built-in agent listings as a Component (type: ai-agent).  Import it
+# into RHDH via catalog.locations in app-config.yaml.
+#
+# Custom agents created through the RHDH "Request a New AI Agent"
+# template, or through AgentStore's onboarding wizard, can be
+# auto-discovered via the /api/rhdh/catalog-sync endpoint instead of
+# being listed here statically.
+# ---------------------------------------------------------------------------
+
+# -- The AgentStore system itself ---------------------------------------
+apiVersion: backstage.io/v1alpha1
+kind: System
+metadata:
+  name: agentstore
+  title: Agent Store
+  description: >
+    Governed AI agent catalog.  Agents are onboarded via AgentStore,
+    provisioned by Ansible Automation Platform, and hosted on OpenShift.
+  tags:
+    - ai
+    - agents
+    - red-hat
+  links:
+    - url: https://agentstore.apps.CLUSTER_DOMAIN
+      title: Open AgentStore console
+spec:
+  owner: group:default/platform-team
+
+---
+# -- Red Hat SRE Engineer ------------------------------------------------
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: redhat-sre-engineer
+  title: Red Hat SRE Engineer
+  description: >
+    Chat agent for CVE impact analysis, remediation playbook generation,
+    and AAP-driven patching.  Built on Red Hat's rh-sre Agentic Skill
+    Pack (13 skills).  Deploy once, then share the link with your
+    SRE/ops team.
+  tags:
+    - ai-agent
+    - sre
+    - autonomous
+    - rh-sre
+  annotations:
+    agentstore.io/listing-id: redhat-sre-engineer
+    agentstore.io/runtime: generic-chat
+    agentstore.io/risk-tier: medium
+  links:
+    - url: https://agentstore.apps.CLUSTER_DOMAIN/catalog
+      title: Open in AgentStore
+spec:
+  type: ai-agent
+  lifecycle: production
+  owner: group:default/sre-team
+  system: agentstore
+
+---
+# -- Red Hat Customer Support -------------------------------------------
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: redhat-customer-support
+  title: Red Hat Customer Support
+  description: >
+    Chat agent for CVE lookups, product lifecycle questions, and
+    support-severity triage.  Built on Red Hat's rh-basic Agentic Skill
+    Pack.  Deploy once, then share the link with your support team.
+  tags:
+    - ai-agent
+    - support
+    - autonomous
+    - rh-basic
+  annotations:
+    agentstore.io/listing-id: redhat-customer-support
+    agentstore.io/runtime: generic-chat
+    agentstore.io/risk-tier: low
+  links:
+    - url: https://agentstore.apps.CLUSTER_DOMAIN/catalog
+      title: Open in AgentStore
+spec:
+  type: ai-agent
+  lifecycle: production
+  owner: group:default/support-team
+  system: agentstore
+
+---
+# -- Red Hat OpenShift Virtualization -----------------------------------
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: redhat-openshift-virtualization
+  title: Red Hat OpenShift Virtualization
+  description: >
+    Chat agent for VM lifecycle management, snapshots, cloning, and
+    rebalancing on OpenShift Virtualization.  Built on Red Hat's rh-virt
+    Agentic Skill Pack (10 skills).  Deploy once, then share the link
+    with your virtualization team.
+  tags:
+    - ai-agent
+    - virtualization
+    - autonomous
+    - rh-virt
+  annotations:
+    agentstore.io/listing-id: redhat-openshift-virtualization
+    agentstore.io/runtime: generic-chat
+    agentstore.io/risk-tier: high
+  links:
+    - url: https://agentstore.apps.CLUSTER_DOMAIN/catalog
+      title: Open in AgentStore
+spec:
+  type: ai-agent
+  lifecycle: production
+  owner: group:default/virt-team
+  system: agentstore
+
+---
+# -- OpenCode (Collaborative) ------------------------------------------
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: opencode
+  title: OpenCode
+  description: >
+    Open-source coding agent for refactors, tests, and pull request
+    drafts.  Launch an interactive session against a repo you choose.
+  tags:
+    - ai-agent
+    - coding
+    - collaborative
+    - openshell
+  annotations:
+    agentstore.io/listing-id: opencode
+    agentstore.io/runtime: openshell
+    agentstore.io/risk-tier: medium
+  links:
+    - url: https://agentstore.apps.CLUSTER_DOMAIN/catalog
+      title: Open in AgentStore
+spec:
+  type: ai-agent
+  lifecycle: production
+  owner: group:default/engineering-team
+  system: agentstore

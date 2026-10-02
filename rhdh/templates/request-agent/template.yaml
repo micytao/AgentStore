@@ -1,0 +1,148 @@
+# ---------------------------------------------------------------------------
+# RHDH Software Template: Request a New AI Agent
+# ---------------------------------------------------------------------------
+# Self-service wizard that lets an end user (team lead, developer, etc.)
+# request a new governed AI agent.  The scaffolder creates a draft listing
+# in AgentStore via the proxy and optionally registers it in the RHDH
+# Software Catalog.  An AgentStore admin still reviews, binds
+# providers/tools/skills, publishes, and deploys -- this template only
+# creates the *request*, not the running agent.
+#
+# Requires:
+#   - proxy endpoint "/agentstore" configured in app-config.yaml
+#   - http:backstage:request scaffolder action enabled (dynamic-plugins.yaml)
+# ---------------------------------------------------------------------------
+apiVersion: scaffolder.backstage.io/v1beta3
+kind: Template
+metadata:
+  name: request-new-agent
+  title: Request a New AI Agent
+  description: >
+    Submit a request for a new governed AI agent.  The request creates a
+    draft listing in AgentStore for admin review and approval.
+  tags:
+    - ai-agent
+    - agentstore
+    - self-service
+spec:
+  owner: group:default/platform-team
+  type: ai-agent
+
+  # -----------------------------------------------------------------------
+  # Wizard pages
+  # -----------------------------------------------------------------------
+  parameters:
+    # -- Page 1: required fields ----------------------------------------
+    - title: Agent details
+      required:
+        - agentName
+        - department
+        - description
+        - riskTier
+      properties:
+        agentName:
+          title: Agent name
+          type: string
+          description: A short, human-readable name for the agent.
+          ui:autofocus: true
+        department:
+          title: Department
+          type: string
+          description: Which department owns this agent?
+          enum:
+            - engineering
+            - security
+            - support
+            - data
+            - finance
+          enumNames:
+            - Engineering
+            - Security & Compliance
+            - Customer Support
+            - Data & Analytics
+            - Finance & HR
+        description:
+          title: Description
+          type: string
+          description: What the agent does and who it serves.
+          ui:widget: textarea
+          ui:options:
+            rows: 4
+        riskTier:
+          title: Risk tier
+          type: string
+          description: >
+            Classifies the blast radius of the agent.  Higher tiers require
+            more scrutiny from the AgentStore admin before publishing.
+          enum:
+            - low
+            - medium
+            - high
+          enumNames:
+            - Low
+            - Medium
+            - High
+
+    # -- Page 2: optional configuration ---------------------------------
+    - title: Optional configuration
+      properties:
+        category:
+          title: Category
+          type: string
+          description: >
+            Free-text sub-grouping within the department
+            (e.g. "Site reliability", "Billing").
+        runtime:
+          title: Runtime type
+          type: string
+          description: >
+            Autonomous agents run as a persistent chat (Deployment + Route).
+            Collaborative agents provide an interactive OpenShell sandbox.
+          enum:
+            - generic-chat
+            - openshell
+          enumNames:
+            - Autonomous (persistent chat)
+            - Collaborative (OpenShell sandbox)
+          default: generic-chat
+
+  # -----------------------------------------------------------------------
+  # Scaffolder steps
+  # -----------------------------------------------------------------------
+  steps:
+    # Step 1 -- Create the listing in AgentStore via the RHDH proxy.
+    # The proxy rewrites /api/proxy/agentstore/* -> ${AGENTSTORE_URL}/*
+    # and injects the X-AgentStore-Token header for service-to-service auth.
+    - id: create-listing
+      name: Create agent listing in AgentStore
+      action: http:backstage:request
+      input:
+        method: POST
+        path: /proxy/agentstore/admin/listings
+        headers:
+          content-type: application/json
+        body:
+          name: ${{ parameters.agentName }}
+          department: ${{ parameters.department }}
+          description: ${{ parameters.description }}
+          riskTier: ${{ parameters.riskTier }}
+          category: ${{ parameters.category }}
+          runtime: ${{ parameters.runtime }}
+          # New listing starts as a draft -- admin reviews before publishing
+          publish: false
+
+  # -----------------------------------------------------------------------
+  # Outputs -- shown on the scaffolder "Task completed" page
+  # -----------------------------------------------------------------------
+  output:
+    links:
+      - title: View draft listing in AgentStore
+        url: ${{ steps['create-listing'].output.body.agentStoreUrl }}
+    text:
+      - title: What happens next
+        content: >
+          Agent "${{ parameters.agentName }}" has been submitted as a
+          **draft** listing in AgentStore.  An admin will review the
+          request, bind the appropriate model provider, MCP tool servers,
+          and skills, then publish and deploy it.  Once deployed, it will
+          appear in the Software Catalog as a discoverable component.

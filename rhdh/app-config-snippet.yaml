@@ -1,0 +1,82 @@
+# ---------------------------------------------------------------------------
+# RHDH app-config.yaml snippet for the AgentStore integration
+# ---------------------------------------------------------------------------
+# Mount this as a ConfigMap in the RHDH namespace and reference it in the
+# Backstage CR:
+#
+#   oc create configmap agentstore-rhdh-app-config \
+#     --from-file=app-config.yaml=rhdh/app-config-snippet.yaml \
+#     -n rhdh
+#
+#   oc patch backstage developer-hub -n rhdh --type merge \
+#     --patch '{"spec":{"application":{"appConfig":{"configMaps":[{"name":"agentstore-rhdh-app-config"}]}}}}'
+#
+# Replace CLUSTER_DOMAIN with your cluster's apps domain (e.g.
+# apps.mycluster.example.com) and set the referenced env vars /
+# secrets before deploying.
+# ---------------------------------------------------------------------------
+
+# -- Portal branding -------------------------------------------------------
+app:
+  title: Agent Store - Self-Service Portal
+  baseUrl: https://developer-hub-rhdh.apps.CLUSTER_DOMAIN
+
+backend:
+  baseUrl: https://developer-hub-rhdh.apps.CLUSTER_DOMAIN
+  cors:
+    origin: https://developer-hub-rhdh.apps.CLUSTER_DOMAIN
+
+# -- Authentication --------------------------------------------------------
+# Guest access for demo / workshop use.  Replace with a real OIDC / RHSSO
+# provider for production.
+auth:
+  environment: development
+  providers:
+    guest:
+      dangerouslyAllowOutsideDevelopment: true
+
+# -- Proxy: route scaffolder HTTP calls to AgentStore ----------------------
+# The proxy plugin forwards /api/proxy/agentstore/* to the real AgentStore
+# API.  The scaffolder templates use http:backstage:request against this
+# proxy path, so RHDH never needs direct cluster networking to AgentStore --
+# just its Route URL.
+proxy:
+  endpoints:
+    '/agentstore':
+      target: ${AGENTSTORE_URL}   # e.g. https://agentstore.apps.CLUSTER_DOMAIN/api
+      changeOrigin: true
+      headers:
+        # Service-to-service auth token that AgentStore's requireAdmin()
+        # accepts as an alternative to the browser cookie.
+        X-AgentStore-Token: ${AGENTSTORE_SERVICE_TOKEN}
+
+# -- Catalog: import Software Templates + agent entities -------------------
+catalog:
+  rules:
+    - allow: [Component, Template, System, Group, Resource, Location]
+  locations:
+    # AgentStore system + built-in agent Components
+    - type: url
+      target: https://github.com/YOUR_ORG/AgentStore/blob/main/rhdh/catalog/catalog-info.yaml
+      rules:
+        - allow: [System, Component]
+
+    # Software Template: "Request a New AI Agent"
+    - type: url
+      target: https://github.com/YOUR_ORG/AgentStore/blob/main/rhdh/templates/request-agent/template.yaml
+      rules:
+        - allow: [Template]
+
+    # Software Template: "Deploy an Existing Agent"
+    - type: url
+      target: https://github.com/YOUR_ORG/AgentStore/blob/main/rhdh/templates/deploy-agent/template.yaml
+      rules:
+        - allow: [Template]
+
+    # (Optional) Dynamic catalog sync -- RHDH polls this URL periodically
+    # to auto-discover agents created outside these static locations.
+    # Requires the /api/rhdh/catalog-sync endpoint on AgentStore.
+    # - type: url
+    #   target: https://agentstore.apps.CLUSTER_DOMAIN/api/rhdh/catalog-sync
+    #   rules:
+    #     - allow: [Component]

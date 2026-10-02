@@ -84,7 +84,38 @@ Admin → Catalog → **+ Onboard new agent**. Engine type **Hosted agent API
 (AAP → OpenShift)**. Publish. Switch back to Demo; the listing is in the
 catalog. Launch it — it follows the same AAP path.
 
-## 8. Durability
+## 8. Optional: Red Hat Developer Hub (self-service portal)
+
+RHDH adds end-user self-service on top of AgentStore. Instead of asking an
+admin to onboard every agent, a team lead opens RHDH's **Self-service**
+page and fills in a wizard.
+
+**Prerequisite:** RHDH 1.10+ running on the same OpenShift cluster.  See
+[rhdh/README.md](../rhdh/README.md) for installation.
+
+1. Open the RHDH portal (its Route URL).
+2. Click **Self-service** in the sidebar.
+3. Two AgentStore templates are listed:
+   - **Request a New AI Agent** — creates a draft listing in AgentStore.
+   - **Deploy an Existing Agent** — triggers the AAP deploy for a published listing.
+4. Fill in the "Request" wizard: name, department, description, risk tier.
+   Click **Create**.
+5. Back in AgentStore (Admin → Catalog), the new draft listing appears.
+   Admin reviews, binds provider/tools/skills, publishes, and deploys.
+6. Once deployed, the agent appears in RHDH's **Software Catalog** as a
+   discoverable Component (type `ai-agent`).
+
+**Dynamic catalog sync:** AgentStore exposes `GET /api/rhdh/catalog-sync`
+which returns catalog-info YAML for every published agent.  Uncomment the
+matching `catalog.locations` entry in `rhdh/app-config-snippet.yaml` to
+have RHDH auto-discover agents without static YAML files.
+
+**Five Red Hat products, one story:**
+Red Hat Developer Hub (self-service) → AgentStore (admin control plane) →
+Ansible Automation Platform (provisioning) → OpenShift (runtime) →
+OpenShift AI / MaaS (model serving).
+
+## 9. Durability
 
 Restart `npm run dev`. Tasks, catalog overrides, custom listings, providers,
 MCP, skills, secrets, and Platform settings (`.data/platform.json`) survive.
