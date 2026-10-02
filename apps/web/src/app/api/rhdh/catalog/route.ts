@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { loadListings } from "@/server/catalog";
+import { getPlatformSettings } from "@/server/platform";
 import type { Listing } from "@agentstore/shared";
 
 export const dynamic = "force-dynamic";
@@ -23,6 +24,10 @@ export async function GET() {
     (l) => l.reviewStatus === "published" || l.reviewStatus === "in-review",
   );
 
+  // Resolve the external AgentStore URL for links end users click in RHDH.
+  const settings = getPlatformSettings();
+  const agentStoreBaseUrl = settings.agentstoreDeploy?.routeUrl ?? "";
+
   const systemEntity = `apiVersion: backstage.io/v1alpha1
 kind: System
 metadata:
@@ -34,11 +39,11 @@ metadata:
   tags:
     - ai
     - agents
-    - red-hat
+    - red-hat${agentStoreBaseUrl ? `\n  links:\n    - url: ${agentStoreBaseUrl}/catalog\n      title: Open AgentStore console` : ""}
 spec:
   owner: group:default/platform-team`;
 
-  const components = listings.map(listingToComponent);
+  const components = listings.map((l) => listingToComponent(l, agentStoreBaseUrl));
   const docs = [systemEntity, ...components].join("\n---\n");
 
   return new NextResponse(docs, {
@@ -66,11 +71,25 @@ function departmentToTeam(department: string): string {
   return map[department] ?? "platform-team";
 }
 
-function listingToComponent(listing: Listing): string {
+function listingToComponent(listing: Listing, baseUrl: string): string {
   const tags = ["ai-agent", runtimeTag(listing)];
   if (listing.category) {
     tags.push(listing.category.toLowerCase().replace(/\s+/g, "-"));
   }
+
+  // Build links section — "Open in AgentStore" always, plus the agent's
+  // own chat/session URL if it has been deployed.
+  const links: string[] = [];
+  if (baseUrl) {
+    links.push(`    - url: ${baseUrl}/catalog\n      title: Open in AgentStore`);
+  }
+  const agentUrl = listing.deployment?.routeUrl;
+  if (agentUrl) {
+    links.push(`    - url: ${agentUrl}\n      title: Launch Agent`);
+  }
+  const linksBlock = links.length > 0
+    ? `\n  links:\n${links.join("\n")}`
+    : "";
 
   return `apiVersion: backstage.io/v1alpha1
 kind: Component
@@ -84,7 +103,7 @@ ${tags.map((t) => `    - ${t}`).join("\n")}
     agentstore.io/listing-id: ${listing.id}
     agentstore.io/runtime: ${listing.runtime ?? "generic-chat"}
     agentstore.io/risk-tier: ${listing.riskTier}
-    agentstore.io/review-status: ${listing.reviewStatus}
+    agentstore.io/review-status: ${listing.reviewStatus}${linksBlock}
 spec:
   type: ai-agent
   lifecycle: ${listing.reviewStatus === "published" ? "production" : "experimental"}

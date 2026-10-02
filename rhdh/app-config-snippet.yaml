@@ -54,6 +54,9 @@ backend:
   baseUrl: https://backstage-developer-hub-rhdh.apps.CLUSTER_DOMAIN
   cors:
     origin: https://backstage-developer-hub-rhdh.apps.CLUSTER_DOMAIN
+  reading:
+    allow:
+      - host: agentstore.agentstore.svc:3000
 
 # -- Authentication --------------------------------------------------------
 # Guest access only for demo / workshop use.  Replace with a real OIDC /
