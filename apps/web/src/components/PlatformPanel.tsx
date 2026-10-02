@@ -53,12 +53,14 @@ import { SecretField } from "@/components/SecretField";
 import {
   createJobTemplates,
   fetchAgentRuntimeBuildStatus,
+  fetchAgentStoreDeployStatus,
   fetchEeBuildStatus,
   fetchJobTemplateBootstrapStatus,
   fetchPlatformStatus,
   fetchSecrets,
   registerExecutionEnvironment,
   startAgentRuntimeBuild,
+  startAgentStoreDeploy,
   startEeImageBuild,
   testPlatformConnection,
 } from "@/lib/api";
@@ -994,6 +996,206 @@ function AgentRuntimeCard({
   );
 }
 
+/** Human-readable description of the current deploy phase. */
+function agentStorePhaseDescription(deploy: import("@agentstore/shared").AgentStoreDeployStatus | undefined): string {
+  if (!deploy) return "";
+  if (deploy.status === "failed") return "Deploy failed.";
+  if (deploy.status === "running") return "AgentStore is running on the cluster.";
+  if (!deploy.image) {
+    switch (deploy.ocpPhase) {
+      case "New": return "Build queued — waiting for a builder pod…";
+      case "Pending": return "Builder pod is starting…";
+      case "Running": return "Building the container image (this may take a few minutes)…";
+      case "Complete": return "Image built — starting deploy…";
+      default: return "Starting the OpenShift build…";
+    }
+  }
+  return "Image ready — applying manifests and waiting for the pod to become ready (30–60s)…";
+}
+
+/** Maps the two-phase flow to a progress value out of 100. */
+function agentStoreProgressPercent(deploy: import("@agentstore/shared").AgentStoreDeployStatus | undefined): number {
+  if (!deploy) return 0;
+  if (deploy.status === "running") return 100;
+  if (deploy.status === "failed") return 100;
+  if (!deploy.image) {
+    switch (deploy.ocpPhase) {
+      case "New": return 10;
+      case "Pending": return 20;
+      case "Running": return 50;
+      case "Complete": return 75;
+      default: return 5;
+    }
+  }
+  return 85;
+}
+
+/** "AgentStore on OpenShift" — builds apps/web/Containerfile and deploys
+ * the console itself to the cluster. Same start/poll pattern as the
+ * Agent Sandbox Service card on the OpenShell tab. */
+function AgentStoreDeployCard({
+  settings,
+  onSettingsUpdate,
+}: {
+  settings: PlatformSettings;
+  onSettingsUpdate: (s: PlatformSettings) => void;
+}) {
+  const deploy = settings.agentstoreDeploy;
+  const running = deploy?.status === "deploying";
+  const done = deploy?.status === "running";
+  const failed = deploy?.status === "failed";
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (!running) return;
+    const id = setInterval(() => {
+      fetchAgentStoreDeployStatus().then(onSettingsUpdate).catch(console.error);
+    }, 4000);
+    return () => clearInterval(id);
+  }, [running, onSettingsUpdate]);
+
+  async function start() {
+    setBusy(true);
+    try {
+      onSettingsUpdate(await startAgentStoreDeploy());
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const phaseLabel = running
+    ? agentStorePhaseDescription(deploy)
+    : failed
+      ? "Failed"
+      : done
+        ? "Complete"
+        : "";
+
+  return (
+    <Card>
+      <CardTitle>
+        <Flex justifyContent={{ default: "justifyContentSpaceBetween" }} alignItems={{ default: "alignItemsCenter" }}>
+          <FlexItem>
+            <IconTitle icon={OpenshiftIcon}>AgentStore on OpenShift</IconTitle>
+          </FlexItem>
+          <FlexItem>
+            <Flex spaceItems={{ default: "spaceItemsSm" }} alignItems={{ default: "alignItemsCenter" }}>
+              {done && (
+                <FlexItem>
+                  <Label color="green" isCompact>Running</Label>
+                </FlexItem>
+              )}
+              <FlexItem>
+                <Button variant="secondary" isDisabled={busy || running} isLoading={running} onClick={() => void start()}>
+                  {running ? "Deploying" : done ? "Redeploy" : failed ? "Retry" : "Deploy"}
+                </Button>
+              </FlexItem>
+            </Flex>
+          </FlexItem>
+        </Flex>
+      </CardTitle>
+      <CardBody>
+        {!deploy && (
+          <Alert
+            variant="info"
+            isInline
+            isPlain
+            title="Deploy AgentStore to OpenShift to enable the Self-service Portal (Red Hat Developer Hub). RHDH proxies to AgentStore via the in-cluster Service URL — no external networking required."
+            style={{ marginBottom: "0.75rem" }}
+          />
+        )}
+        <Content component={ContentVariants.small}>
+          Build <code>apps/web/Containerfile</code> and deploy the AgentStore console to the{" "}
+          <code>agentstore</code> namespace on the connected OpenShift cluster.
+        </Content>
+
+        {/* Progress bar + phase description */}
+        {(running || done || failed) && (
+          <>
+            <Progress
+              value={agentStoreProgressPercent(deploy)}
+              title="Deploy progress"
+              label={phaseLabel}
+              variant={failed ? "danger" : done ? "success" : undefined}
+              measureLocation="inside"
+              style={{ marginTop: "0.75rem", maxWidth: "480px" }}
+            />
+            {running && (
+              <Content component={ContentVariants.small} style={{ marginTop: "0.25rem", fontStyle: "italic", color: "var(--pf-t--global--text--color--subtle)" }}>
+                {agentStorePhaseDescription(deploy)}
+              </Content>
+            )}
+          </>
+        )}
+
+        {/* Error detail */}
+        {failed && deploy?.error && (
+          <Alert variant="danger" isInline isPlain title={deploy.error} style={{ marginTop: "0.75rem" }} />
+        )}
+
+        {/* Status details once we have useful info */}
+        {deploy && (running || done || failed) && (
+          <DescriptionList isCompact isHorizontal style={{ marginTop: "0.75rem" }}>
+            {deploy.buildName && (
+              <DescriptionListGroup>
+                <DescriptionListTerm>Build</DescriptionListTerm>
+                <DescriptionListDescription>
+                  <code>{deploy.buildName}</code>
+                  {deploy.ocpPhase && (
+                    <Label isCompact style={{ marginLeft: "0.5rem" }}
+                      color={deploy.ocpPhase === "Complete" ? "green" : deploy.ocpPhase === "Failed" || deploy.ocpPhase === "Error" ? "red" : "grey"}>
+                      {deploy.ocpPhase}
+                    </Label>
+                  )}
+                </DescriptionListDescription>
+              </DescriptionListGroup>
+            )}
+            <DescriptionListGroup>
+              <DescriptionListTerm>Namespace</DescriptionListTerm>
+              <DescriptionListDescription><code>agentstore</code></DescriptionListDescription>
+            </DescriptionListGroup>
+            {deploy.image && (
+              <DescriptionListGroup>
+                <DescriptionListTerm>Image</DescriptionListTerm>
+                <DescriptionListDescription>
+                  <code style={{ fontSize: "0.8em", wordBreak: "break-all" }}>{deploy.image}</code>
+                </DescriptionListDescription>
+              </DescriptionListGroup>
+            )}
+            {deploy.routeUrl && (
+              <DescriptionListGroup>
+                <DescriptionListTerm>Route</DescriptionListTerm>
+                <DescriptionListDescription>
+                  <a href={deploy.routeUrl} target="_blank" rel="noreferrer">{deploy.routeUrl}</a>
+                </DescriptionListDescription>
+              </DescriptionListGroup>
+            )}
+            {deploy.updatedAt && (
+              <DescriptionListGroup>
+                <DescriptionListTerm>Last updated</DescriptionListTerm>
+                <DescriptionListDescription>{new Date(deploy.updatedAt).toLocaleString()}</DescriptionListDescription>
+              </DescriptionListGroup>
+            )}
+          </DescriptionList>
+        )}
+
+        {/* Next step hint */}
+        {done && (
+          <Alert
+            variant="success"
+            isInline
+            isPlain
+            title="AgentStore is running on the cluster. You can now install the Self-service Portal (Red Hat Developer Hub) from the sidebar."
+            style={{ marginTop: "0.75rem" }}
+          />
+        )}
+      </CardBody>
+    </Card>
+  );
+}
+
 export function PlatformPanel() {
   const [status, setStatus] = useState<PlatformStatus | null>(null);
   const [draft, setDraft] = useState<PlatformSettings | null>(null);
@@ -1130,7 +1332,8 @@ export function PlatformPanel() {
     if (
       next.aapBootstrap?.status !== "deploying" &&
       next.eeBuild?.status !== "deploying" &&
-      next.agentRuntimeBuild?.status !== "deploying"
+      next.agentRuntimeBuild?.status !== "deploying" &&
+      next.agentstoreDeploy?.status !== "deploying"
     )
       load();
   }
@@ -1359,6 +1562,13 @@ export function PlatformPanel() {
             )}
           </CardBody>
         </Card>
+      </FlexItem>
+
+      <FlexItem>
+        <AgentStoreDeployCard
+          settings={draft}
+          onSettingsUpdate={applyBootstrapUpdate}
+        />
       </FlexItem>
     </Flex>
   );

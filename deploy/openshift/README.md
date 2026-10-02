@@ -40,12 +40,30 @@ podman build -t agent-runtime:dev -f apps/agent-runtime/Containerfile .
 # push somewhere the cluster can pull, then set agent_runtime_image on both templates
 ```
 
-## 4. The console itself
+## 4. Deploy AgentStore to OpenShift (optional)
 
-AgentStore runs off-cluster (laptop/VM/container elsewhere) and talks to AAP
-and OpenShift over their APIs. There are no console Deployment/Route/PVC
-manifests here — host the console however you host any other internal web
-app.
+AgentStore can run off-cluster (laptop/VM) or be deployed to the same
+OpenShift cluster as the agent workloads. Two options:
+
+### Self-service (recommended)
+
+Admin → Platform → **AgentStore on OpenShift** → **Deploy**. This builds
+`apps/web/Containerfile` as an OpenShift BuildConfig and then applies
+`deploy/openshift/agentstore.yaml` (Namespace `agentstore` + PVC +
+Deployment + Service + Route). The Route URL appears once the pod is ready.
+
+### Manual
+
+```bash
+# Build and push the image, then apply the manifests:
+oc apply -f deploy/openshift/agentstore.yaml
+# Set the Deployment's image to your pushed image:
+oc set image deployment/agentstore agentstore=<your-registry>/agentstore:latest -n agentstore
+```
+
+Running on-cluster enables RHDH to proxy to AgentStore via the in-cluster
+Service URL (`http://agentstore.agentstore.svc:3000/api`), avoiding
+external Route exposure for the RHDH-to-AgentStore path.
 
 ## 5. Optional Engineering: the OpenShell gateway + Agent Sandbox Service
 

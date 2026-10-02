@@ -339,6 +339,17 @@ export interface PlatformSettings {
   /** Progress/result of the "Install Agent Sandbox Service" admin
    * action, once ever started. */
   agentSandboxServiceInstall?: AgentSandboxServiceInstallStatus;
+
+  // --- AgentStore-on-OpenShift deploy (Admin -> Platform -> AgentStore) --
+  /** Progress/result of the "Deploy AgentStore to OpenShift" admin action.
+   * Same BuildConfig/Build mechanism as agentRuntimeBuild, plus a second
+   * phase applying deploy/openshift/agentstore.yaml and waiting for the
+   * Route. */
+  agentstoreDeploy?: AgentStoreDeployStatus;
+
+  // --- RHDH self-service portal (Admin -> Self-service Portal) -----------
+  /** Progress/result of the RHDH operator install + instance provision. */
+  rhdhDeploy?: RhdhDeployStatus;
 }
 
 /** Progress/result of the "Build from source" admin action — builds
@@ -416,6 +427,28 @@ export interface AgentSandboxServiceInstallStatus extends OcpImageBuildStatus {
    * does now) before giving up and surfacing the stall as a failure —
    * see that function's doc comment. Unset until the first nudge. */
   restartNudgedAt?: string;
+}
+
+/** Progress/result of "Deploy AgentStore to OpenShift" (Admin -> Platform ->
+ * AgentStore on OpenShift) — same BuildConfig/Build mechanism as
+ * OcpImageBuildStatus (building apps/web/Containerfile), plus a second
+ * phase applying deploy/openshift/agentstore.yaml and waiting for the
+ * Route. */
+export interface AgentStoreDeployStatus extends OcpImageBuildStatus {
+  routeUrl?: string;
+}
+
+/** Progress/result of the RHDH self-service portal install (Admin ->
+ * Self-service Portal). Two independent sub-phases: operator install
+ * (Subscription + OperatorGroup) and instance provision (ConfigMaps +
+ * Secret + Backstage CR). */
+export interface RhdhDeployStatus {
+  operatorStatus: "not-installed" | "installing" | "installed" | "failed";
+  instanceStatus: "not-deployed" | "deploying" | "running" | "failed";
+  /** RHDH Route URL once the instance is running. */
+  routeUrl?: string;
+  error?: string;
+  updatedAt?: string;
 }
 
 /** The OpenShell chart's workload kind for its main server: a

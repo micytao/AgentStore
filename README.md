@@ -7,10 +7,11 @@ via AAP → OpenShift → MaaS/OpenShift AI) or an interactive **Collaborative**
 coding sandbox (OpenShell). Mode always follows which engine a listing
 declares (see `deriveAgentMode()` in `packages/shared`).
 
-AgentStore is a **lightweight console**. It does not need to run on
-OpenShift. When an admin deploys an agent, **Ansible Automation Platform**
-provisions it and the workload runs on OpenShift. Admins connect both
-clusters from the Platform tab.
+AgentStore is a **lightweight console**. It can run locally on a laptop or
+be deployed to the same OpenShift cluster as the agents (Admin → Platform →
+"Deploy AgentStore to OpenShift"). When an admin deploys an agent,
+**Ansible Automation Platform** provisions it and the workload runs on
+OpenShift. Admins connect both clusters from the Platform tab.
 
 ## Run locally
 
@@ -53,7 +54,8 @@ real SSO — see `docs/DEFERRED.md`). Tabs:
 
 - **Catalog** — edit listings, bind per-agent config, onboard new agents
 - **Providers / MCP / Skills / Secrets** — model, tools, vault
-- **Platform** — connect AAP and prod OpenShift, bind job templates, list jobs
+- **Platform** — connect AAP and prod OpenShift, bind job templates, deploy AgentStore itself to the cluster, list jobs
+- **Self-service Portal** — install the RHDH operator and provision a Developer Hub instance with AgentStore integration
 - **Engine** — connection status for OpenShell / AAP / OpenShift
 
 ## Configuration
@@ -86,7 +88,7 @@ catalog/
   listings/                   Built-in YAML agent catalog
   skills/                     Red Hat Agentic Skill Packs (imported via scripts/)
 ansible/                      AAP playbooks + Execution Environment definition
-deploy/openshift/             Namespace/RBAC, agent-sandbox-service, OpenShell gateway
+deploy/openshift/             Namespace/RBAC, agent-sandbox-service, OpenShell gateway, AgentStore deploy
 rhdh/                         Red Hat Developer Hub integration (optional)
 docs/                         DEMO walkthrough + DEFERRED design decisions
 scripts/                      Dev-time tools (import-redhat-skills)

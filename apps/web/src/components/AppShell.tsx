@@ -25,6 +25,7 @@ import {
 import {
   BarsIcon,
   BrainIcon,
+  CatalogIcon,
   CloudIcon,
   HomeIcon,
   MoonIcon,
@@ -54,6 +55,7 @@ const TOP_LEVEL_ITEMS: {
 }[] = [
   { href: "/", label: "Landing Page", icon: HomeIcon },
   { href: "/catalog", label: "Catalog", icon: ThLargeIcon },
+  { href: "/admin/rhdh", label: "Self-service Portal", icon: CatalogIcon },
 ];
 
 const SETTINGS_ITEMS: {
@@ -103,7 +105,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     </Masthead>
   );
 
-  const settingsActive = pathname.startsWith("/admin");
+  const settingsActive = pathname.startsWith("/admin") && !pathname.startsWith("/admin/rhdh");
 
   const sidebar = (
     <PageSidebar isSidebarOpen={isSidebarOpen}>

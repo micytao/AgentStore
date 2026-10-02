@@ -445,6 +445,66 @@ export function importRedHatSkills(packs?: string[]): Promise<SkillImportResult>
   }).then((r) => parse<SkillImportResult>(r));
 }
 
+// --- AgentStore-on-OpenShift deploy ---
+
+/** Starts (or re-starts) the "Deploy AgentStore to OpenShift" build+deploy. */
+export function startAgentStoreDeploy(): Promise<PlatformSettings> {
+  return fetch("/api/admin/platform/agentstore-deploy", { method: "POST" }).then((r) =>
+    parse<PlatformSettings>(r)
+  );
+}
+
+/** Polls the in-flight AgentStore build/deploy for progress. */
+export function fetchAgentStoreDeployStatus(): Promise<PlatformSettings> {
+  return fetch("/api/admin/platform/agentstore-deploy").then((r) => parse<PlatformSettings>(r));
+}
+
+// --- RHDH self-service portal ---
+
+export interface RhdhPreflightResult {
+  aap: { status: string };
+  openshift: { status: string };
+  agentstoreOnCluster: { status: string };
+  rhdhOperator: { status: string };
+  rhdhInstance: { status: string };
+  serviceToken: { status: string };
+  deploy?: import("@agentstore/shared").RhdhDeployStatus;
+}
+
+/** Returns RHDH preflight check results + current deploy status. */
+export function fetchRhdhPreflight(): Promise<RhdhPreflightResult> {
+  return fetch("/api/admin/platform/rhdh").then((r) => parse<RhdhPreflightResult>(r));
+}
+
+/** Installs the RHDH operator (Namespace + OperatorGroup + Subscription). */
+export function installRhdhOperator(): Promise<PlatformSettings> {
+  return fetch("/api/admin/platform/rhdh/operator", { method: "POST" }).then((r) =>
+    parse<PlatformSettings>(r)
+  );
+}
+
+/** Polls operator install status. */
+export function fetchRhdhOperatorStatus(): Promise<PlatformSettings> {
+  return fetch("/api/admin/platform/rhdh/operator").then((r) => parse<PlatformSettings>(r));
+}
+
+/** Provisions ConfigMaps + Secret + Backstage CR. */
+export function provisionRhdhInstance(input: {
+  namespace?: string;
+  agentstoreUrl?: string;
+}): Promise<PlatformSettings> {
+  return fetch("/api/admin/platform/rhdh/instance", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  }).then((r) => parse<PlatformSettings>(r));
+}
+
+/** Polls instance status (Route + Deployment readiness). */
+export function fetchRhdhInstanceStatus(): Promise<PlatformSettings> {
+  return fetch("/api/admin/platform/rhdh/instance").then((r) => parse<PlatformSettings>(r));
+}
+
 export type {
   DepartmentId,
   EngineSettings,

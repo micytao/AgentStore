@@ -1,0 +1,107 @@
+# AgentStore console — Next.js app deployed on OpenShift.
+# Applied programmatically by apps/web/src/server/agentstoreDeploy.ts
+# after the image build completes. The BuildConfig + ImageStream are
+# created via the OpenShift API (not from this file) because the image
+# reference is dynamic; everything below assumes the image already exists
+# in the agentstore ImageStream.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: agentstore
+  labels:
+    app.kubernetes.io/managed-by: agentstore
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: agentstore
+  namespace: agentstore
+  labels:
+    app.kubernetes.io/managed-by: agentstore
+    app.kubernetes.io/name: agentstore
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: agentstore
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: agentstore
+    spec:
+      serviceAccountName: default
+      containers:
+        - name: agentstore
+          image: agentstore:latest # replaced at apply time with the built image
+          ports:
+            - containerPort: 3000
+          env:
+            - name: PORT
+              value: "3000"
+            - name: NODE_ENV
+              value: "production"
+            - name: SECRETS_DATA_DIR
+              value: "/app/.data"
+          volumeMounts:
+            - name: data
+              mountPath: /app/.data
+          readinessProbe:
+            httpGet:
+              path: /api/listings
+              port: 3000
+            initialDelaySeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /api/listings
+              port: 3000
+            initialDelaySeconds: 15
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: agentstore-data
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: agentstore-data
+  namespace: agentstore
+  labels:
+    app.kubernetes.io/managed-by: agentstore
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: agentstore
+  namespace: agentstore
+  labels:
+    app.kubernetes.io/managed-by: agentstore
+spec:
+  selector:
+    app.kubernetes.io/name: agentstore
+  ports:
+    - name: http
+      port: 3000
+      targetPort: 3000
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: agentstore
+  namespace: agentstore
+  labels:
+    app.kubernetes.io/managed-by: agentstore
+spec:
+  to:
+    kind: Service
+    name: agentstore
+  port:
+    targetPort: http
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect

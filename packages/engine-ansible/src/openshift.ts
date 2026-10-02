@@ -144,6 +144,10 @@ const AGENT_SANDBOX_RESOURCE_ENDPOINTS: Record<string, AgentSandboxResourceEndpo
     namespaced: false,
     collectionPath: () => "/apis/rbac.authorization.k8s.io/v1/clusterrolebindings",
   },
+  "rbac.authorization.k8s.io/v1/RoleBinding": {
+    namespaced: true,
+    collectionPath: (ns) => `/apis/rbac.authorization.k8s.io/v1/namespaces/${ns}/rolebindings`,
+  },
   "apiextensions.k8s.io/v1/CustomResourceDefinition": {
     namespaced: false,
     collectionPath: () => "/apis/apiextensions.k8s.io/v1/customresourcedefinitions",
@@ -154,6 +158,28 @@ const AGENT_SANDBOX_RESOURCE_ENDPOINTS: Record<string, AgentSandboxResourceEndpo
   "route.openshift.io/v1/Route": {
     namespaced: true,
     collectionPath: (ns) => `/apis/route.openshift.io/v1/namespaces/${ns}/routes`,
+  },
+  // OLM resources for operator installs (RHDH, etc.)
+  "operators.coreos.com/v1/OperatorGroup": {
+    namespaced: true,
+    collectionPath: (ns) => `/apis/operators.coreos.com/v1/namespaces/${ns}/operatorgroups`,
+  },
+  "operators.coreos.com/v1alpha1/Subscription": {
+    namespaced: true,
+    collectionPath: (ns) => `/apis/operators.coreos.com/v1alpha1/namespaces/${ns}/subscriptions`,
+  },
+  // Core resources needed for AgentStore deploy + RHDH instance provision
+  "v1/PersistentVolumeClaim": {
+    namespaced: true,
+    collectionPath: (ns) => `/api/v1/namespaces/${ns}/persistentvolumeclaims`,
+  },
+  "v1/ConfigMap": {
+    namespaced: true,
+    collectionPath: (ns) => `/api/v1/namespaces/${ns}/configmaps`,
+  },
+  "v1/Secret": {
+    namespaced: true,
+    collectionPath: (ns) => `/api/v1/namespaces/${ns}/secrets`,
   },
 };
 
@@ -688,6 +714,190 @@ export async function getEeImageReference(imageStreamName: string, tag = "latest
   const ref = body.image?.dockerImageReference;
   if (!ref) throw new Error("OpenShift imagestreamtag has no image reference yet");
   return ref;
+}
+
+// --- RHDH operator + instance helpers -----------------------------------
+
+/** Checks whether the RHDH operator CRD is registered on the cluster.
+ * Also returns the preferred API version (e.g. "v1alpha2") so callers
+ * can construct the correct Backstage CR apiVersion dynamically — the
+ * version changes across RHDH releases and can't be hardcoded. */
+export async function checkRhdhOperator(): Promise<{
+  installed: boolean;
+  apiVersion?: string;
+  error?: string;
+}> {
+  try {
+    const response = await ocpFetch("/apis/rhdh.redhat.com");
+    if (!response.ok) {
+      if (response.status === 404) return { installed: false };
+      return { installed: false, error: `HTTP ${response.status}` };
+    }
+    const body = (await response.json()) as {
+      preferredVersion?: { version?: string };
+      versions?: Array<{ version?: string }>;
+    };
+    const version =
+      body.preferredVersion?.version ??
+      body.versions?.[0]?.version ??
+      "v1alpha2";
+    return { installed: true, apiVersion: `rhdh.redhat.com/${version}` };
+  } catch (err) {
+    return { installed: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+/** Applies a single Backstage CR using the discovered API version.
+ * The CR path is built dynamically because the version varies across
+ * RHDH operator releases. */
+export async function applyBackstageCR(
+  namespace: string,
+  name: string,
+  apiVersion: string,
+  spec: Record<string, unknown>
+): Promise<void> {
+  const version = apiVersion.replace("rhdh.redhat.com/", "");
+  const collectionPath = `/apis/rhdh.redhat.com/${version}/namespaces/${namespace}/backstages`;
+  const itemPath = `${collectionPath}/${name}`;
+
+  const doc = {
+    apiVersion,
+    kind: "Backstage",
+    metadata: {
+      name,
+      namespace,
+      labels: { "app.kubernetes.io/managed-by": "agentstore" },
+    },
+    spec,
+  };
+
+  const existing = await ocpFetch(itemPath);
+  if (existing.ok) {
+    const body = (await existing.json()) as { metadata?: { resourceVersion?: string } };
+    const updated = await ocpFetch(itemPath, {
+      method: "PUT",
+      body: JSON.stringify({
+        ...doc,
+        metadata: { ...doc.metadata, resourceVersion: body.metadata?.resourceVersion },
+      }),
+    });
+    if (!updated.ok) {
+      const text = await updated.text();
+      throw new Error(`OpenShift update Backstage/${name} failed (${updated.status}): ${text.slice(0, 400)}`);
+    }
+    return;
+  }
+  if (existing.status !== 404) {
+    throw new Error(`OpenShift get Backstage/${name}: HTTP ${existing.status}`);
+  }
+  const created = await ocpFetch(collectionPath, {
+    method: "POST",
+    body: JSON.stringify(doc),
+  });
+  if (!created.ok) {
+    const text = await created.text();
+    throw new Error(`OpenShift create Backstage/${name} failed (${created.status}): ${text.slice(0, 400)}`);
+  }
+}
+
+/** Checks if any Deployment in a namespace has ready replicas — useful
+ * when the exact Deployment name is operator-generated and unpredictable
+ * (e.g. the RHDH operator). */
+export async function checkNamespaceDeploymentReadiness(namespace: string): Promise<{
+  ready: boolean;
+  deploymentName?: string;
+  readyReplicas: number;
+  stalledReason?: string;
+}> {
+  const response = await ocpFetch(`/apis/apps/v1/namespaces/${namespace}/deployments`);
+  if (!response.ok) {
+    return { ready: false, readyReplicas: 0, stalledReason: `HTTP ${response.status}` };
+  }
+  const body = (await response.json()) as {
+    items?: Array<{
+      metadata?: { name?: string };
+      status?: {
+        readyReplicas?: number;
+        replicas?: number;
+        conditions?: Array<{ type?: string; status?: string; reason?: string; message?: string }>;
+      };
+    }>;
+  };
+  const deployments = body.items ?? [];
+  // Find one with ready replicas
+  const readyDeploy = deployments.find((d) => (d.status?.readyReplicas ?? 0) > 0);
+  if (readyDeploy) {
+    return {
+      ready: true,
+      deploymentName: readyDeploy.metadata?.name,
+      readyReplicas: readyDeploy.status?.readyReplicas ?? 0,
+    };
+  }
+  // Check if any are stalled
+  for (const d of deployments) {
+    const conditions = d.status?.conditions ?? [];
+    const stalled = conditions.find(
+      (c) =>
+        (c.type === "ReplicaFailure" && c.status === "True") ||
+        (c.type === "Progressing" && c.status === "False" && c.reason === "ProgressDeadlineExceeded")
+    );
+    if (stalled) {
+      return {
+        ready: false,
+        deploymentName: d.metadata?.name,
+        readyReplicas: 0,
+        stalledReason: `${stalled.reason ?? "Unknown"}: ${stalled.message ?? ""}`.trim(),
+      };
+    }
+  }
+  return { ready: false, readyReplicas: 0 };
+}
+
+/** Triggers a rollout restart on all Deployments in a namespace by
+ * stamping a `agentstore.io/restartedAt` annotation on each pod
+ * template — same mechanism as restartAgentSandboxServiceDeployment()
+ * but without needing to know the exact name (operator-generated). */
+export async function restartNamespaceDeployments(namespace: string): Promise<string[]> {
+  const response = await ocpFetch(`/apis/apps/v1/namespaces/${namespace}/deployments`);
+  if (!response.ok) return [];
+  const body = (await response.json()) as {
+    items?: Array<{
+      metadata?: { name?: string };
+      spec?: { template?: { metadata?: { annotations?: Record<string, string> } } };
+    }>;
+  };
+  const restarted: string[] = [];
+  for (const deploy of body.items ?? []) {
+    const name = deploy.metadata?.name;
+    if (!name) continue;
+    const template = deploy.spec?.template;
+    if (!template) continue;
+    template.metadata = {
+      ...(template.metadata ?? {}),
+      annotations: {
+        ...(template.metadata?.annotations ?? {}),
+        "agentstore.io/restartedAt": new Date().toISOString(),
+      },
+    };
+    const updated = await ocpFetch(
+      `/apis/apps/v1/namespaces/${namespace}/deployments/${name}`,
+      { method: "PUT", body: JSON.stringify(deploy) }
+    );
+    if (updated.ok) restarted.push(name);
+  }
+  return restarted;
+}
+
+/** Reads the first Route in a namespace (RHDH operator auto-creates one
+ * for the Backstage CR when `route.enabled: true`). */
+export async function getNamespaceRouteHost(namespace: string): Promise<string | undefined> {
+  const response = await ocpFetch(`/apis/route.openshift.io/v1/namespaces/${namespace}/routes`);
+  if (!response.ok) return undefined;
+  const body = (await response.json()) as {
+    items?: Array<{ spec?: { host?: string } }>;
+  };
+  const host = body.items?.[0]?.spec?.host;
+  return host ? `https://${host}` : undefined;
 }
 
 /** Best-effort teardown of everything provision-generic-agent.yml creates

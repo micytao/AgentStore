@@ -84,14 +84,39 @@ Admin → Catalog → **+ Onboard new agent**. Engine type **Hosted agent API
 (AAP → OpenShift)**. Publish. Switch back to Demo; the listing is in the
 catalog. Launch it — it follows the same AAP path.
 
-## 8. Optional: Red Hat Developer Hub (self-service portal)
+## 8. Deploy AgentStore to OpenShift
 
-RHDH adds end-user self-service on top of AgentStore. Instead of asking an
-admin to onboard every agent, a team lead opens RHDH's **Self-service**
-page and fills in a wizard.
+AgentStore can run on the same cluster as the agent workloads:
 
-**Prerequisite:** RHDH 1.10+ running on the same OpenShift cluster.  See
-[rhdh/README.md](../rhdh/README.md) for installation.
+1. Admin → Platform → scroll to **AgentStore on OpenShift** card.
+2. Click **Deploy**. This triggers an OpenShift Build (apps/web/Containerfile)
+   and then applies the Namespace/Deployment/Service/Route/PVC manifests.
+3. Wait for the progress bar to reach "Complete" — the Route URL appears.
+
+The in-cluster AgentStore is now reachable at that Route, and RHDH can
+proxy to it via `http://agentstore.agentstore.svc:3000/api` without
+external networking.
+
+## 9. Optional: Red Hat Developer Hub (self-service portal)
+
+RHDH adds end-user self-service on top of AgentStore. The RHDH operator
+and instance can now be installed entirely from within AgentStore:
+
+1. Admin → **Self-service Portal** sidebar.
+2. The preflight strip shows what's ready (AAP, OpenShift, AgentStore on
+   cluster, RHDH operator, instance, service token).
+3. Click **Install Operator** — creates the `rhdh` namespace, OperatorGroup,
+   and Subscription from the `redhat-operators` CatalogSource. Poll until
+   the CRD appears.
+4. Fill in the instance form (RHDH namespace, AgentStore internal URL) and
+   click **Deploy Instance** — creates ConfigMaps, Secret, and a Backstage
+   CR. The operator rolls out the Developer Hub pod.
+5. Once the Route URL appears, open it — the Software Templates are live.
+
+**Manual install alternative:** See [rhdh/README.md](../rhdh/README.md) for
+step-by-step `oc` commands instead of the self-service flow.
+
+Once RHDH is running (via either method):
 
 1. Open the RHDH portal (its Route URL).
 2. Click **Self-service** in the sidebar.
@@ -110,12 +135,12 @@ which returns catalog-info YAML for every published agent.  Uncomment the
 matching `catalog.locations` entry in `rhdh/app-config-snippet.yaml` to
 have RHDH auto-discover agents without static YAML files.
 
-**Five Red Hat products, one story:**
+**Six Red Hat products, one story:**
 Red Hat Developer Hub (self-service) → AgentStore (admin control plane) →
 Ansible Automation Platform (provisioning) → OpenShift (runtime) →
-OpenShift AI / MaaS (model serving).
+OpenShift AI / MaaS (model serving) → all deployed from one console.
 
-## 9. Durability
+## 10. Durability
 
 Restart `npm run dev`. Tasks, catalog overrides, custom listings, providers,
 MCP, skills, secrets, and Platform settings (`.data/platform.json`) survive.

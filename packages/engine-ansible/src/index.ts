@@ -30,6 +30,11 @@ export {
   getAgentSandboxServiceReadiness,
   getAgentSandboxServiceRouteHost,
   restartAgentSandboxServiceDeployment,
+  checkRhdhOperator,
+  applyBackstageCR,
+  checkNamespaceDeploymentReadiness,
+  restartNamespaceDeployments,
+  getNamespaceRouteHost,
 } from "./openshift";
 export {
   startAgentSandboxServiceImageBuild,
@@ -87,6 +92,14 @@ export {
   type JobTemplateBootstrapHandle,
   type JobTemplateBootstrapResult,
 } from "./jobTemplateBootstrap";
+export {
+  startAgentStoreImageBuild,
+  getAgentStoreImageBuildPhase,
+  getAgentStoreImageBuildResult,
+  getAgentStoreImageBuildLog,
+  type AgentStoreImageBuildInput,
+  type AgentStoreImageBuildResult,
+} from "./agentstoreImageBuild";
 /** Exported so deployments.ts can derive a stable per-listing resource
  * name — DNS-1123-safe (lowercase alphanumeric + "-", no leading/trailing
  * "-"), since it becomes a Deployment/Service/Route/Secret name. */

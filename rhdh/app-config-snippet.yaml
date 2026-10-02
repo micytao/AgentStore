@@ -19,21 +19,51 @@
 # -- Portal branding -------------------------------------------------------
 app:
   title: Agent Store - Self-Service Portal
-  baseUrl: https://developer-hub-rhdh.apps.CLUSTER_DOMAIN
+  baseUrl: https://backstage-developer-hub-rhdh.apps.CLUSTER_DOMAIN
+  branding:
+    title: Agent Store
+    theme:
+      light:
+        variant: rhdh
+        mode: light
+        palette:
+          primary:
+            main: '#c9190b'
+          navigation:
+            color: '#ffffff'
+            indicator: '#c9190b'
+            selectedColor: '#ffffff'
+          banner:
+            info: '#c9190b'
+            link: '#c9190b'
+      dark:
+        variant: rhdh
+        mode: dark
+        palette:
+          primary:
+            main: '#ef9234'
+          navigation:
+            color: '#ffffff'
+            indicator: '#ef9234'
+            selectedColor: '#ffffff'
+          banner:
+            info: '#ef9234'
+            link: '#ef9234'
 
 backend:
-  baseUrl: https://developer-hub-rhdh.apps.CLUSTER_DOMAIN
+  baseUrl: https://backstage-developer-hub-rhdh.apps.CLUSTER_DOMAIN
   cors:
-    origin: https://developer-hub-rhdh.apps.CLUSTER_DOMAIN
+    origin: https://backstage-developer-hub-rhdh.apps.CLUSTER_DOMAIN
 
 # -- Authentication --------------------------------------------------------
-# Guest access for demo / workshop use.  Replace with a real OIDC / RHSSO
-# provider for production.
+# Guest access only for demo / workshop use.  Replace with a real OIDC /
+# RHSSO provider for production.
 auth:
   environment: development
   providers:
     guest:
       dangerouslyAllowOutsideDevelopment: true
+signInPage: guest
 
 # -- Proxy: route scaffolder HTTP calls to AgentStore ----------------------
 # The proxy plugin forwards /api/proxy/agentstore/* to the real AgentStore
@@ -50,33 +80,28 @@ proxy:
         # accepts as an alternative to the browser cookie.
         X-AgentStore-Token: ${AGENTSTORE_SERVICE_TOKEN}
 
-# -- Catalog: import Software Templates + agent entities -------------------
+# -- Catalog: import agent entities + templates from AgentStore API --------
+# These locations point at AgentStore's REST endpoints so RHDH auto-discovers
+# agents without needing a public GitHub repo.  ${AGENTSTORE_URL} is injected
+# from the rhdh-secrets Secret (e.g. http://agentstore.agentstore.svc:3000/api).
 catalog:
   rules:
     - allow: [Component, Template, System, Group, Resource, Location]
   locations:
-    # AgentStore system + built-in agent Components
+    # AgentStore System entity + all published agent Components (dynamic)
     - type: url
-      target: https://github.com/YOUR_ORG/AgentStore/blob/main/rhdh/catalog/catalog-info.yaml
+      target: ${AGENTSTORE_URL}/rhdh/catalog
       rules:
         - allow: [System, Component]
 
     # Software Template: "Request a New AI Agent"
     - type: url
-      target: https://github.com/YOUR_ORG/AgentStore/blob/main/rhdh/templates/request-agent/template.yaml
+      target: ${AGENTSTORE_URL}/rhdh/templates/request-agent
       rules:
         - allow: [Template]
 
     # Software Template: "Deploy an Existing Agent"
     - type: url
-      target: https://github.com/YOUR_ORG/AgentStore/blob/main/rhdh/templates/deploy-agent/template.yaml
+      target: ${AGENTSTORE_URL}/rhdh/templates/deploy-agent
       rules:
         - allow: [Template]
-
-    # (Optional) Dynamic catalog sync -- RHDH polls this URL periodically
-    # to auto-discover agents created outside these static locations.
-    # Requires the /api/rhdh/catalog-sync endpoint on AgentStore.
-    # - type: url
-    #   target: https://agentstore.apps.CLUSTER_DOMAIN/api/rhdh/catalog-sync
-    #   rules:
-    #     - allow: [Component]
