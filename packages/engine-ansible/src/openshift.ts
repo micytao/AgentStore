@@ -219,6 +219,13 @@ async function applyOneAgentSandboxManifest(doc: Record<string, unknown>): Promi
 
   const existing = await ocpFetch(itemPath);
   if (existing.ok) {
+    // PersistentVolumeClaims have an immutable spec after creation —
+    // attempting a PUT will always 422.  Just treat "already exists" as
+    // success for these resources.
+    if (kind === "PersistentVolumeClaim") {
+      return label;
+    }
+
     const existingBody = (await existing.json()) as { metadata?: { resourceVersion?: string } };
     const updated = await ocpFetch(itemPath, {
       method: "PUT",

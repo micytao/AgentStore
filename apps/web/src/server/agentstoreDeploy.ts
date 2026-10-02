@@ -153,12 +153,15 @@ export async function refreshAgentStoreDeploy(): Promise<PlatformSettings> {
       image = result.image;
     }
 
-    let routeUrl = deploy.routeUrl;
-    if (!routeUrl) {
-      const docs = getAgentStoreManifestDocs(image);
-      await applyAgentSandboxManifests(docs);
-      routeUrl = await getAgentSandboxServiceRouteHost(AGENTSTORE_NAMESPACE, AGENTSTORE_DEPLOY_NAME);
-    }
+    // Re-apply manifests on every poll while deploying — they are
+    // idempotent (PVCs skip update; other resources use resourceVersion)
+    // and this ensures partial failures (e.g. a previous PVC 422 that
+    // aborted before the RoleBinding was created) are recovered on the
+    // next poll cycle.
+    const docs = getAgentStoreManifestDocs(image);
+    await applyAgentSandboxManifests(docs);
+    const routeUrl = deploy.routeUrl
+      || await getAgentSandboxServiceRouteHost(AGENTSTORE_NAMESPACE, AGENTSTORE_DEPLOY_NAME);
 
     const readiness = await getAgentSandboxServiceReadiness(AGENTSTORE_NAMESPACE, AGENTSTORE_DEPLOY_NAME);
     if (!readiness.ready) {
