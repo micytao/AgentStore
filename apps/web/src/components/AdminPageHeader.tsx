@@ -21,6 +21,7 @@ export function AdminPageHeader({
   title,
   description,
   eyebrow,
+  action,
   children,
 }: {
   title: string;
@@ -29,17 +30,24 @@ export function AdminPageHeader({
    * "Settings" for Platform/LLMs/Skills). Omitted for top-level sections
    * like Catalog, which have no parent group to name. */
   eyebrow?: string;
+  /** Optional action element rendered at the top right of the header. */
+  action?: ReactNode;
   children: ReactNode;
 }) {
   return (
     <>
       <PageSection variant="secondary">
         <Content>
-          {eyebrow && <Content component={ContentVariants.small}>{eyebrow}</Content>}
-          <Title headingLevel="h1" size="2xl">
-            {title}
-          </Title>
-          <Content component={ContentVariants.p}>{description}</Content>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+            <div>
+              {eyebrow && <Content component={ContentVariants.small}>{eyebrow}</Content>}
+              <Title headingLevel="h1" size="2xl">
+                {title}
+              </Title>
+              <Content component={ContentVariants.p}>{description}</Content>
+            </div>
+            {action && <div style={{ flexShrink: 0, marginLeft: "1rem" }}>{action}</div>}
+          </div>
         </Content>
       </PageSection>
       <PageSection>{children}</PageSection>

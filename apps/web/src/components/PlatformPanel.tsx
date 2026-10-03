@@ -60,7 +60,6 @@ import {
   fetchPlatformStatus,
   fetchSecrets,
   registerExecutionEnvironment,
-  resetClusterState,
   startAgentRuntimeBuild,
   startAgentStoreDeploy,
   startEeImageBuild,
@@ -246,7 +245,7 @@ function PlatformStatusStat({
  * AAP/OpenShift cards directly below it. Rendered as single-line
  * icon + label + color-coded value stats separated by vertical dividers,
  * rather than a run of uniform "Label: Value" pill badges. */
-function PlatformStatusStrip({ status, draft, onRefresh, refreshing, onReset }: { status: PlatformStatus; draft: PlatformSettings; onRefresh: () => void; refreshing: boolean; onReset: () => void }) {
+function PlatformStatusStrip({ status, draft, onRefresh, refreshing }: { status: PlatformStatus; draft: PlatformSettings; onRefresh: () => void; refreshing: boolean }) {
   const aap = connectionStripState(status.aap);
   const openshift = connectionStripState(status.openshift);
   const eeSet = draft.aapExecutionEnvironmentId !== "";
@@ -298,11 +297,6 @@ function PlatformStatusStrip({ status, draft, onRefresh, refreshing, onReset }: 
           <FlexItem>
             <Button variant="plain" aria-label="Refresh status" isDisabled={refreshing} onClick={onRefresh}>
               <SyncAltIcon style={refreshing ? { animation: "spin 1s linear infinite" } : undefined} />
-            </Button>
-          </FlexItem>
-          <FlexItem>
-            <Button variant="link" isDanger onClick={onReset} style={{ fontSize: "0.8rem" }}>
-              Reset for New Cluster
             </Button>
           </FlexItem>
         </Flex>
@@ -1316,20 +1310,6 @@ export function PlatformPanel() {
     load();
   }
 
-  function handleResetCluster() {
-    if (!window.confirm(
-      "This will clear all deploy statuses, build results, image references, " +
-      "AAP IDs, and sync tokens — keeping only your connection URLs.\n\n" +
-      "Use this when switching to a new cluster. Continue?"
-    )) return;
-    resetClusterState()
-      .then((next) => {
-        setStatus(next);
-        setDraft(next.settings);
-      })
-      .catch((err: Error) => setError(err.message));
-  }
-
   useEffect(load, []);
 
   function draftPatch(): PlatformSettings {
@@ -1453,7 +1433,7 @@ export function PlatformPanel() {
       ) : null}
 
       <FlexItem>
-        <PlatformStatusStrip status={status} draft={draft} onRefresh={refresh} refreshing={refreshing} onReset={handleResetCluster} />
+        <PlatformStatusStrip status={status} draft={draft} onRefresh={refresh} refreshing={refreshing} />
       </FlexItem>
 
       <FlexItem>
