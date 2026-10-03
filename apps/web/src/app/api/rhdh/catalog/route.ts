@@ -125,19 +125,40 @@ spec:
 }
 
 /**
- * Derives the AgentStore base URL from the incoming request when no
- * explicit env var or setting is available.  RHDH fetches the catalog
- * via the AgentStore Route, so the request's origin gives us the
- * externally-reachable URL.
+ * Derives the AgentStore external Route URL when no explicit env var or
+ * setting is available.
+ *
+ * First tries the request's x-forwarded-host (set by the OpenShift Route
+ * on external requests).  If absent (RHDH fetches via the internal
+ * Service URL where there's no Route in front), constructs the external
+ * URL from the cluster domain in platform settings.
  */
 function deriveBaseUrl(request: Request): string {
   try {
+    // External requests through the OpenShift Route carry forwarded headers
+    const fwdHost = request.headers.get("x-forwarded-host");
+    if (fwdHost) {
+      const proto = request.headers.get("x-forwarded-proto") || "https";
+      return `${proto}://${fwdHost}`;
+    }
+
+    // Internal requests (e.g. from RHDH's catalog fetcher via the K8s Service)
+    // don't have forwarded headers.  Derive from the cluster domain.
+    const settings = getPlatformSettings();
+    const consoleUrl = settings.openshiftConsoleUrl || "";
+    const domainMatch = consoleUrl.match(/console-openshift-console\.(apps\..+)/);
+    if (domainMatch) {
+      return `https://agentstore-agentstore.${domainMatch[1]}`;
+    }
+    const apiUrl = settings.openshiftApiUrl || "";
+    const apiMatch = apiUrl.match(/api\.(.*?)(?::6443)?$/);
+    if (apiMatch) {
+      return `https://agentstore-agentstore.apps.${apiMatch[1]}`;
+    }
+
+    // Last resort: use the request URL (may be internal — better than empty)
     const url = new URL(request.url);
-    // request.url in Next.js may use the internal host (e.g. localhost:3000).
-    // Prefer x-forwarded-host / x-forwarded-proto set by the OpenShift Route.
-    const host = request.headers.get("x-forwarded-host") || url.host;
-    const proto = request.headers.get("x-forwarded-proto") || url.protocol.replace(":", "");
-    return `${proto}://${host}`;
+    return `${url.protocol}//${url.host}`;
   } catch {
     return "";
   }
