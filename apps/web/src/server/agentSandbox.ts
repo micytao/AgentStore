@@ -191,9 +191,12 @@ function getAgentSandboxServiceManifestDocs(image: string, namespace: string): R
     }));
 
   // Images are built in the `agentstore` namespace. If this service
-  // deploys into a different namespace, grant its default SA pull access.
+  // deploys into a different namespace, grant its SAs pull access.
   const imagePullerDocs: Record<string, unknown>[] = [];
   if (namespace !== "agentstore") {
+    // Grant every SA the Deployment references (e.g. "agentstore-console")
+    // plus "default" as a fallback.
+    const pullSubjects = new Set(["default", ...referencedServiceAccounts]);
     imagePullerDocs.push({
       apiVersion: "rbac.authorization.k8s.io/v1",
       kind: "RoleBinding",
@@ -207,13 +210,11 @@ function getAgentSandboxServiceManifestDocs(image: string, namespace: string): R
         kind: "ClusterRole",
         name: "system:image-puller",
       },
-      subjects: [
-        {
-          kind: "ServiceAccount",
-          name: "default",
-          namespace,
-        },
-      ],
+      subjects: [...pullSubjects].map((sa) => ({
+        kind: "ServiceAccount",
+        name: sa,
+        namespace,
+      })),
     });
   }
 
