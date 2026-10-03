@@ -1,7 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
 import { NextResponse } from "next/server";
-import { loadListings } from "@/server/catalog";
 
 export const dynamic = "force-dynamic";
 
@@ -12,10 +11,6 @@ export const dynamic = "force-dynamic";
  * `rhdh/templates/{name}/template.yaml` directory.  RHDH registers
  * this URL as a `catalog.locations` entry (type: url, allow: Template)
  * so templates are discovered without needing a public GitHub repo.
- *
- * For the `deploy-agent` template, the listing ID field is dynamically
- * populated with real published agent IDs as a dropdown instead of
- * free text.
  *
  * Open access — template metadata is non-sensitive and RHDH's
  * location fetcher does not send custom headers.
@@ -45,47 +40,10 @@ export async function GET(
     );
   }
 
-  let yaml = fs.readFileSync(filePath, "utf8");
-
-  // For the deploy-agent template, inject a real enum of published listing
-  // IDs so RHDH renders a dropdown instead of a free-text field.
-  if (name === "deploy-agent") {
-    yaml = injectListingEnum(yaml);
-  }
+  const yaml = fs.readFileSync(filePath, "utf8");
 
   return new NextResponse(yaml, {
     status: 200,
     headers: { "Content-Type": "text/yaml; charset=utf-8" },
   });
-}
-
-/**
- * Replaces the free-text `listingId` field with an enum dropdown
- * populated from the real published agent catalog.
- */
-function injectListingEnum(yaml: string): string {
-  const listings = loadListings().filter(
-    (l) => l.reviewStatus === "published" || l.reviewStatus === "in-review",
-  );
-  if (listings.length === 0) return yaml;
-
-  const enumEntries = listings.map((l) => `            - ${l.id}`).join("\n");
-  const enumLabels = listings
-    .map((l) => `              ${l.id}: "${l.name} (${l.runtime === "openshell" ? "collaborative" : "autonomous"})"`)
-    .join("\n");
-
-  const replacement = `        listingId:
-          title: Agent listing ID
-          type: string
-          description: Select a published agent to deploy.
-          enum:
-${enumEntries}
-          ui:enumNames:
-${enumLabels}
-          ui:autofocus: true`;
-
-  return yaml.replace(
-    /^ {8}listingId:\n(?:^ {10}.+\n)*/m,
-    replacement + "\n",
-  );
 }

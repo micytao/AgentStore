@@ -33,10 +33,8 @@ rhdh/
 ├── catalog/
 │   └── catalog-info.yaml               ← System + Component entities for built-in agents
 └── templates/
-    ├── request-agent/
-    │   └── template.yaml               ← "Request a New AI Agent" wizard
-    └── deploy-agent/
-        └── template.yaml               ← "Deploy an Existing Agent" wizard
+    └── request-agent/
+        └── template.yaml               ← "Request a New AI Agent" wizard
 ```
 
 ## Quick-start (Operator install)
@@ -115,13 +113,9 @@ Open the Route URL.  The two Software Templates appear under
 ```
 End user (RHDH)
     │
-    ├─ "Request a New AI Agent" template
-    │     └─ http:backstage:request  →  POST /proxy/agentstore/admin/listings
-    │                                        (creates a draft listing)
-    │
-    └─ "Deploy an Existing Agent" template
-          └─ http:backstage:request  →  POST /proxy/agentstore/admin/listings/{id}/deploy
-                                             (triggers AAP job → OpenShift)
+    └─ "Request a New AI Agent" template
+          └─ http:backstage:request  →  POST /proxy/agentstore/admin/listings
+                                             (creates a draft listing)
 ```
 
 The RHDH proxy (`/agentstore`) forwards requests to the real AgentStore
