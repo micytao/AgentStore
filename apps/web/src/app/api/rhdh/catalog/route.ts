@@ -88,9 +88,14 @@ function listingToComponent(listing: Listing, baseUrl: string): string {
   if (baseUrl) {
     links.push(`    - url: ${baseUrl}/catalog\n      title: Open in AgentStore`);
   }
+  // Autonomous agents (generic-chat) have a direct route URL
   const agentUrl = listing.deployment?.routeUrl;
   if (agentUrl) {
     links.push(`    - url: ${agentUrl}\n      title: Launch Agent`);
+  }
+  // Collaborative agents (openshell) are accessed via AgentStore's listing page
+  if (!agentUrl && listing.openshellSession?.status === "running" && baseUrl) {
+    links.push(`    - url: ${baseUrl}/listing/${listing.id}\n      title: Launch Agent`);
   }
   const linksBlock = links.length > 0
     ? `\n  links:\n${links.join("\n")}`
