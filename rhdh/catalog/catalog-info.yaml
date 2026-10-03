@@ -1,14 +1,10 @@
 # ---------------------------------------------------------------------------
 # RHDH Software Catalog entities for AgentStore
 # ---------------------------------------------------------------------------
-# This file registers AgentStore itself as a System, and each of its
-# built-in agent listings as a Component (type: ai-agent).  Import it
-# into RHDH via catalog.locations in app-config.yaml.
-#
-# Custom agents created through the RHDH "Request a New AI Agent"
-# template, or through AgentStore's onboarding wizard, can be
-# auto-discovered via the /api/rhdh/catalog-sync endpoint instead of
-# being listed here statically.
+# This file is a static reference for the two built-in agent listings.
+# In practice the /api/rhdh/catalog endpoint generates these dynamically
+# from AgentStore's live catalog, so RHDH does not import this file
+# directly.
 # ---------------------------------------------------------------------------
 
 # -- The AgentStore system itself ---------------------------------------
@@ -31,37 +27,7 @@ spec:
   owner: group:default/platform-team
 
 ---
-# -- Red Hat SRE Engineer ------------------------------------------------
-apiVersion: backstage.io/v1alpha1
-kind: Component
-metadata:
-  name: redhat-sre-engineer
-  title: Red Hat SRE Engineer
-  description: >
-    Chat agent for CVE impact analysis, remediation playbook generation,
-    and AAP-driven patching.  Built on Red Hat's rh-sre Agentic Skill
-    Pack (13 skills).  Deploy once, then share the link with your
-    SRE/ops team.
-  tags:
-    - ai-agent
-    - sre
-    - autonomous
-    - rh-sre
-  annotations:
-    agentstore.io/listing-id: redhat-sre-engineer
-    agentstore.io/runtime: generic-chat
-    agentstore.io/risk-tier: medium
-  links:
-    - url: https://agentstore.apps.CLUSTER_DOMAIN/catalog
-      title: Open in AgentStore
-spec:
-  type: ai-agent
-  lifecycle: production
-  owner: group:default/sre-team
-  system: agentstore
-
----
-# -- Red Hat Customer Support -------------------------------------------
+# -- Red Hat Customer Support (Autonomous) ------------------------------
 apiVersion: backstage.io/v1alpha1
 kind: Component
 metadata:
@@ -87,36 +53,6 @@ spec:
   type: ai-agent
   lifecycle: production
   owner: group:default/support-team
-  system: agentstore
-
----
-# -- Red Hat OpenShift Virtualization -----------------------------------
-apiVersion: backstage.io/v1alpha1
-kind: Component
-metadata:
-  name: redhat-openshift-virtualization
-  title: Red Hat OpenShift Virtualization
-  description: >
-    Chat agent for VM lifecycle management, snapshots, cloning, and
-    rebalancing on OpenShift Virtualization.  Built on Red Hat's rh-virt
-    Agentic Skill Pack (10 skills).  Deploy once, then share the link
-    with your virtualization team.
-  tags:
-    - ai-agent
-    - virtualization
-    - autonomous
-    - rh-virt
-  annotations:
-    agentstore.io/listing-id: redhat-openshift-virtualization
-    agentstore.io/runtime: generic-chat
-    agentstore.io/risk-tier: high
-  links:
-    - url: https://agentstore.apps.CLUSTER_DOMAIN/catalog
-      title: Open in AgentStore
-spec:
-  type: ai-agent
-  lifecycle: production
-  owner: group:default/virt-team
   system: agentstore
 
 ---
