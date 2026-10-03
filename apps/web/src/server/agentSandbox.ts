@@ -189,7 +189,35 @@ function getAgentSandboxServiceManifestDocs(image: string, namespace: string): R
       kind: "ServiceAccount",
       metadata: { name, namespace, labels: { "app.kubernetes.io/managed-by": "agentstore" } },
     }));
-  return [...missingServiceAccountDocs, ...docs];
+
+  // Images are built in the `agentstore` namespace. If this service
+  // deploys into a different namespace, grant its default SA pull access.
+  const imagePullerDocs: Record<string, unknown>[] = [];
+  if (namespace !== "agentstore") {
+    imagePullerDocs.push({
+      apiVersion: "rbac.authorization.k8s.io/v1",
+      kind: "RoleBinding",
+      metadata: {
+        name: "workloads-image-puller",
+        namespace: "agentstore",
+        labels: { "app.kubernetes.io/managed-by": "agentstore" },
+      },
+      roleRef: {
+        apiGroup: "rbac.authorization.k8s.io",
+        kind: "ClusterRole",
+        name: "system:image-puller",
+      },
+      subjects: [
+        {
+          kind: "ServiceAccount",
+          name: "default",
+          namespace,
+        },
+      ],
+    });
+  }
+
+  return [...imagePullerDocs, ...missingServiceAccountDocs, ...docs];
 }
 
 function persistServiceInstall(
