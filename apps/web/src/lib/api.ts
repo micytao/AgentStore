@@ -120,6 +120,12 @@ export function fetchPlatformStatus(): Promise<PlatformStatus> {
   return fetch("/api/admin/platform", { cache: "no-store" }).then((r) => parse<PlatformStatus>(r));
 }
 
+/** Clears all cluster-specific state (deploy statuses, build results,
+ *  image refs, AAP IDs) for a fresh-cluster restart. */
+export function resetClusterState(): Promise<PlatformStatus> {
+  return fetch("/api/admin/platform", { method: "DELETE" }).then((r) => parse<PlatformStatus>(r));
+}
+
 /** Starts (or re-starts) the one-time "install the OpenShell gateway"
  * AAP job. Returns the updated PlatformSettings (holding
  * `openshellGatewayDeployment`), not the full PlatformStatus. */
