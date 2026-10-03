@@ -3,6 +3,7 @@ import path from "node:path";
 import { NextResponse } from "next/server";
 import type { PlatformSettings } from "@agentstore/shared";
 import { getDataDir, importSecrets } from "@/server/secrets";
+import { savePlatformSettings } from "@/server/platform";
 import {
   writeCatalogOverrides,
   writeCustomListings,
@@ -29,11 +30,40 @@ export async function POST(request: Request) {
     const body = (await request.json()) as SyncPayload;
 
     // --- Platform settings: merge config, preserve deploy status --------
+    // Uses savePlatformSettings() which updates the in-memory cache AND
+    // hydrates process.env (applyPlatformEnv), so the running process
+    // picks up the new AAP/OCP URLs immediately — not just on next restart.
     if (body.platformSettings) {
-      mergePlatformSettings(body.platformSettings);
+      const dataDir = getDataDir();
+      const filePath = path.join(dataDir, "platform.json");
+
+      let existing: Partial<PlatformSettings> = {};
+      if (fs.existsSync(filePath)) {
+        try {
+          existing = JSON.parse(fs.readFileSync(filePath, "utf8")) as Partial<PlatformSettings>;
+        } catch {
+          existing = {};
+        }
+      }
+
+      const merged: Partial<PlatformSettings> = {
+        ...body.platformSettings,
+        // Preserve cluster-owned deploy status blobs
+        agentstoreDeploy: existing.agentstoreDeploy,
+        rhdhDeploy: existing.rhdhDeploy,
+        eeBuild: existing.eeBuild,
+        agentRuntimeBuild: existing.agentRuntimeBuild,
+        agentSandboxServiceInstall: existing.agentSandboxServiceInstall,
+        aapBootstrap: existing.aapBootstrap,
+        openshellGatewayDeployment: existing.openshellGatewayDeployment,
+      };
+
+      savePlatformSettings(merged);
     }
 
     // --- Secrets: import plaintext into local vault ---------------------
+    // importSecrets() writes to the vault file AND updates process.env
+    // for known secret slots (AAP_TOKEN, OPENSHIFT_TOKEN, etc.)
     if (body.secrets && Object.keys(body.secrets).length > 0) {
       importSecrets(body.secrets);
     }
@@ -105,38 +135,4 @@ function requireSyncToken(request: Request): NextResponse | null {
   }
 
   return null;
-}
-
-// ---------------------------------------------------------------------------
-// Platform settings merge
-// ---------------------------------------------------------------------------
-
-function mergePlatformSettings(seed: Partial<PlatformSettings>): void {
-  const dataDir = getDataDir();
-  const filePath = path.join(dataDir, "platform.json");
-
-  let existing: Partial<PlatformSettings> = {};
-  if (fs.existsSync(filePath)) {
-    try {
-      existing = JSON.parse(fs.readFileSync(filePath, "utf8")) as Partial<PlatformSettings>;
-    } catch {
-      existing = {};
-    }
-  }
-
-  const merged: Partial<PlatformSettings> = {
-    ...existing,
-    ...seed,
-    // Preserve cluster-owned deploy status blobs
-    agentstoreDeploy: existing.agentstoreDeploy,
-    rhdhDeploy: existing.rhdhDeploy,
-    eeBuild: existing.eeBuild,
-    agentRuntimeBuild: existing.agentRuntimeBuild,
-    agentSandboxServiceInstall: existing.agentSandboxServiceInstall,
-    aapBootstrap: existing.aapBootstrap,
-    openshellGatewayDeployment: existing.openshellGatewayDeployment,
-  };
-
-  if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
-  fs.writeFileSync(filePath, JSON.stringify(merged, null, 2));
 }

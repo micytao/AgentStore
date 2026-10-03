@@ -236,6 +236,10 @@ export function exportDecryptedSecrets(): Record<string, string> {
 export function importSecrets(secrets: Record<string, string>): void {
   for (const [key, value] of Object.entries(secrets)) {
     setSecretRaw(key, value);
+    // Also hydrate process.env so the running process picks up tokens
+    // (AAP_TOKEN, OPENSHIFT_TOKEN, etc.) immediately — not just on
+    // next restart.  This mirrors what the startup hydration loop does.
+    process.env[key] = value;
   }
 }
 
