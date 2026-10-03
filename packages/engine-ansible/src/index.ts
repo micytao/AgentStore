@@ -22,6 +22,7 @@ export {
 } from "./aap";
 export {
   pingOpenshift,
+  ensureNamespace,
   listAgentDeployments,
   checkAgentSandboxController,
   applyAgentSandboxManifests,

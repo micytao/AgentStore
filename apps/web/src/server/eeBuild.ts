@@ -1,5 +1,6 @@
 import type { EeBuildStatus, PlatformSettings } from "@agentstore/shared";
 import {
+  ensureNamespace,
   getEeImageBuildLog,
   getEeImageBuildPhase,
   getEeImageBuildResult,
@@ -72,6 +73,7 @@ export async function startEeBuild(input: { name: string; credentialId?: number 
   }
 
   try {
+    await ensureNamespace("agentstore");
     const buildInput = buildInputFrom(settings, input.name.trim(), input.credentialId);
     const { buildName } = await startEeImageBuild(buildInput);
     return persist({

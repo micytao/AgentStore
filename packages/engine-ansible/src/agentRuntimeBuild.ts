@@ -36,6 +36,7 @@ const AGENT_RUNTIME_BUILD_NAME = "agentstore-agent-runtime";
  * to resolve @agentstore/shared and @agentstore/agent-core. */
 const AGENT_RUNTIME_CONTEXT_DIR = "";
 const AGENT_RUNTIME_DOCKERFILE_PATH = "apps/agent-runtime/Containerfile";
+const BUILD_NAMESPACE = "agentstore";
 
 export interface AgentRuntimeImageBuildInput {
   /** Any repo/branch containing apps/agent-runtime/Containerfile at
@@ -53,7 +54,7 @@ export interface AgentRuntimeImageBuildInput {
 export async function startAgentRuntimeImageBuild(
   input: AgentRuntimeImageBuildInput
 ): Promise<{ buildName: string }> {
-  await ocp.findOrCreateEeImageStream(AGENT_RUNTIME_BUILD_NAME);
+  await ocp.findOrCreateEeImageStream(AGENT_RUNTIME_BUILD_NAME, BUILD_NAMESPACE);
   await ocp.findOrCreateEeBuildConfig({
     name: AGENT_RUNTIME_BUILD_NAME,
     imageStreamName: AGENT_RUNTIME_BUILD_NAME,
@@ -62,15 +63,15 @@ export async function startAgentRuntimeImageBuild(
     contextDir: AGENT_RUNTIME_CONTEXT_DIR,
     dockerfilePath: AGENT_RUNTIME_DOCKERFILE_PATH,
     gitSecretName: input.gitSecretName,
-  });
-  return ocp.startEeBuild(AGENT_RUNTIME_BUILD_NAME);
+  }, BUILD_NAMESPACE);
+  return ocp.startEeBuild(AGENT_RUNTIME_BUILD_NAME, BUILD_NAMESPACE);
 }
 
 /** Just the raw OpenShift Build phase, for the "Build from source"
  * mini-form's progress bar — see eeBuild.ts's getEeImageBuildPhase()
  * for the same rationale. */
 export async function getAgentRuntimeImageBuildPhase(buildName: string): Promise<string> {
-  return (await ocp.getEeBuildStatus(buildName)).phase;
+  return (await ocp.getEeBuildStatus(buildName, BUILD_NAMESPACE)).phase;
 }
 
 export interface AgentRuntimeImageBuildResult {
@@ -84,7 +85,7 @@ export interface AgentRuntimeImageBuildResult {
 export async function getAgentRuntimeImageBuildResult(
   buildName: string
 ): Promise<AgentRuntimeImageBuildResult | undefined> {
-  const status = await ocp.getEeBuildStatus(buildName);
+  const status = await ocp.getEeBuildStatus(buildName, BUILD_NAMESPACE);
   if (["New", "Pending", "Running"].includes(status.phase)) return undefined;
   if (status.phase !== "Complete") {
     throw new Error(
@@ -92,7 +93,7 @@ export async function getAgentRuntimeImageBuildResult(
         `Check Build "${buildName}" logs in the OpenShift console and retry.`
     );
   }
-  const image = await ocp.getEeImageReference(AGENT_RUNTIME_BUILD_NAME);
+  const image = await ocp.getEeImageReference(AGENT_RUNTIME_BUILD_NAME, "latest", BUILD_NAMESPACE);
   return { image };
 }
 
@@ -102,5 +103,5 @@ export async function getAgentRuntimeImageBuildLog(
   buildName: string,
   tailLines = EE_BUILD_LOG_TAIL_LINES
 ): Promise<string> {
-  return ocp.getEeBuildLogTail(buildName, tailLines);
+  return ocp.getEeBuildLogTail(buildName, tailLines, BUILD_NAMESPACE);
 }

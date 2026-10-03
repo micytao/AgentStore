@@ -5,6 +5,7 @@ import yaml from "js-yaml";
 import type { AgentStoreDeployStatus, PlatformSettings } from "@agentstore/shared";
 import {
   applyAgentSandboxManifests,
+  ensureNamespace,
   getAgentStoreImageBuildLog,
   getAgentStoreImageBuildPhase,
   getAgentStoreImageBuildResult,
@@ -187,18 +188,19 @@ function getAgentStoreManifestDocs(image: string): Record<string, unknown>[] {
     }
   }
 
-  // The image lives in the build namespace (e.g. agent-workloads) but the
-  // Deployment runs in `agentstore`. Grant the agentstore namespace's
-  // default ServiceAccount the system:image-puller role in the build
-  // namespace so it can pull across namespaces.
-  const buildNs = openshiftNamespace();
-  if (buildNs !== AGENTSTORE_NAMESPACE) {
+  // All builds now live in the `agentstore` namespace, but agent pods run
+  // in the workloads namespace (e.g. `agent-workloads`).  Grant the
+  // workloads namespace's default ServiceAccount the system:image-puller
+  // role in `agentstore` so agent pods can pull built images across
+  // namespaces.
+  const workloadsNs = openshiftNamespace();
+  if (workloadsNs !== AGENTSTORE_NAMESPACE) {
     docs.push({
       apiVersion: "rbac.authorization.k8s.io/v1",
       kind: "RoleBinding",
       metadata: {
-        name: "agentstore-image-puller",
-        namespace: buildNs,
+        name: "workloads-image-puller",
+        namespace: AGENTSTORE_NAMESPACE,
         labels: { "app.kubernetes.io/managed-by": "agentstore" },
       },
       roleRef: {
@@ -210,7 +212,7 @@ function getAgentStoreManifestDocs(image: string): Record<string, unknown>[] {
         {
           kind: "ServiceAccount",
           name: "default",
-          namespace: AGENTSTORE_NAMESPACE,
+          namespace: workloadsNs,
         },
       ],
     });
@@ -232,6 +234,7 @@ export async function startAgentStoreDeploy(): Promise<PlatformSettings> {
   }
 
   try {
+    await ensureNamespace(AGENTSTORE_NAMESPACE);
     const { buildName } = await startAgentStoreImageBuild({
       gitUrl: settings.aapProjectGitUrl,
       gitBranch: settings.aapProjectGitBranch || "main",

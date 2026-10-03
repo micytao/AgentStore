@@ -14,6 +14,7 @@ import * as ocp from "./openshift";
 const AGENTSTORE_BUILD_NAME = "agentstore";
 const AGENTSTORE_CONTEXT_DIR = "";
 const AGENTSTORE_DOCKERFILE_PATH = "apps/web/Containerfile";
+const BUILD_NAMESPACE = "agentstore";
 
 export interface AgentStoreImageBuildInput {
   gitUrl: string;
@@ -24,7 +25,7 @@ export interface AgentStoreImageBuildInput {
 export async function startAgentStoreImageBuild(
   input: AgentStoreImageBuildInput
 ): Promise<{ buildName: string }> {
-  await ocp.findOrCreateEeImageStream(AGENTSTORE_BUILD_NAME);
+  await ocp.findOrCreateEeImageStream(AGENTSTORE_BUILD_NAME, BUILD_NAMESPACE);
   await ocp.findOrCreateEeBuildConfig({
     name: AGENTSTORE_BUILD_NAME,
     imageStreamName: AGENTSTORE_BUILD_NAME,
@@ -33,12 +34,12 @@ export async function startAgentStoreImageBuild(
     contextDir: AGENTSTORE_CONTEXT_DIR,
     dockerfilePath: AGENTSTORE_DOCKERFILE_PATH,
     gitSecretName: input.gitSecretName,
-  });
-  return ocp.startEeBuild(AGENTSTORE_BUILD_NAME);
+  }, BUILD_NAMESPACE);
+  return ocp.startEeBuild(AGENTSTORE_BUILD_NAME, BUILD_NAMESPACE);
 }
 
 export async function getAgentStoreImageBuildPhase(buildName: string): Promise<string> {
-  return (await ocp.getEeBuildStatus(buildName)).phase;
+  return (await ocp.getEeBuildStatus(buildName, BUILD_NAMESPACE)).phase;
 }
 
 export interface AgentStoreImageBuildResult {
@@ -48,7 +49,7 @@ export interface AgentStoreImageBuildResult {
 export async function getAgentStoreImageBuildResult(
   buildName: string
 ): Promise<AgentStoreImageBuildResult | undefined> {
-  const status = await ocp.getEeBuildStatus(buildName);
+  const status = await ocp.getEeBuildStatus(buildName, BUILD_NAMESPACE);
   if (["New", "Pending", "Running"].includes(status.phase)) return undefined;
   if (status.phase !== "Complete") {
     throw new Error(
@@ -56,10 +57,10 @@ export async function getAgentStoreImageBuildResult(
         `Check Build "${buildName}" logs in the OpenShift console and retry.`
     );
   }
-  const image = await ocp.getEeImageReference(AGENTSTORE_BUILD_NAME);
+  const image = await ocp.getEeImageReference(AGENTSTORE_BUILD_NAME, "latest", BUILD_NAMESPACE);
   return { image };
 }
 
 export async function getAgentStoreImageBuildLog(buildName: string, tailLines = 1000): Promise<string> {
-  return ocp.getEeBuildLogTail(buildName, tailLines);
+  return ocp.getEeBuildLogTail(buildName, tailLines, BUILD_NAMESPACE);
 }

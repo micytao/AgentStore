@@ -33,6 +33,7 @@ const AGENT_SANDBOX_SERVICE_BUILD_NAME = "agent-sandbox-service";
  * resolve @agentstore/shared and friends. */
 const AGENT_SANDBOX_SERVICE_CONTEXT_DIR = "";
 const AGENT_SANDBOX_SERVICE_DOCKERFILE_PATH = "apps/agent-sandbox-service/Containerfile";
+const BUILD_NAMESPACE = "agentstore";
 
 export interface AgentSandboxServiceImageBuildInput {
   /** Any repo/branch containing apps/agent-sandbox-service/Containerfile
@@ -57,7 +58,7 @@ export interface AgentSandboxServiceImageBuildInput {
 export async function startAgentSandboxServiceImageBuild(
   input: AgentSandboxServiceImageBuildInput
 ): Promise<{ buildName: string }> {
-  await ocp.findOrCreateEeImageStream(AGENT_SANDBOX_SERVICE_BUILD_NAME);
+  await ocp.findOrCreateEeImageStream(AGENT_SANDBOX_SERVICE_BUILD_NAME, BUILD_NAMESPACE);
   await ocp.findOrCreateEeBuildConfig({
     name: AGENT_SANDBOX_SERVICE_BUILD_NAME,
     imageStreamName: AGENT_SANDBOX_SERVICE_BUILD_NAME,
@@ -79,14 +80,14 @@ export async function startAgentSandboxServiceImageBuild(
           },
         ]
       : undefined,
-  });
-  return ocp.startEeBuild(AGENT_SANDBOX_SERVICE_BUILD_NAME);
+  }, BUILD_NAMESPACE);
+  return ocp.startEeBuild(AGENT_SANDBOX_SERVICE_BUILD_NAME, BUILD_NAMESPACE);
 }
 
 /** Just the raw OpenShift Build phase, for the install button's progress
  * bar — see eeBuild.ts's getEeImageBuildPhase() for the same rationale. */
 export async function getAgentSandboxServiceImageBuildPhase(buildName: string): Promise<string> {
-  return (await ocp.getEeBuildStatus(buildName)).phase;
+  return (await ocp.getEeBuildStatus(buildName, BUILD_NAMESPACE)).phase;
 }
 
 export interface AgentSandboxServiceImageBuildResult {
@@ -100,7 +101,7 @@ export interface AgentSandboxServiceImageBuildResult {
 export async function getAgentSandboxServiceImageBuildResult(
   buildName: string
 ): Promise<AgentSandboxServiceImageBuildResult | undefined> {
-  const status = await ocp.getEeBuildStatus(buildName);
+  const status = await ocp.getEeBuildStatus(buildName, BUILD_NAMESPACE);
   if (["New", "Pending", "Running"].includes(status.phase)) return undefined;
   if (status.phase !== "Complete") {
     throw new Error(
@@ -108,6 +109,6 @@ export async function getAgentSandboxServiceImageBuildResult(
         `Check Build "${buildName}" logs in the OpenShift console and retry.`
     );
   }
-  const image = await ocp.getEeImageReference(AGENT_SANDBOX_SERVICE_BUILD_NAME);
+  const image = await ocp.getEeImageReference(AGENT_SANDBOX_SERVICE_BUILD_NAME, "latest", BUILD_NAMESPACE);
   return { image };
 }

@@ -39,6 +39,7 @@ import * as ocp from "./openshift";
 const EE_BUILD_NAME = "agentstore-ee";
 const EE_CONTEXT_DIR = "ansible/execution-environment";
 const EE_DOCKERFILE_PATH = "Containerfile";
+const BUILD_NAMESPACE = "agentstore";
 
 export interface EeImageBuildInput {
   /** Same repo/branch as the AAP Project — must contain
@@ -61,7 +62,7 @@ export interface EeImageBuildInput {
  * after changing the Git URL/branch) — every OpenShift object here is
  * idempotent by name. */
 export async function startEeImageBuild(input: EeImageBuildInput): Promise<{ buildName: string }> {
-  await ocp.findOrCreateEeImageStream(EE_BUILD_NAME);
+  await ocp.findOrCreateEeImageStream(EE_BUILD_NAME, BUILD_NAMESPACE);
   await ocp.findOrCreateEeBuildConfig({
     name: EE_BUILD_NAME,
     imageStreamName: EE_BUILD_NAME,
@@ -70,8 +71,8 @@ export async function startEeImageBuild(input: EeImageBuildInput): Promise<{ bui
     contextDir: EE_CONTEXT_DIR,
     dockerfilePath: EE_DOCKERFILE_PATH,
     gitSecretName: input.gitSecretName,
-  });
-  return ocp.startEeBuild(EE_BUILD_NAME);
+  }, BUILD_NAMESPACE);
+  return ocp.startEeBuild(EE_BUILD_NAME, BUILD_NAMESPACE);
 }
 
 export interface EeImageBuildResult {
@@ -85,7 +86,7 @@ export interface EeImageBuildResult {
  * percentage (OpenShift doesn't expose one), but still more informative
  * than a single static "building…" label. */
 export async function getEeImageBuildPhase(buildName: string): Promise<string> {
-  return (await ocp.getEeBuildStatus(buildName)).phase;
+  return (await ocp.getEeBuildStatus(buildName, BUILD_NAMESPACE)).phase;
 }
 
 /** Phase 2: polls the Build from phase 1; returns undefined while it's
@@ -96,7 +97,7 @@ export async function getEeImageBuildResult(
   buildName: string,
   input: EeImageBuildInput
 ): Promise<EeImageBuildResult | undefined> {
-  const status = await ocp.getEeBuildStatus(buildName);
+  const status = await ocp.getEeBuildStatus(buildName, BUILD_NAMESPACE);
   if (["New", "Pending", "Running"].includes(status.phase)) return undefined;
   if (status.phase !== "Complete") {
     throw new Error(
@@ -104,7 +105,7 @@ export async function getEeImageBuildResult(
         `Check Build "${buildName}" logs in the OpenShift console and retry.`
     );
   }
-  const image = await ocp.getEeImageReference(EE_BUILD_NAME);
+  const image = await ocp.getEeImageReference(EE_BUILD_NAME, "latest", BUILD_NAMESPACE);
   const ee = await findOrCreateExecutionEnvironment({
     name: input.executionEnvironmentName,
     image,
@@ -121,5 +122,5 @@ export async function getEeImageBuildLog(
   buildName: string,
   tailLines = EE_BUILD_LOG_TAIL_LINES
 ): Promise<string> {
-  return ocp.getEeBuildLogTail(buildName, tailLines);
+  return ocp.getEeBuildLogTail(buildName, tailLines, BUILD_NAMESPACE);
 }

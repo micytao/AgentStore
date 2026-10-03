@@ -1,5 +1,6 @@
 import type { OcpImageBuildStatus, PlatformSettings } from "@agentstore/shared";
 import {
+  ensureNamespace,
   getAgentRuntimeImageBuildLog,
   getAgentRuntimeImageBuildPhase,
   getAgentRuntimeImageBuildResult,
@@ -53,6 +54,7 @@ export async function startAgentRuntimeBuild(): Promise<PlatformSettings> {
   }
 
   try {
+    await ensureNamespace("agentstore");
     const { buildName } = await startAgentRuntimeImageBuild({
       gitUrl: settings.aapProjectGitUrl,
       gitBranch: settings.aapProjectGitBranch || "main",

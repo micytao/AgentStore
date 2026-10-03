@@ -556,13 +556,32 @@ export interface EeBuildConfigInput {
   buildEnv?: Array<Record<string, unknown>>;
 }
 
+/** Ensures a Namespace exists — creates it if it doesn't. Idempotent. */
+export async function ensureNamespace(name: string): Promise<void> {
+  const existing = await ocpFetch(`/api/v1/namespaces/${name}`);
+  if (existing.ok) return;
+  if (existing.status !== 404) throw new Error(`OpenShift get namespace ${name}: HTTP ${existing.status}`);
+  const response = await ocpFetch("/api/v1/namespaces", {
+    method: "POST",
+    body: JSON.stringify({
+      apiVersion: "v1",
+      kind: "Namespace",
+      metadata: { name, labels: { "app.kubernetes.io/managed-by": "agentstore" } },
+    }),
+  });
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`OpenShift create namespace ${name} failed (${response.status}): ${text.slice(0, 400)}`);
+  }
+}
+
 /** ImageStreams are what actually create the internal-registry
  * repository a BuildConfig's `output.to` can push to — creating one
  * ahead of the BuildConfig (rather than relying on it to be
  * auto-created) keeps this idempotent-by-inspection like everything else
  * here. */
-export async function findOrCreateEeImageStream(name: string): Promise<void> {
-  const ns = openshiftNamespace();
+export async function findOrCreateEeImageStream(name: string, namespace?: string): Promise<void> {
+  const ns = namespace ?? openshiftNamespace();
   const path = `/apis/image.openshift.io/v1/namespaces/${ns}/imagestreams/${name}`;
   const existing = await ocpFetch(path);
   if (existing.ok) return;
@@ -586,8 +605,8 @@ export async function findOrCreateEeImageStream(name: string): Promise<void> {
  * requires for updates) so a changed Git URL/branch always takes effect
  * on the next build, the same way findOrCreateExecutionEnvironment()
  * patches an existing AAP object rather than leaving it stale. */
-export async function findOrCreateEeBuildConfig(input: EeBuildConfigInput): Promise<void> {
-  const ns = openshiftNamespace();
+export async function findOrCreateEeBuildConfig(input: EeBuildConfigInput, namespace?: string): Promise<void> {
+  const ns = namespace ?? openshiftNamespace();
   const path = `/apis/build.openshift.io/v1/namespaces/${ns}/buildconfigs/${input.name}`;
   const spec = {
     source: {
@@ -644,8 +663,8 @@ export async function findOrCreateEeBuildConfig(input: EeBuildConfigInput): Prom
 /** Triggers a new Build from the BuildConfig (like `oc start-build`);
  * returns the created Build object's name (e.g. `agentstore-ee-3`) to
  * poll via getEeBuildStatus(). */
-export async function startEeBuild(buildConfigName: string): Promise<{ buildName: string }> {
-  const ns = openshiftNamespace();
+export async function startEeBuild(buildConfigName: string, namespace?: string): Promise<{ buildName: string }> {
+  const ns = namespace ?? openshiftNamespace();
   const response = await ocpFetch(
     `/apis/build.openshift.io/v1/namespaces/${ns}/buildconfigs/${buildConfigName}/instantiate`,
     {
@@ -673,8 +692,8 @@ export interface EeBuildStatusResult {
   message?: string;
 }
 
-export async function getEeBuildStatus(buildName: string): Promise<EeBuildStatusResult> {
-  const ns = openshiftNamespace();
+export async function getEeBuildStatus(buildName: string, namespace?: string): Promise<EeBuildStatusResult> {
+  const ns = namespace ?? openshiftNamespace();
   const response = await ocpFetch(`/apis/build.openshift.io/v1/namespaces/${ns}/builds/${buildName}`);
   if (!response.ok) throw new Error(`OpenShift get build ${buildName}: HTTP ${response.status}`);
   const body = (await response.json()) as {
@@ -689,8 +708,8 @@ export async function getEeBuildStatus(buildName: string): Promise<EeBuildStatus
  * failed build doesn't require switching to the OpenShift console at
  * all. Unlike every other call in this file, the response body is
  * plain text, not JSON. */
-export async function getEeBuildLogTail(buildName: string, tailLines = 1000): Promise<string> {
-  const ns = openshiftNamespace();
+export async function getEeBuildLogTail(buildName: string, tailLines = 1000, namespace?: string): Promise<string> {
+  const ns = namespace ?? openshiftNamespace();
   const response = await ocpFetch(
     `/apis/build.openshift.io/v1/namespaces/${ns}/builds/${buildName}/log?tailLines=${tailLines}`
   );
@@ -711,8 +730,8 @@ export async function getEeBuildLogTail(buildName: string, tailLines = 1000): Pr
 /** Reads back the built image's pullable reference (including registry
  * host + digest) once a Build lands its output on this ImageStreamTag —
  * exactly what AAP's Execution Environment `image` field needs. */
-export async function getEeImageReference(imageStreamName: string, tag = "latest"): Promise<string> {
-  const ns = openshiftNamespace();
+export async function getEeImageReference(imageStreamName: string, tag = "latest", namespace?: string): Promise<string> {
+  const ns = namespace ?? openshiftNamespace();
   const response = await ocpFetch(
     `/apis/image.openshift.io/v1/namespaces/${ns}/imagestreamtags/${imageStreamName}:${tag}`
   );
