@@ -19,19 +19,21 @@ export const dynamic = "force-dynamic";
  * Open access (no service-token check) because catalog metadata is
  * non-sensitive and RHDH's location fetcher does not send custom headers.
  */
-export async function GET() {
+export async function GET(request: Request) {
   const listings = loadListings().filter(
     (l) => l.reviewStatus === "published" || l.reviewStatus === "in-review",
   );
 
   // Resolve the external AgentStore URL for links end users click in RHDH.
   // On the deployed instance, AGENTSTORE_ROUTE_URL is injected by the
-  // deploy manifest; locally, fall back to platform settings.
+  // deploy manifest; locally, fall back to platform settings.  As a last
+  // resort, derive it from the incoming request's origin (works when RHDH
+  // fetches the catalog via the AgentStore Route/Service URL).
   const settings = getPlatformSettings();
   const agentStoreBaseUrl =
     process.env.AGENTSTORE_ROUTE_URL
     || settings.agentstoreDeploy?.routeUrl
-    || "";
+    || deriveBaseUrl(request);
 
   const systemEntity = `apiVersion: backstage.io/v1alpha1
 kind: System
@@ -120,4 +122,23 @@ spec:
   owner: group:default/${departmentToTeam(listing.department)}
   system: agentstore
 `;
+}
+
+/**
+ * Derives the AgentStore base URL from the incoming request when no
+ * explicit env var or setting is available.  RHDH fetches the catalog
+ * via the AgentStore Route, so the request's origin gives us the
+ * externally-reachable URL.
+ */
+function deriveBaseUrl(request: Request): string {
+  try {
+    const url = new URL(request.url);
+    // request.url in Next.js may use the internal host (e.g. localhost:3000).
+    // Prefer x-forwarded-host / x-forwarded-proto set by the OpenShift Route.
+    const host = request.headers.get("x-forwarded-host") || url.host;
+    const proto = request.headers.get("x-forwarded-proto") || url.protocol.replace(":", "");
+    return `${proto}://${host}`;
+  } catch {
+    return "";
+  }
 }
