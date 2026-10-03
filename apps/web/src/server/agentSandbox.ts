@@ -225,7 +225,7 @@ export async function startAgentSandboxServiceInstall(): Promise<PlatformSetting
     // BuildConfig can reference it as a build env var for npm install.
     const githubToken = getSecret("GITHUB_PACKAGES_TOKEN");
     if (githubToken) {
-      await ensureSecretValue(openshiftNamespace(), "github-packages-token", "GITHUB_TOKEN", githubToken);
+      await ensureSecretValue("agentstore", "github-packages-token", "GITHUB_TOKEN", githubToken);
     }
     const { buildName } = await startAgentSandboxServiceImageBuild({
       gitUrl: settings.aapProjectGitUrl,
