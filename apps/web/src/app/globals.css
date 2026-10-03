@@ -390,3 +390,9 @@ a {
   background: var(--pf-t--global--background--color--secondary--default);
   font-weight: 650;
 }
+
+/* Refresh-button spin animation (PlatformPanel / RhdhPanel status strips) */
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}

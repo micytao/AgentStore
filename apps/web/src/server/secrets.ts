@@ -208,6 +208,50 @@ export function clearSecret(key: string): SecretSummary {
   return summaryFor(key);
 }
 
+// --- Export helpers for state sync ----------------------------------------
+
+/** Returns the resolved data directory path (used by seed/sync logic to
+ *  locate catalog-overrides.json, deleted-listings.json, providers.json,
+ *  custom-listings/, etc.). */
+export function getDataDir(): string {
+  return dataDir();
+}
+
+/** Decrypts every vault entry and returns a plain key→value map.
+ *  Used by the "Sync to Cluster" feature to push secrets to the
+ *  on-cluster AgentStore instance. */
+export function exportDecryptedSecrets(): Record<string, string> {
+  const store = vaultStore();
+  const result: Record<string, string> = {};
+  for (const key of Object.keys(store.data)) {
+    const val = getSecret(key);
+    if (val) result[key] = val;
+  }
+  return result;
+}
+
+/** Bulk-import plaintext secrets into the local vault, encrypting each
+ *  with this instance's own key.  Used on startup by seedMerge when the
+ *  pod receives seed secrets from the deploy ConfigMap/Secret. */
+export function importSecrets(secrets: Record<string, string>): void {
+  for (const [key, value] of Object.entries(secrets)) {
+    setSecretRaw(key, value);
+  }
+}
+
+// --- Startup seed merge (runs once, before vault hydration) ----------------
+// On-cluster pods receive seed state via mounted ConfigMap/Secret volumes.
+// mergeSeedState() imports platform settings + secrets into .data/ so they
+// are available when the vault hydration loop below runs.
+// Uses require() to break the circular dependency (seedMerge → secrets).
+try {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { mergeSeedState } = require("./seedMerge") as { mergeSeedState: () => void };
+  mergeSeedState();
+} catch {
+  // Seed merge is optional — only runs on cluster pods with /app/.seed/
+}
+
 // Hydrate process.env for the fixed engine-related slots on module load so
 // engine-openshell's `env: { ...process.env }` spread picks them up with no
 // changes needed in that package.

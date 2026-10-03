@@ -8,6 +8,7 @@ import {
   CatalogIcon,
   KeyIcon,
   OpenshiftIcon,
+  SyncAltIcon,
 } from "@patternfly/react-icons";
 import {
   Alert,
@@ -148,6 +149,7 @@ export function RhdhPanel() {
   const [error, setError] = useState<string | null>(null);
   const [operatorBusy, setOperatorBusy] = useState(false);
   const [instanceBusy, setInstanceBusy] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   // Instance provision form
   const [namespace, setNamespace] = useState("rhdh");
@@ -156,8 +158,14 @@ export function RhdhPanel() {
   const load = useCallback(() => {
     fetchRhdhPreflight()
       .then(setPreflight)
-      .catch((err: Error) => setError(err.message));
+      .catch((err: Error) => setError(err.message))
+      .finally(() => setRefreshing(false));
   }, []);
+
+  function refresh() {
+    setRefreshing(true);
+    load();
+  }
 
   useEffect(load, [load]);
 
@@ -308,6 +316,12 @@ export function RhdhPanel() {
                   value={statLabel(preflight.serviceToken.status)}
                   color={statColor(preflight.serviceToken.status)}
                 />
+              </FlexItem>
+              <Divider orientation={{ default: "vertical" }} />
+              <FlexItem>
+                <Button variant="plain" aria-label="Refresh status" isDisabled={refreshing} onClick={refresh}>
+                  <SyncAltIcon style={refreshing ? { animation: "spin 1s linear infinite" } : undefined} />
+                </Button>
               </FlexItem>
             </Flex>
           </CardBody>

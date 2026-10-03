@@ -117,7 +117,7 @@ export function fetchEngineSettings(): Promise<EngineSettings> {
 }
 
 export function fetchPlatformStatus(): Promise<PlatformStatus> {
-  return fetch("/api/admin/platform").then((r) => parse<PlatformStatus>(r));
+  return fetch("/api/admin/platform", { cache: "no-store" }).then((r) => parse<PlatformStatus>(r));
 }
 
 /** Starts (or re-starts) the one-time "install the OpenShell gateway"
@@ -459,6 +459,13 @@ export function fetchAgentStoreDeployStatus(): Promise<PlatformSettings> {
   return fetch("/api/admin/platform/agentstore-deploy").then((r) => parse<PlatformSettings>(r));
 }
 
+/** Pushes local .data/ state to the on-cluster AgentStore instance. */
+export function syncStateToCluster(): Promise<{ ok: boolean; syncedAt?: string; error?: string }> {
+  return fetch("/api/admin/platform/agentstore-deploy/sync", { method: "POST" }).then((r) =>
+    parse<{ ok: boolean; syncedAt?: string; error?: string }>(r)
+  );
+}
+
 // --- RHDH self-service portal ---
 
 export interface RhdhPreflightResult {
@@ -473,7 +480,7 @@ export interface RhdhPreflightResult {
 
 /** Returns RHDH preflight check results + current deploy status. */
 export function fetchRhdhPreflight(): Promise<RhdhPreflightResult> {
-  return fetch("/api/admin/platform/rhdh").then((r) => parse<RhdhPreflightResult>(r));
+  return fetch("/api/admin/platform/rhdh", { cache: "no-store" }).then((r) => parse<RhdhPreflightResult>(r));
 }
 
 /** Installs the RHDH operator (Namespace + OperatorGroup + Subscription). */

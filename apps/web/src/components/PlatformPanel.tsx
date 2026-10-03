@@ -16,6 +16,7 @@ import {
   CubeIcon,
   OpenshiftIcon,
   PficonTemplateIcon,
+  SyncAltIcon,
 } from "@patternfly/react-icons";
 import {
   Alert,
@@ -62,6 +63,7 @@ import {
   startAgentRuntimeBuild,
   startAgentStoreDeploy,
   startEeImageBuild,
+  syncStateToCluster,
   testPlatformConnection,
 } from "@/lib/api";
 
@@ -243,7 +245,7 @@ function PlatformStatusStat({
  * AAP/OpenShift cards directly below it. Rendered as single-line
  * icon + label + color-coded value stats separated by vertical dividers,
  * rather than a run of uniform "Label: Value" pill badges. */
-function PlatformStatusStrip({ status, draft }: { status: PlatformStatus; draft: PlatformSettings }) {
+function PlatformStatusStrip({ status, draft, onRefresh, refreshing }: { status: PlatformStatus; draft: PlatformSettings; onRefresh: () => void; refreshing: boolean }) {
   const aap = connectionStripState(status.aap);
   const openshift = connectionStripState(status.openshift);
   const eeSet = draft.aapExecutionEnvironmentId !== "";
@@ -290,6 +292,12 @@ function PlatformStatusStrip({ status, draft }: { status: PlatformStatus; draft:
               value={templatesReady ? "Created" : "Not created"}
               color={templatesReady ? "green" : "grey"}
             />
+          </FlexItem>
+          <Divider orientation={{ default: "vertical" }} />
+          <FlexItem>
+            <Button variant="plain" aria-label="Refresh status" isDisabled={refreshing} onClick={onRefresh}>
+              <SyncAltIcon style={refreshing ? { animation: "spin 1s linear infinite" } : undefined} />
+            </Button>
           </FlexItem>
         </Flex>
       </CardBody>
@@ -1045,6 +1053,8 @@ function AgentStoreDeployCard({
   const done = deploy?.status === "running";
   const failed = deploy?.status === "failed";
   const [busy, setBusy] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [syncResult, setSyncResult] = useState<{ ok: boolean; message: string } | null>(null);
 
   useEffect(() => {
     if (!running) return;
@@ -1062,6 +1072,23 @@ function AgentStoreDeployCard({
       console.error(err);
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function sync() {
+    setSyncing(true);
+    setSyncResult(null);
+    try {
+      const result = await syncStateToCluster();
+      if (result.ok) {
+        setSyncResult({ ok: true, message: `State synced to cluster at ${result.syncedAt ?? "now"}.` });
+      } else {
+        setSyncResult({ ok: false, message: result.error ?? "Sync failed." });
+      }
+    } catch (err) {
+      setSyncResult({ ok: false, message: err instanceof Error ? err.message : String(err) });
+    } finally {
+      setSyncing(false);
     }
   }
 
@@ -1191,6 +1218,58 @@ function AgentStoreDeployCard({
             style={{ marginTop: "0.75rem" }}
           />
         )}
+
+        {/* --- Sync to Cluster section (shown when deploy is running or done) --- */}
+        {done && (
+          <div style={{ marginTop: "1rem" }}>
+            <Alert
+              variant="warning"
+              isInline
+              title="Changes you make here (secrets, catalog, providers) are local only."
+              style={{ marginBottom: "0.75rem" }}
+            >
+              <Content component={ContentVariants.small}>
+                The on-cluster AgentStore has its own state. Use <strong>Sync to Cluster</strong> to
+                push your local configuration without a full redeploy, or <strong>Redeploy</strong> to
+                rebuild and reseed everything.
+              </Content>
+            </Alert>
+            <Flex spaceItems={{ default: "spaceItemsMd" }} alignItems={{ default: "alignItemsCenter" }}>
+              <FlexItem>
+                <Button
+                  variant="secondary"
+                  isDisabled={syncing}
+                  isLoading={syncing}
+                  onClick={() => void sync()}
+                >
+                  {syncing ? "Syncing…" : "Sync to Cluster"}
+                </Button>
+              </FlexItem>
+              {deploy.routeUrl && (
+                <FlexItem>
+                  <Button
+                    variant="link"
+                    component="a"
+                    href={deploy.routeUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Open on Cluster ↗
+                  </Button>
+                </FlexItem>
+              )}
+            </Flex>
+            {syncResult && (
+              <Alert
+                variant={syncResult.ok ? "success" : "danger"}
+                isInline
+                isPlain
+                title={syncResult.message}
+                style={{ marginTop: "0.5rem" }}
+              />
+            )}
+          </div>
+        )}
       </CardBody>
     </Card>
   );
@@ -1207,6 +1286,7 @@ export function PlatformPanel() {
     openshift?: TestOutcome;
   }>({});
   const [activeTabKey, setActiveTabKey] = useState<string | number>("connections");
+  const [refreshing, setRefreshing] = useState(false);
 
   function loadSecrets() {
     fetchSecrets()
@@ -1220,8 +1300,14 @@ export function PlatformPanel() {
         setStatus(next);
         setDraft(next.settings);
       })
-      .catch((err: Error) => setError(err.message));
+      .catch((err: Error) => setError(err.message))
+      .finally(() => setRefreshing(false));
     loadSecrets();
+  }
+
+  function refresh() {
+    setRefreshing(true);
+    load();
   }
 
   useEffect(load, []);
@@ -1347,7 +1433,7 @@ export function PlatformPanel() {
       ) : null}
 
       <FlexItem>
-        <PlatformStatusStrip status={status} draft={draft} />
+        <PlatformStatusStrip status={status} draft={draft} onRefresh={refresh} refreshing={refreshing} />
       </FlexItem>
 
       <FlexItem>

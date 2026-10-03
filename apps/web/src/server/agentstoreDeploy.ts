@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import crypto from "node:crypto";
 import yaml from "js-yaml";
 import type { AgentStoreDeployStatus, PlatformSettings } from "@agentstore/shared";
 import {
@@ -15,6 +16,13 @@ import {
   startAgentStoreImageBuild,
 } from "@agentstore/engine-ansible";
 import { ensurePlatformEnv, getPlatformSettings, savePlatformSettings } from "./platform";
+import { exportDecryptedSecrets } from "./secrets";
+import {
+  readCatalogOverrides,
+  readCustomListings,
+  readDeletedListings,
+  readProviders,
+} from "./dataDirFiles";
 
 /**
  * "Deploy AgentStore to OpenShift" admin action (Admin -> Platform ->
@@ -59,31 +67,122 @@ function parseManifestDocs(file: string): Record<string, unknown>[] {
   return docs.filter((doc): doc is Record<string, unknown> => !!doc && typeof doc === "object");
 }
 
+/** Strip deploy-status fields from PlatformSettings — the cluster
+ *  instance manages its own deploy lifecycle.  Only connection/config
+ *  fields travel in the seed. */
+function seedPlatformSettings(settings: PlatformSettings): Partial<PlatformSettings> {
+  const {
+    agentstoreDeploy: _a, rhdhDeploy: _b, eeBuild: _c,
+    agentRuntimeBuild: _d, agentSandboxServiceInstall: _e,
+    aapBootstrap: _f, openshellGatewayDeployment: _g,
+    ...config
+  } = settings;
+  return config;
+}
+
+/** Generate or retrieve a stable sync token for this deploy.  Stored in
+ *  platform settings so the local instance can call POST /api/admin/sync
+ *  on the cluster later without a full redeploy. */
+function getOrCreateSyncToken(): string {
+  const settings = getPlatformSettings();
+  const existing = settings.syncToken;
+  if (existing) return existing;
+  const token = crypto.randomBytes(24).toString("hex");
+  savePlatformSettings({ syncToken: token } as Partial<PlatformSettings>);
+  return token;
+}
+
 function getAgentStoreManifestDocs(image: string): Record<string, unknown>[] {
   const file = resolveDeployFile("deploy/openshift/agentstore.yaml");
   const docs = parseManifestDocs(file);
 
-  // Derive the external Route URL so the deployed pod can include it
-  // in RHDH catalog links.  The Route follows the standard pattern
-  // <name>-<namespace>.apps.<cluster-domain>.
   const settings = getPlatformSettings();
   const routeUrl = settings.agentstoreDeploy?.routeUrl ?? "";
+  const syncToken = getOrCreateSyncToken();
+
+  // --- Build the seed ConfigMap + Secret ---------------------------------
+
+  const seedConfigData: Record<string, string> = {
+    "platform.json": JSON.stringify(seedPlatformSettings(settings), null, 2),
+    "catalog-overrides.json": JSON.stringify(readCatalogOverrides(), null, 2),
+    "deleted-listings.json": JSON.stringify(readDeletedListings(), null, 2),
+    "providers.json": JSON.stringify(readProviders(), null, 2),
+  };
+
+  const customListings = readCustomListings();
+  for (const [name, content] of Object.entries(customListings)) {
+    seedConfigData[`custom-listing-${name}`] = content;
+  }
+
+  docs.push({
+    apiVersion: "v1",
+    kind: "ConfigMap",
+    metadata: {
+      name: "agentstore-state-seed",
+      namespace: AGENTSTORE_NAMESPACE,
+      labels: { "app.kubernetes.io/managed-by": "agentstore" },
+      annotations: { "agentstore.io/seed-timestamp": now() },
+    },
+    data: seedConfigData,
+  });
+
+  const decryptedSecrets = exportDecryptedSecrets();
+  docs.push({
+    apiVersion: "v1",
+    kind: "Secret",
+    metadata: {
+      name: "agentstore-secrets-seed",
+      namespace: AGENTSTORE_NAMESPACE,
+      labels: { "app.kubernetes.io/managed-by": "agentstore" },
+    },
+    stringData: decryptedSecrets,
+  });
+
+  // --- Patch the Deployment: env vars + seed volume mounts ---------------
 
   for (const doc of docs) {
     if (doc.kind === "Deployment") {
-      const spec = doc.spec as
-        | { template?: { spec?: { containers?: Array<{ image?: string; env?: Array<{ name: string; value: string }> }> } } }
-        | undefined;
+      const spec = doc.spec as {
+        template?: {
+          spec?: {
+            containers?: Array<{
+              image?: string;
+              env?: Array<{ name: string; value: string }>;
+              volumeMounts?: Array<{ name: string; mountPath: string; readOnly?: boolean }>;
+            }>;
+            volumes?: Array<Record<string, unknown>>;
+          };
+        };
+      } | undefined;
+
       const container = spec?.template?.spec?.containers?.[0];
       if (container) {
         container.image = image;
-        // Inject the external Route URL so /api/rhdh/catalog can build
-        // clickable links for RHDH component pages.
+
+        const envList = container.env ?? [];
         if (routeUrl) {
-          const envList = container.env ?? [];
           envList.push({ name: "AGENTSTORE_ROUTE_URL", value: routeUrl });
-          container.env = envList;
         }
+        envList.push({ name: "AGENTSTORE_SYNC_TOKEN", value: syncToken });
+        container.env = envList;
+
+        const mounts = container.volumeMounts ?? [];
+        mounts.push({ name: "seed-config", mountPath: "/app/.seed/config", readOnly: true });
+        mounts.push({ name: "seed-secrets", mountPath: "/app/.seed/secrets", readOnly: true });
+        container.volumeMounts = mounts;
+      }
+
+      const volumes = spec?.template?.spec?.volumes ?? [];
+      volumes.push({
+        name: "seed-config",
+        configMap: { name: "agentstore-state-seed" },
+      });
+      volumes.push({
+        name: "seed-secrets",
+        secret: { secretName: "agentstore-secrets-seed" },
+      });
+      if (spec?.template?.spec) {
+        spec.template.spec.volumes = volumes;
       }
     }
   }
@@ -209,4 +308,51 @@ export async function fetchAgentStoreDeployLog(): Promise<string> {
   const deploy = getPlatformSettings().agentstoreDeploy;
   if (!deploy?.buildName) return "(no build started yet)";
   return getAgentStoreImageBuildLog(deploy.buildName);
+}
+
+// --- Sync state to cluster -----------------------------------------------
+
+/** Gather local state and push it to the on-cluster AgentStore via
+ *  POST /api/admin/sync.  Returns { ok, syncedAt } on success. */
+export async function syncStateToCluster(): Promise<{ ok: boolean; syncedAt?: string; error?: string }> {
+  const settings = getPlatformSettings();
+  const routeUrl = settings.agentstoreDeploy?.routeUrl;
+  const syncToken = settings.syncToken;
+
+  if (!routeUrl) {
+    return { ok: false, error: "AgentStore is not deployed — no Route URL available." };
+  }
+  if (!syncToken) {
+    return { ok: false, error: "No sync token found — redeploy AgentStore to generate one." };
+  }
+
+  const payload = {
+    platformSettings: seedPlatformSettings(settings),
+    secrets: exportDecryptedSecrets(),
+    catalogOverrides: readCatalogOverrides(),
+    deletedListings: readDeletedListings(),
+    providers: readProviders(),
+    customListings: readCustomListings(),
+  };
+
+  try {
+    const res = await fetch(`${routeUrl}/api/admin/sync`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Sync-Token": syncToken,
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!res.ok) {
+      const text = await res.text();
+      return { ok: false, error: `Sync failed (${res.status}): ${text.slice(0, 300)}` };
+    }
+
+    const result = (await res.json()) as { ok: boolean; syncedAt: string };
+    return result;
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
 }

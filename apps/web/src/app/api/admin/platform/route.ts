@@ -3,6 +3,8 @@ import type { PlatformSettings } from "@agentstore/shared";
 import { requireAdmin } from "@/server/auth";
 import { getPlatformStatus, savePlatformSettings } from "@/server/platform";
 
+export const dynamic = "force-dynamic";
+
 export async function GET(request: Request) {
   const denied = requireAdmin(request);
   if (denied) return denied;

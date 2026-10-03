@@ -350,6 +350,12 @@ export interface PlatformSettings {
   // --- RHDH self-service portal (Admin -> Self-service Portal) -----------
   /** Progress/result of the RHDH operator install + instance provision. */
   rhdhDeploy?: RhdhDeployStatus;
+
+  // --- Sync token for bootstrap handoff ----------------------------------
+  /** Random token injected into the on-cluster Deployment as
+   *  AGENTSTORE_SYNC_TOKEN.  The local instance uses it to authenticate
+   *  POST /api/admin/sync calls after deploy. */
+  syncToken?: string;
 }
 
 /** Progress/result of the "Build from source" admin action — builds
