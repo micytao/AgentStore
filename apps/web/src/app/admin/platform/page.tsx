@@ -41,8 +41,8 @@ export default function PlatformSettingsPage() {
           <ModalHeader title="Reset for New Cluster?" titleIconVariant="warning" />
           <ModalBody>
             This will clear all deploy statuses, build results, image references,
-            AAP job template IDs, execution environment IDs, and sync tokens —
-            keeping only your connection URLs and project configuration.
+            and sync tokens — keeping your connection URLs, AAP job template IDs,
+            execution environment IDs, and project configuration.
             <br /><br />
             Use this when switching to a new cluster so stale state from
             the previous cluster doesn&apos;t interfere.
