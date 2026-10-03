@@ -94,7 +94,7 @@ function listingToComponent(listing: Listing, baseUrl: string): string {
     links.push(`    - url: ${agentUrl}\n      title: Launch Agent`);
   }
   // Collaborative agents (openshell) are accessed via AgentStore's listing page
-  if (!agentUrl && listing.openshellSession?.status === "running" && baseUrl) {
+  if (!agentUrl && listing.runtime === "openshell" && baseUrl) {
     links.push(`    - url: ${baseUrl}/listing/${listing.id}\n      title: Launch Agent`);
   }
   const linksBlock = links.length > 0
