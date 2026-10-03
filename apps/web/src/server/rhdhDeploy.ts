@@ -68,11 +68,33 @@ export async function getRhdhPreflight(): Promise<RhdhPreflightResult> {
     ocpStatus = ping.ok ? "connected" : "disconnected";
   }
 
-  const asStatus = settings.agentstoreDeploy?.status === "running"
-    ? "running"
-    : settings.agentstoreDeploy?.status === "failed"
-      ? "failed"
-      : "not-deployed";
+  // Live-check AgentStore on the cluster (if OCP is connected) instead of
+  // relying solely on the local agentstoreDeploy setting, which may be stale
+  // after a cluster reset or manual redeploy.
+  let asStatus: "running" | "not-deployed" | "failed" = "not-deployed";
+  if (ocpStatus === "connected") {
+    try {
+      const asReadiness = await checkNamespaceDeploymentReadiness("agentstore");
+      if (asReadiness.ready) {
+        asStatus = "running";
+      } else if (settings.agentstoreDeploy?.status === "failed") {
+        asStatus = "failed";
+      }
+    } catch {
+      // Fall back to local settings if the live check fails
+      asStatus = settings.agentstoreDeploy?.status === "running"
+        ? "running"
+        : settings.agentstoreDeploy?.status === "failed"
+          ? "failed"
+          : "not-deployed";
+    }
+  } else if (settings.agentstoreDeploy?.status) {
+    asStatus = settings.agentstoreDeploy.status === "running"
+      ? "running"
+      : settings.agentstoreDeploy.status === "failed"
+        ? "failed"
+        : "not-deployed";
+  }
 
   let operatorStatus: "installed" | "not-installed" = "not-installed";
   let operatorApiVersion: string | undefined;
