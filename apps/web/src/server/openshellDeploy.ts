@@ -47,7 +47,11 @@ function phaseToStatus(phase: client.RemoteSession["phase"]): OpenShellSessionSt
  * OpenShell sandbox session. Persists an initial "deploying" state
  * immediately and returns; the Admin UI polls refreshOpenShellSession()
  * for progress, same inline-progress pattern deployments.ts's
- * startDeployment() uses for the generic-chat AAP job. */
+ * startDeployment() uses for the generic-chat AAP job.
+ *
+ * If the sandbox already exists on the Agent Sandbox Service (e.g. after
+ * a pod restart where the seed preserved the session data but the sandbox
+ * survived independently), adopts the existing session instead of failing. */
 export async function startOpenShellSession(listingId: string): Promise<Listing> {
   const listing = getListing(listingId);
   if (!listing) throw new Error(`Unknown listing: ${listingId}`);
@@ -60,14 +64,34 @@ export async function startOpenShellSession(listingId: string): Promise<Listing>
     );
   }
 
-  const session = await client.createSession({
-    taskId: listing.id,
-    agent: listing.openshellAgent ?? "opencode",
-    model: openshellModelFor(listing),
-    mcpServers: mcpServersFor(listing),
-    gitUrl: listing.agentConfig?.gitUrl,
-    gitToken: listing.agentConfig?.gitUrl ? getSecret("GIT_PAT") : undefined,
-  });
+  let session: client.RemoteSession;
+  try {
+    session = await client.createSession({
+      taskId: listing.id,
+      agent: listing.openshellAgent ?? "opencode",
+      model: openshellModelFor(listing),
+      mcpServers: mcpServersFor(listing),
+      gitUrl: listing.agentConfig?.gitUrl,
+      gitToken: listing.agentConfig?.gitUrl ? getSecret("GIT_PAT") : undefined,
+    });
+  } catch (err) {
+    // If the sandbox already exists, adopt it instead of failing.
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.toLowerCase().includes("already exists")) {
+      try {
+        session = await client.getSession(listing.id);
+      } catch {
+        throw new Error(`Sandbox already exists but could not fetch its state: ${msg}`);
+      }
+      return persistSession(listingId, {
+        status: phaseToStatus(session.phase),
+        sandboxId: session.id,
+        error: session.phase === "Failed" ? session.message : undefined,
+        updatedAt: now(),
+      });
+    }
+    throw err;
+  }
 
   return persistSession(listingId, {
     status: session.phase === "Failed" ? "failed" : "deploying",
