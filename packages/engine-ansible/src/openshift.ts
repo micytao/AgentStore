@@ -850,16 +850,11 @@ export async function checkNamespaceDeploymentReadiness(namespace: string): Prom
     }>;
   };
   const deployments = body.items ?? [];
-  // Find one with ready replicas
-  const readyDeploy = deployments.find((d) => (d.status?.readyReplicas ?? 0) > 0);
-  if (readyDeploy) {
-    return {
-      ready: true,
-      deploymentName: readyDeploy.metadata?.name,
-      readyReplicas: readyDeploy.status?.readyReplicas ?? 0,
-    };
+  if (deployments.length === 0) {
+    return { ready: false, readyReplicas: 0 };
   }
-  // Check if any are stalled
+
+  // Check if any are stalled first
   for (const d of deployments) {
     const conditions = d.status?.conditions ?? [];
     const stalled = conditions.find(
@@ -876,7 +871,29 @@ export async function checkNamespaceDeploymentReadiness(namespace: string): Prom
       };
     }
   }
-  return { ready: false, readyReplicas: 0 };
+
+  // ALL deployments with desired replicas > 0 must have readyReplicas >=
+  // replicas — a single ready Deployment isn't enough when the operator
+  // creates multiple (e.g. RHDH's backstage pod + supporting services).
+  const wantedDeployments = deployments.filter((d) => (d.status?.replicas ?? 0) > 0);
+  if (wantedDeployments.length === 0) {
+    return { ready: false, readyReplicas: 0 };
+  }
+  const allReady = wantedDeployments.every(
+    (d) => (d.status?.readyReplicas ?? 0) >= (d.status?.replicas ?? 1)
+  );
+  const totalReady = wantedDeployments.reduce((sum, d) => sum + (d.status?.readyReplicas ?? 0), 0);
+  const firstReady = wantedDeployments.find((d) => (d.status?.readyReplicas ?? 0) > 0);
+
+  if (allReady) {
+    return {
+      ready: true,
+      deploymentName: firstReady?.metadata?.name,
+      readyReplicas: totalReady,
+    };
+  }
+
+  return { ready: false, deploymentName: firstReady?.metadata?.name, readyReplicas: totalReady };
 }
 
 /** Triggers a rollout restart on all Deployments in a namespace by
