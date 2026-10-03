@@ -135,7 +135,10 @@ function mergeSecrets(): void {
   for (const name of fs.readdirSync(SEED_SECRETS_DIR)) {
     const content = fs.readFileSync(path.join(SEED_SECRETS_DIR, name), "utf8");
     if (content.trim()) {
-      secrets[name] = content;
+      // K8s Secret keys encode colons as __COLON__ (colons are not valid
+      // in Secret data keys).  Restore the original vault key names.
+      const realKey = name.replace(/__COLON__/g, ":");
+      secrets[realKey] = content;
     }
   }
 

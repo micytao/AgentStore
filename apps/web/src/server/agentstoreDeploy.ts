@@ -128,6 +128,14 @@ function getAgentStoreManifestDocs(image: string): Record<string, unknown>[] {
   });
 
   const decryptedSecrets = exportDecryptedSecrets();
+  // K8s Secret keys only allow [-._a-zA-Z0-9].  Vault keys can contain
+  // colons (e.g. "provider:openshift-ai-maas-verp:apiKey"), so encode
+  // them for the Secret and decode on import in seedMerge.ts.
+  const encodedSecrets: Record<string, string> = {};
+  for (const [key, value] of Object.entries(decryptedSecrets)) {
+    encodedSecrets[key.replace(/:/g, "__COLON__")] = value;
+  }
+
   docs.push({
     apiVersion: "v1",
     kind: "Secret",
@@ -136,7 +144,7 @@ function getAgentStoreManifestDocs(image: string): Record<string, unknown>[] {
       namespace: AGENTSTORE_NAMESPACE,
       labels: { "app.kubernetes.io/managed-by": "agentstore" },
     },
-    stringData: decryptedSecrets,
+    stringData: encodedSecrets,
   });
 
   // --- Patch the Deployment: env vars + seed volume mounts ---------------
