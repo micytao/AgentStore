@@ -138,12 +138,21 @@ export async function getOpenShellTerminalEndpoint(
 }
 
 /** Tears down this listing's sandbox session (e.g. before a redeploy, or
- * if an admin explicitly stops it). */
+ * if an admin explicitly stops it).  Always resets the listing to
+ * "not-deployed" even if the remote delete fails or times out — the admin
+ * can re-deploy later which will handle "already exists" gracefully. */
 export async function stopOpenShellSession(listingId: string): Promise<Listing> {
   const listing = getListing(listingId);
   if (!listing) throw new Error(`Unknown listing: ${listingId}`);
-  if (listing.openshellSession?.sandboxId) {
-    await client.deleteSession(listing.openshellSession.sandboxId).catch(() => undefined);
+  if (listing.openshellSession?.sandboxId && isOpenShellServiceConfigured()) {
+    try {
+      await Promise.race([
+        client.deleteSession(listing.openshellSession.sandboxId),
+        new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), 8000)),
+      ]);
+    } catch {
+      // Best-effort — reset listing status regardless
+    }
   }
   return persistSession(listingId, { status: "not-deployed", updatedAt: now() });
 }
