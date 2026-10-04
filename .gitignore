@@ -9,3 +9,6 @@ apps/web/.next
 apps/web/.data
 *.tsbuildinfo
 .DS_Store
+scripts/.bootstrap-config
+scripts/bootstrap.log
+scripts/bootstrap-devserver.log
