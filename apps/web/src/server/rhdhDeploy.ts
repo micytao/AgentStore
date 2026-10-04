@@ -107,10 +107,37 @@ export async function getRhdhPreflight(): Promise<RhdhPreflightResult> {
   }
 
   const rhdhDeploy = settings.rhdhDeploy;
-  const instanceStatus = rhdhDeploy?.instanceStatus ?? "not-deployed";
+
+  // Live-check RHDH instance on the cluster (if OCP is connected) instead of
+  // relying solely on the local rhdhDeploy setting, which may be stale after
+  // a sync from a local bootstrap or a cluster redeploy.
+  let instanceStatus: "running" | "not-deployed" | "deploying" | "failed" =
+    rhdhDeploy?.instanceStatus ?? "not-deployed";
+  let liveRouteUrl = rhdhDeploy?.routeUrl;
+  if (ocpStatus === "connected" && operatorStatus === "installed") {
+    try {
+      const rhdhReadiness = await checkNamespaceDeploymentReadiness(RHDH_NAMESPACE);
+      if (rhdhReadiness.ready) {
+        instanceStatus = "running";
+        if (!liveRouteUrl) {
+          const host = await getNamespaceRouteHost(RHDH_NAMESPACE);
+          if (host) liveRouteUrl = `https://${host}/catalog`;
+        }
+      }
+    } catch {
+      // Fall back to local settings if the live check fails
+    }
+  }
 
   const token = getSecret("AGENTSTORE_SERVICE_TOKEN");
   const tokenStatus = token ? "set" : "not-set";
+
+  // Merge live-discovered values into the deploy record for the UI
+  const effectiveDeploy: RhdhDeployStatus | undefined = rhdhDeploy
+    ? { ...rhdhDeploy, instanceStatus, routeUrl: liveRouteUrl ?? rhdhDeploy.routeUrl }
+    : instanceStatus === "running"
+      ? { operatorStatus, instanceStatus, routeUrl: liveRouteUrl, updatedAt: now() }
+      : rhdhDeploy;
 
   return {
     aap: { status: aapStatus },
@@ -119,7 +146,7 @@ export async function getRhdhPreflight(): Promise<RhdhPreflightResult> {
     rhdhOperator: { status: operatorStatus, apiVersion: operatorApiVersion },
     rhdhInstance: { status: instanceStatus },
     serviceToken: { status: tokenStatus },
-    deploy: rhdhDeploy,
+    deploy: effectiveDeploy,
   };
 }
 

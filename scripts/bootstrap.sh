@@ -33,8 +33,8 @@ C_MILESTONE='\033[1;32m'  # bold green  — major milestones
 C_WARN='\033[0;33m'       # yellow      — warnings / skipped
 C_ERR='\033[0;31m'        # red         — errors
 C_FATAL='\033[1;31m'      # bold red    — fatal errors
-C_PROGRESS='\033[0;34m'   # blue        — in-progress / polling
-C_PROMPT='\033[0;35m'     # magenta     — user input prompts
+C_PROGRESS='\033[0;36m'   # cyan        — in-progress / polling
+C_PROMPT='\033[1;33m'     # bold yellow — user input prompts
 C_DIM='\033[2m'           # dim/grey    — debug info
 C_BOLD='\033[1;37m'       # bold white  — summary
 
@@ -1243,9 +1243,9 @@ if [[ -z "$FINAL_AS_ROUTE" ]]; then
   [[ -n "$DOMAIN" ]] && FINAL_AS_ROUTE="https://agentstore-agentstore.${DOMAIN}"
 fi
 FINAL_AS_ROUTE="${FINAL_AS_ROUTE:-N/A}"
-FINAL_EE_ID=$(echo "$PLAT" | jq -r '.eeBuild.executionEnvironmentId // "—"' 2>/dev/null)
-FINAL_JT_AUTO=$(echo "$PLAT" | jq -r '.aapBootstrap.autonomousJobTemplateId // "—"' 2>/dev/null)
-FINAL_JT_COLLAB=$(echo "$PLAT" | jq -r '.aapBootstrap.collaborativeJobTemplateId // "—"' 2>/dev/null)
+FINAL_EE_ID=$(echo "$PLAT" | jq -r '.eeBuild.executionEnvironmentId // .aapExecutionEnvironmentId // "—"' 2>/dev/null)
+FINAL_JT_AUTO=$(echo "$PLAT" | jq -r '.aapBootstrap.autonomousJobTemplateId // .aapJobTemplateId // "—"' 2>/dev/null)
+FINAL_JT_COLLAB=$(echo "$PLAT" | jq -r '.aapBootstrap.collaborativeJobTemplateId // .openshellGatewayJobTemplateId // "—"' 2>/dev/null)
 
 PROVIDERS=$(api_call GET "/admin/providers" 2>/dev/null) || true
 FINAL_LLM=$(echo "$PROVIDERS" | jq -r '.[] | select(.active == true) | "\(.label) (\(.defaultModel // "no model"))"' 2>/dev/null | head -1)
