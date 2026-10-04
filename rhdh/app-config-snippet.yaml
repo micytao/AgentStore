@@ -57,6 +57,7 @@ backend:
   reading:
     allow:
       - host: agentstore.agentstore.svc:3000
+      - host: agentstore-agentstore.apps.CLUSTER_DOMAIN
 
 # -- Authentication --------------------------------------------------------
 # Guest access only for demo / workshop use.  Replace with a real OIDC /
@@ -86,7 +87,7 @@ proxy:
 # -- Catalog: import agent entities + templates from AgentStore API --------
 # These locations point at AgentStore's REST endpoints so RHDH auto-discovers
 # agents without needing a public GitHub repo.  ${AGENTSTORE_URL} is injected
-# from the rhdh-secrets Secret (e.g. http://agentstore.agentstore.svc:3000/api).
+# from the rhdh-secrets Secret (e.g. https://agentstore-agentstore.apps.CLUSTER_DOMAIN).
 catalog:
   rules:
     - allow: [Component, Template, System, Group, Resource, Location]
