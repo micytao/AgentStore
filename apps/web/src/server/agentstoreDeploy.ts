@@ -46,6 +46,21 @@ function now(): string {
   return new Date().toISOString();
 }
 
+/** Predicts the AgentStore Route URL from the cluster domain before the
+ *  Route actually exists.  OpenShift Route hostnames follow a deterministic
+ *  pattern: `<route-name>-<namespace>.<apps-domain>`.  The manifest uses
+ *  Route name "agentstore" in namespace "agentstore", giving us
+ *  `agentstore-agentstore.<apps-domain>`. */
+function predictRouteUrl(settings: PlatformSettings): string {
+  const consoleUrl = settings.openshiftConsoleUrl || "";
+  const match = consoleUrl.match(/console-openshift-console\.(apps\..+)/);
+  if (match) return `https://agentstore-agentstore.${match[1]}`;
+  const apiUrl = settings.openshiftApiUrl || "";
+  const apiMatch = apiUrl.match(/api\.(.*?)(?::6443)?$/);
+  if (apiMatch) return `https://agentstore-agentstore.apps.${apiMatch[1]}`;
+  return "";
+}
+
 function persist(deploy: AgentStoreDeployStatus, extra?: Partial<PlatformSettings>): PlatformSettings {
   return savePlatformSettings({ ...extra, agentstoreDeploy: deploy });
 }
@@ -98,7 +113,10 @@ function getAgentStoreManifestDocs(image: string): Record<string, unknown>[] {
   const docs = parseManifestDocs(file);
 
   const settings = getPlatformSettings();
-  const routeUrl = settings.agentstoreDeploy?.routeUrl ?? "";
+  // Prefer the discovered Route URL; fall back to predicting it from the
+  // cluster domain (the Route name "agentstore" in namespace "agentstore"
+  // produces a deterministic hostname in OpenShift).
+  const routeUrl = settings.agentstoreDeploy?.routeUrl || predictRouteUrl(settings);
   const syncToken = getOrCreateSyncToken();
 
   // --- Build the seed ConfigMap + Secret ---------------------------------
