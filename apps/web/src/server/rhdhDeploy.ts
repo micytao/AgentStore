@@ -265,9 +265,12 @@ export async function provisionRhdhInstance(input: RhdhInstanceInput = {}): Prom
 
   const ns = input.namespace || RHDH_NAMESPACE;
   const settings = getPlatformSettings();
-  const agentstoreUrl = input.agentstoreUrl
+  const rawUrl = input.agentstoreUrl
     || settings.agentstoreDeploy?.routeUrl
-    || "http://agentstore.agentstore.svc:3000/api";
+    || "http://agentstore.agentstore.svc:3000";
+  // Ensure the URL includes the /api path — the app-config template
+  // appends paths like /rhdh/catalog directly after ${AGENTSTORE_URL}.
+  const agentstoreUrl = rawUrl.endsWith("/api") ? rawUrl : `${rawUrl}/api`;
   const serviceToken = getSecret("AGENTSTORE_SERVICE_TOKEN") || "";
   const gitUrl = settings.aapProjectGitUrl || "https://github.com/YOUR_ORG/AgentStore";
   const gitBranch = settings.aapProjectGitBranch || "main";
