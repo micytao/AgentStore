@@ -192,7 +192,7 @@ export async function installRhdhOperator(): Promise<PlatformSettings> {
           labels: { "app.kubernetes.io/managed-by": "agentstore" },
         },
         spec: {
-          channel: "fast",
+          channel: "fast-1.10",
           name: "rhdh",
           source: "redhat-operators",
           sourceNamespace: "openshift-marketplace",

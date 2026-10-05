@@ -94,8 +94,7 @@ catalog:
   # How often RHDH re-reads locations and re-processes entities.
   # Default is ~100-200s; set lower for faster agent discovery.
   processingInterval:
-    fromSeconds: 10
-    toSeconds: 10
+    seconds: 10
   locations:
     # AgentStore System entity + all published agent Components (dynamic)
     - type: url

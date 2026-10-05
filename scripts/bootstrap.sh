@@ -4,7 +4,7 @@
 #
 # Usage:
 #   ./scripts/bootstrap.sh              # Full setup
-#   ./scripts/bootstrap.sh --resume     # Resume interrupted setup
+#   ./scripts/bootstrap.sh --resume     # Skip credential prompts if already configured
 #   ./scripts/bootstrap.sh --teardown   # Remove everything from cluster
 #   ./scripts/bootstrap.sh --verbose    # Show debug API call info
 # =============================================================================
@@ -309,13 +309,16 @@ prompt_optional() {
 
 prompt_secret() {
   local label="$1" var_name="$2" required="${3:-0}"
-  ask "$label: "
   local val=""
-  read -rs val
-  echo ""
-  if [[ -z "$val" && "$required" == "1" ]]; then
-    die "$label is required"
-  fi
+  while true; do
+    ask "$label: "
+    read -rs val
+    echo ""
+    if [[ -n "$val" || "$required" != "1" ]]; then
+      break
+    fi
+    err "$label is required"
+  done
   eval "$var_name='$val'"
 }
 
@@ -344,7 +347,7 @@ for arg in "$@"; do
     --teardown) TEARDOWN=1 ;;
     --help|-h)
       echo "Usage: bootstrap.sh [--resume] [--teardown] [--verbose]"
-      echo "  --resume    Skip already-completed phases"
+      echo "  --resume    Skip credential prompts if already configured"
       echo "  --teardown  Remove all AgentStore resources from the cluster"
       echo "  --verbose   Show debug API call info"
       exit 0
@@ -605,6 +608,12 @@ if load_config; then
   info "Loaded saved config from $CONFIG_FILE"
 fi
 
+# Snapshot the current OCP API URL from platform.json before any changes —
+# used after Phase 1 to detect cluster switches and reset stale deploy state.
+PREV_OCP_API=""
+PREV_PLAT=$(api_call GET "/admin/platform" 2>/dev/null) || PREV_PLAT="{}"
+PREV_OCP_API=$(echo "$PREV_PLAT" | jq -r '.settings.openshiftApiUrl // empty' 2>/dev/null)
+
 # Auto-detect git info (saved config overrides git-detected defaults)
 GIT_URL_DEFAULT="${SAVED_GIT_URL:-$(cd "$REPO_DIR" && git remote get-url origin 2>/dev/null || echo "")}"
 GIT_BRANCH_DEFAULT="${SAVED_GIT_BRANCH:-$(cd "$REPO_DIR" && git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "main")}"
@@ -618,17 +627,17 @@ if [[ "$RESUME" == "1" ]]; then
   SECRETS_JSON=$(api_call GET "/admin/secrets" 2>/dev/null) || SECRETS_JSON="[]"
 
   # API values first, fall back to saved config from previous run
-  OCP_API=$(echo "$PLAT_JSON" | jq -r '.openshiftApiUrl // empty' 2>/dev/null)
+  OCP_API=$(echo "$PLAT_JSON" | jq -r '.settings.openshiftApiUrl // empty' 2>/dev/null)
   OCP_API="${OCP_API:-$SAVED_OCP_API}"
-  OCP_CONSOLE=$(echo "$PLAT_JSON" | jq -r '.openshiftConsoleUrl // empty' 2>/dev/null)
+  OCP_CONSOLE=$(echo "$PLAT_JSON" | jq -r '.settings.openshiftConsoleUrl // empty' 2>/dev/null)
   OCP_CONSOLE="${OCP_CONSOLE:-$SAVED_OCP_CONSOLE}"
-  AAP_URL=$(echo "$PLAT_JSON" | jq -r '.aapControllerUrl // empty' 2>/dev/null)
+  AAP_URL=$(echo "$PLAT_JSON" | jq -r '.settings.aapControllerUrl // empty' 2>/dev/null)
   AAP_URL="${AAP_URL:-$SAVED_AAP_URL}"
-  OCP_NS=$(echo "$PLAT_JSON" | jq -r '.openshiftNamespace // empty' 2>/dev/null)
+  OCP_NS=$(echo "$PLAT_JSON" | jq -r '.settings.openshiftNamespace // empty' 2>/dev/null)
   OCP_NS="${OCP_NS:-${SAVED_OCP_NS:-agent-workloads}}"
-  GIT_URL=$(echo "$PLAT_JSON" | jq -r '.aapProjectGitUrl // empty' 2>/dev/null)
+  GIT_URL=$(echo "$PLAT_JSON" | jq -r '.settings.aapProjectGitUrl // empty' 2>/dev/null)
   GIT_URL="${GIT_URL:-$SAVED_GIT_URL}"
-  GIT_BRANCH=$(echo "$PLAT_JSON" | jq -r '.aapProjectGitBranch // empty' 2>/dev/null)
+  GIT_BRANCH=$(echo "$PLAT_JSON" | jq -r '.settings.aapProjectGitBranch // empty' 2>/dev/null)
   GIT_BRANCH="${GIT_BRANCH:-${SAVED_GIT_BRANCH:-main}}"
 
   has_secret() { echo "$SECRETS_JSON" | jq -e ".[] | select(.key == \"$1\" and .hasValue == true)" > /dev/null 2>&1; }
@@ -777,6 +786,32 @@ info "  AAP URL:        $AAP_URL"
 info "  Namespace:      $OCP_NS"
 info "  Git:            $GIT_URL @ $GIT_BRANCH"
 
+# --- Detect cluster change and reset stale deploy state ---
+# Two checks: (1) OCP API URL changed, (2) stored route URL belongs to a
+# different cluster than the one we're targeting (catches the case where the
+# user accepted a stale default or the API URL didn't change but the prior
+# deploy was from an even older cluster).
+NEED_RESET=0
+if [[ -n "$PREV_OCP_API" && "$PREV_OCP_API" != "$OCP_API" ]]; then
+  warn "Cluster changed: $PREV_OCP_API → $OCP_API"
+  NEED_RESET=1
+fi
+if [[ $NEED_RESET -eq 0 ]]; then
+  PREV_ROUTE=$(echo "$PREV_PLAT" | jq -r '.settings.agentstoreDeploy.routeUrl // empty' 2>/dev/null)
+  if [[ -n "$PREV_ROUTE" && -n "$OCP_CONSOLE" ]]; then
+    CURRENT_DOMAIN=$(echo "$OCP_CONSOLE" | sed -n 's|.*console-openshift-console\.\(apps\..*\)|\1|p')
+    if [[ -n "$CURRENT_DOMAIN" && "$PREV_ROUTE" != *"$CURRENT_DOMAIN"* ]]; then
+      warn "Stale deploy state: route $PREV_ROUTE does not match current cluster ($CURRENT_DOMAIN)"
+      NEED_RESET=1
+    fi
+  fi
+fi
+if [[ $NEED_RESET -eq 1 ]]; then
+  info "Resetting deploy/build state from the previous cluster..."
+  api_call DELETE "/admin/platform" > /dev/null 2>&1 || true
+  ok "Cluster state reset — all phases will run fresh"
+fi
+
 # =============================================================================
 # Phase 2 — Validate Connectivity
 # =============================================================================
@@ -809,10 +844,10 @@ phase 3 "Deploy AgentStore to OpenShift"
 
 # Resume check
 PLAT=$(api_call GET "/admin/platform") || die "Cannot read platform status"
-AS_STATUS=$(echo "$PLAT" | jq -r '.agentstoreDeploy.status // "none"' 2>/dev/null)
-AS_ROUTE=$(echo "$PLAT" | jq -r '.agentstoreDeploy.routeUrl // empty' 2>/dev/null)
+AS_STATUS=$(echo "$PLAT" | jq -r '.settings.agentstoreDeploy.status // "none"' 2>/dev/null)
+AS_ROUTE=$(echo "$PLAT" | jq -r '.settings.agentstoreDeploy.routeUrl // empty' 2>/dev/null)
 
-if [[ "$RESUME" == "1" && "$AS_STATUS" == "running" && -n "$AS_ROUTE" ]]; then
+if [[ "$AS_STATUS" == "running" && -n "$AS_ROUTE" ]]; then
   ok "AgentStore already deployed at $AS_ROUTE"
 else
   info "Starting AgentStore build + deploy..."
@@ -873,10 +908,10 @@ fi
 phase 4 "Build Execution Environment"
 
 PLAT=$(api_call GET "/admin/platform") || true
-EE_STATUS=$(echo "$PLAT" | jq -r '.eeBuild.status // "none"' 2>/dev/null)
-EE_ID=$(echo "$PLAT" | jq -r '.eeBuild.executionEnvironmentId // empty' 2>/dev/null)
+EE_STATUS=$(echo "$PLAT" | jq -r '.settings.eeBuild.status // "none"' 2>/dev/null)
+EE_ID=$(echo "$PLAT" | jq -r '.settings.eeBuild.executionEnvironmentId // .settings.aapExecutionEnvironmentId // empty' 2>/dev/null)
 
-if [[ "$RESUME" == "1" && "$EE_STATUS" == "running" && -n "$EE_ID" ]]; then
+if [[ "$EE_STATUS" == "running" && -n "$EE_ID" ]]; then
   ok "EE already built (ID: $EE_ID)"
 else
   for attempt in 1 2; do
@@ -915,9 +950,9 @@ fi
 phase 5 "Build Agent Runtime"
 
 PLAT=$(api_call GET "/admin/platform") || true
-RT_STATUS=$(echo "$PLAT" | jq -r '.agentRuntimeBuild.status // "none"' 2>/dev/null)
+RT_STATUS=$(echo "$PLAT" | jq -r '.settings.agentRuntimeBuild.status // "none"' 2>/dev/null)
 
-if [[ "$RESUME" == "1" && "$RT_STATUS" == "running" ]]; then
+if [[ "$RT_STATUS" == "running" ]]; then
   ok "Agent runtime already built"
 else
   for attempt in 1 2; do
@@ -956,10 +991,10 @@ fi
 phase 6 "Create AAP Job Templates"
 
 PLAT=$(api_call GET "/admin/platform") || true
-JT_AUTO=$(echo "$PLAT" | jq -r '.aapBootstrap.autonomousJobTemplateId // empty' 2>/dev/null)
-JT_COLLAB=$(echo "$PLAT" | jq -r '.aapBootstrap.collaborativeJobTemplateId // empty' 2>/dev/null)
+JT_AUTO=$(echo "$PLAT" | jq -r '.settings.aapBootstrap.autonomousJobTemplateId // empty' 2>/dev/null)
+JT_COLLAB=$(echo "$PLAT" | jq -r '.settings.aapBootstrap.collaborativeJobTemplateId // empty' 2>/dev/null)
 
-if [[ "$RESUME" == "1" && -n "$JT_AUTO" && -n "$JT_COLLAB" ]]; then
+if [[ -n "$JT_AUTO" && -n "$JT_COLLAB" ]]; then
   ok "Job templates already exist (autonomous: #$JT_AUTO, collaborative: #$JT_COLLAB)"
 else
   info "Creating AAP Project, Inventory, Credentials, and Job Templates..."
@@ -995,7 +1030,7 @@ PROVIDERS=$(api_call GET "/admin/providers") || true
 ACTIVE_LLM=$(echo "$PROVIDERS" | jq -r '.[] | select(.active == true and (.models | length) > 0) | .label' 2>/dev/null | head -1)
 ACTIVE_MODEL=$(echo "$PROVIDERS" | jq -r '.[] | select(.active == true) | .defaultModel // empty' 2>/dev/null | head -1)
 
-if [[ "$RESUME" == "1" && -n "$ACTIVE_LLM" ]]; then
+if [[ -n "$ACTIVE_LLM" ]]; then
   ok "LLM already configured: $ACTIVE_LLM ($ACTIVE_MODEL)"
   if ! prompt_yn "Reconfigure LLM?" "N"; then
     info "Keeping existing LLM configuration"
@@ -1111,7 +1146,7 @@ if prompt_yn "Install Red Hat Developer Hub?" "Y"; then
   RHDH_INST=$(echo "$RHDH_PRE" | jq -r '.rhdhInstance.status // "none"' 2>/dev/null)
   RHDH_ROUTE=$(echo "$RHDH_PRE" | jq -r '.deploy.routeUrl // empty' 2>/dev/null)
 
-  if [[ "$RESUME" == "1" && "$RHDH_INST" == "running" && -n "$RHDH_ROUTE" ]]; then
+  if [[ "$RHDH_INST" == "running" && -n "$RHDH_ROUTE" ]]; then
     ok "RHDH already running at $RHDH_ROUTE"
   else
     # Install operator
@@ -1233,21 +1268,21 @@ fi
 
 # Gather final status
 PLAT=$(api_call GET "/admin/platform") || true
-FINAL_AS_ROUTE=$(echo "$PLAT" | jq -r '.agentstoreDeploy.routeUrl // empty' 2>/dev/null)
+FINAL_AS_ROUTE=$(echo "$PLAT" | jq -r '.settings.agentstoreDeploy.routeUrl // empty' 2>/dev/null)
 # Derive cluster URL from console URL if not stored
 if [[ -z "$FINAL_AS_ROUTE" ]]; then
   # Try API value first, then script variable from Phase 1
-  CONSOLE_URL=$(echo "$PLAT" | jq -r '.openshiftConsoleUrl // empty' 2>/dev/null)
+  CONSOLE_URL=$(echo "$PLAT" | jq -r '.settings.openshiftConsoleUrl // empty' 2>/dev/null)
   [[ -z "$CONSOLE_URL" ]] && CONSOLE_URL="${OCP_CONSOLE:-}"
   DOMAIN=$(echo "$CONSOLE_URL" | sed -n 's|.*console-openshift-console\.\(apps\..*\)|\1|p')
   [[ -n "$DOMAIN" ]] && FINAL_AS_ROUTE="https://agentstore-agentstore.${DOMAIN}"
 fi
 FINAL_AS_ROUTE="${FINAL_AS_ROUTE:-N/A}"
-FINAL_EE_ID="${EE_ID:-$(echo "$PLAT" | jq -r '.eeBuild.executionEnvironmentId // .aapExecutionEnvironmentId // empty' 2>/dev/null)}"
+FINAL_EE_ID="${EE_ID:-$(echo "$PLAT" | jq -r '.settings.eeBuild.executionEnvironmentId // .settings.aapExecutionEnvironmentId // empty' 2>/dev/null)}"
 FINAL_EE_ID="${FINAL_EE_ID:-—}"
-FINAL_JT_AUTO="${JT_AUTO:-$(echo "$PLAT" | jq -r '.aapBootstrap.autonomousJobTemplateId // .aapJobTemplateId // empty' 2>/dev/null)}"
+FINAL_JT_AUTO="${JT_AUTO:-$(echo "$PLAT" | jq -r '.settings.aapBootstrap.autonomousJobTemplateId // .settings.aapJobTemplateId // empty' 2>/dev/null)}"
 FINAL_JT_AUTO="${FINAL_JT_AUTO:-—}"
-FINAL_JT_COLLAB="${JT_COLLAB:-$(echo "$PLAT" | jq -r '.aapBootstrap.collaborativeJobTemplateId // .openshellGatewayJobTemplateId // empty' 2>/dev/null)}"
+FINAL_JT_COLLAB="${JT_COLLAB:-$(echo "$PLAT" | jq -r '.settings.aapBootstrap.collaborativeJobTemplateId // .settings.openshellGatewayJobTemplateId // empty' 2>/dev/null)}"
 FINAL_JT_COLLAB="${FINAL_JT_COLLAB:-—}"
 
 PROVIDERS=$(api_call GET "/admin/providers" 2>/dev/null) || true
