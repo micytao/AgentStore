@@ -19,3 +19,81 @@ plugins:
   # call AgentStore's REST API through the RHDH proxy.
   - package: './dynamic-plugins/dist/roadiehq-scaffolder-backend-module-http-request-dynamic'
     disabled: false
+
+  # -- Dynamic Home Page ---------------------------------------------------
+  # Replaces the default RHDH home page with an AgentStore-branded
+  # self-service portal.  Uses only built-in RHDH cards.
+  - package: './dynamic-plugins/dist/red-hat-developer-hub-backstage-plugin-dynamic-home-page'
+    disabled: false
+    pluginConfig:
+      dynamicPlugins:
+        frontend:
+          red-hat-developer-hub.backstage-plugin-dynamic-home-page:
+            dynamicRoutes:
+              - path: /
+                importName: DynamicHomePage
+            mountPoints:
+              # Row 1: Search bar (full width)
+              - mountPoint: home.page/cards
+                importName: SearchBar
+                config:
+                  layouts:
+                    xl: { w: 10, h: 1, x: 1 }
+                    lg: { w: 10, h: 1, x: 1 }
+                    md: { w: 10, h: 1, x: 1 }
+                    sm: { w: 12, h: 1 }
+                    xs: { w: 12, h: 1 }
+
+              # Row 2 left: Welcome / description card
+              - mountPoint: home.page/cards
+                importName: MarkdownCard
+                config:
+                  props:
+                    title: " "
+                    content: |
+                      ## Agent Store — Self-Service Portal
+
+                      **Governed AI agents, deployed once, used by everyone.**
+
+                      Welcome to the AgentStore self-service portal.  From here you can:
+
+                      - **Browse** the agent catalog to find and launch deployed agents
+                      - **Request** a new agent — submit a draft for admin review
+                      - **Star** your favourite agents for quick access
+
+                      Every agent is centrally reviewed, risk-tiered, and auditable —
+                      no unmanaged shadow-AI sprawl.
+                  layouts:
+                    xl: { w: 7, h: 5, x: 0 }
+                    lg: { w: 7, h: 5, x: 0 }
+                    md: { w: 12, h: 5, x: 0 }
+                    sm: { w: 12, h: 5 }
+                    xs: { w: 12, h: 5 }
+
+              # Row 2 right: Quick access links
+              - mountPoint: home.page/cards
+                importName: MarkdownCard
+                config:
+                  props:
+                    title: Quick Actions
+                    content: |
+                      - [**Browse Agent Catalog** — Discover and launch deployed agents](/catalog?filters[kind]=component)
+                      - [**Request a New Agent** — Submit a governed agent request](/create/templates/default/request-new-agent)
+                      - [**View All Templates** — See available self-service templates](/create)
+                  layouts:
+                    xl: { w: 5, h: 5, x: 7 }
+                    lg: { w: 5, h: 5, x: 7 }
+                    md: { w: 12, h: 4, x: 0 }
+                    sm: { w: 12, h: 4 }
+                    xs: { w: 12, h: 4 }
+
+              # Row 3: Starred agents (full width)
+              - mountPoint: home.page/cards
+                importName: CatalogStarredEntitiesCard
+                config:
+                  layouts:
+                    xl: { w: 12, h: 4 }
+                    lg: { w: 12, h: 4 }
+                    md: { w: 12, h: 4 }
+                    sm: { w: 12, h: 4 }
+                    xs: { w: 12, h: 4 }

@@ -11,15 +11,15 @@
 #   oc patch backstage developer-hub -n rhdh --type merge \
 #     --patch '{"spec":{"application":{"appConfig":{"configMaps":[{"name":"agentstore-rhdh-app-config"}]}}}}'
 #
-# Replace CLUSTER_DOMAIN with your cluster's apps domain (e.g.
-# apps.mycluster.example.com) and set the referenced env vars /
-# secrets before deploying.
+# CLUSTER_DOMAIN is replaced at provision time by extractClusterDomain()
+# which returns the full apps domain (e.g. apps.mycluster.example.com).
+# Set the referenced env vars / secrets before deploying.
 # ---------------------------------------------------------------------------
 
 # -- Portal branding -------------------------------------------------------
 app:
   title: Agent Store - Self-Service Portal
-  baseUrl: https://backstage-developer-hub-rhdh.apps.CLUSTER_DOMAIN
+  baseUrl: https://backstage-developer-hub-rhdh.CLUSTER_DOMAIN
   branding:
     title: Agent Store
     theme:
@@ -51,9 +51,9 @@ app:
             link: '#ef9234'
 
 backend:
-  baseUrl: https://backstage-developer-hub-rhdh.apps.CLUSTER_DOMAIN
+  baseUrl: https://backstage-developer-hub-rhdh.CLUSTER_DOMAIN
   cors:
-    origin: https://backstage-developer-hub-rhdh.apps.CLUSTER_DOMAIN
+    origin: https://backstage-developer-hub-rhdh.CLUSTER_DOMAIN
   reading:
     allow:
       - host: agentstore.agentstore.svc:3000
@@ -77,7 +77,7 @@ signInPage: guest
 proxy:
   endpoints:
     '/agentstore':
-      target: ${AGENTSTORE_URL}   # e.g. https://agentstore.apps.CLUSTER_DOMAIN/api
+      target: ${AGENTSTORE_URL}   # e.g. https://agentstore-agentstore.CLUSTER_DOMAIN/api
       changeOrigin: true
       headers:
         # Service-to-service auth token that AgentStore's requireAdmin()
@@ -87,7 +87,7 @@ proxy:
 # -- Catalog: import agent entities + templates from AgentStore API --------
 # These locations point at AgentStore's REST endpoints so RHDH auto-discovers
 # agents without needing a public GitHub repo.  ${AGENTSTORE_URL} is injected
-# from the rhdh-secrets Secret (e.g. https://agentstore-agentstore.apps.CLUSTER_DOMAIN).
+# from the rhdh-secrets Secret (e.g. https://agentstore-agentstore.CLUSTER_DOMAIN).
 catalog:
   rules:
     - allow: [Component, Template, System, Group, Resource, Location]
@@ -108,4 +108,3 @@ catalog:
       target: ${AGENTSTORE_URL}/rhdh/templates/request-agent
       rules:
         - allow: [Template]
-
