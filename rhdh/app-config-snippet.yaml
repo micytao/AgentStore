@@ -57,7 +57,7 @@ backend:
   reading:
     allow:
       - host: agentstore.agentstore.svc:3000
-      - host: agentstore-agentstore.apps.CLUSTER_DOMAIN
+      - host: agentstore-agentstore.CLUSTER_DOMAIN
 
 # -- Authentication --------------------------------------------------------
 # Guest access only for demo / workshop use.  Replace with a real OIDC /
