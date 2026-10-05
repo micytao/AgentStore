@@ -121,7 +121,7 @@ export async function getRhdhPreflight(): Promise<RhdhPreflightResult> {
         instanceStatus = "running";
         if (!liveRouteUrl) {
           const host = await getNamespaceRouteHost(RHDH_NAMESPACE);
-          if (host) liveRouteUrl = `https://${host}/catalog`;
+          if (host) liveRouteUrl = `${host}/catalog`;
         }
       }
     } catch {
