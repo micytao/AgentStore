@@ -1243,12 +1243,20 @@ if [[ -z "$FINAL_AS_ROUTE" ]]; then
   [[ -n "$DOMAIN" ]] && FINAL_AS_ROUTE="https://agentstore-agentstore.${DOMAIN}"
 fi
 FINAL_AS_ROUTE="${FINAL_AS_ROUTE:-N/A}"
-FINAL_EE_ID=$(echo "$PLAT" | jq -r '.eeBuild.executionEnvironmentId // .aapExecutionEnvironmentId // "—"' 2>/dev/null)
-FINAL_JT_AUTO=$(echo "$PLAT" | jq -r '.aapBootstrap.autonomousJobTemplateId // .aapJobTemplateId // "—"' 2>/dev/null)
-FINAL_JT_COLLAB=$(echo "$PLAT" | jq -r '.aapBootstrap.collaborativeJobTemplateId // .openshellGatewayJobTemplateId // "—"' 2>/dev/null)
+FINAL_EE_ID="${EE_ID:-$(echo "$PLAT" | jq -r '.eeBuild.executionEnvironmentId // .aapExecutionEnvironmentId // empty' 2>/dev/null)}"
+FINAL_EE_ID="${FINAL_EE_ID:-—}"
+FINAL_JT_AUTO="${JT_AUTO:-$(echo "$PLAT" | jq -r '.aapBootstrap.autonomousJobTemplateId // .aapJobTemplateId // empty' 2>/dev/null)}"
+FINAL_JT_AUTO="${FINAL_JT_AUTO:-—}"
+FINAL_JT_COLLAB="${JT_COLLAB:-$(echo "$PLAT" | jq -r '.aapBootstrap.collaborativeJobTemplateId // .openshellGatewayJobTemplateId // empty' 2>/dev/null)}"
+FINAL_JT_COLLAB="${FINAL_JT_COLLAB:-—}"
 
 PROVIDERS=$(api_call GET "/admin/providers" 2>/dev/null) || true
 FINAL_LLM=$(echo "$PROVIDERS" | jq -r '.[] | select(.active == true) | "\(.label) (\(.defaultModel // "no model"))"' 2>/dev/null | head -1)
+# Override with the model the script just set if the API didn't persist it
+if [[ -n "${SELECTED_MODEL:-}" && "$FINAL_LLM" == *"no model"* ]]; then
+  LLM_LABEL=$(echo "$PROVIDERS" | jq -r '.[] | select(.active == true) | .label' 2>/dev/null | head -1)
+  FINAL_LLM="${LLM_LABEL:-LLM} ($SELECTED_MODEL)"
+fi
 FINAL_LLM="${FINAL_LLM:-N/A}"
 
 FINAL_RHDH="${RHDH_ROUTE:-— skipped}"
