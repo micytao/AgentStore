@@ -91,6 +91,11 @@ proxy:
 catalog:
   rules:
     - allow: [Component, Template, System, Group, Resource, Location]
+  # How often RHDH re-reads locations and re-processes entities.
+  # Default is ~100-200s; set lower for faster agent discovery.
+  processingInterval:
+    fromSeconds: 10
+    toSeconds: 10
   locations:
     # AgentStore System entity + all published agent Components (dynamic)
     - type: url
