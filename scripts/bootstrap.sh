@@ -1132,7 +1132,7 @@ if [[ -z "$ACTIVE_LLM" ]]; then
     }
 
     MODELS=$(echo "$TEST_RESULT" | jq -r '.models // [] | .[]' 2>/dev/null)
-    MODEL_COUNT=$(echo "$MODELS" | grep -c . || echo "0")
+    MODEL_COUNT=$(echo "$MODELS" | grep -c . 2>/dev/null) || MODEL_COUNT=0
 
     if [[ "$MODEL_COUNT" -eq 0 ]]; then
       warn "No models discovered at this endpoint"
