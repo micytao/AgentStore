@@ -1,4 +1,5 @@
 import type { OpenShellMcpServerConfig, OpenShellModelConfig } from "@agentstore/shared";
+import { openshellCommandForAgent } from "@agentstore/shared";
 import { SdkError } from "@nvidia/openshell-sdk";
 import { sandboxImageForAgent } from "./config.js";
 import { buildOpenCodeConfig, isNativeProvider, nativeProviderEnvVar } from "./opencodeConfig.js";
@@ -156,7 +157,7 @@ export async function createSession(input: CreateSessionInput): Promise<SessionR
       name: id,
       image: sandboxImageForAgent(input.agent, input.sandboxImage),
       providers: providerNames,
-      command: ["sh", "-c", input.agent],
+      command: openshellCommandForAgent(input.agent),
       tty: true,
       policy: DEFAULT_SANDBOX_POLICY,
     };

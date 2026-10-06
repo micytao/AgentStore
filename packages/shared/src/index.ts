@@ -785,6 +785,8 @@ export interface OpenshellAgentDef {
   label: string;
   image: string;
   description: string;
+  /** Override the default sandbox command (`["sh", "-c", "<id>"]`). */
+  command?: string[];
 }
 
 const NVIDIA_BASE = "ghcr.io/nvidia/openshell-community/sandboxes/base:latest";
@@ -796,7 +798,7 @@ export const OPENSHELL_AGENTS: OpenshellAgentDef[] = [
   { id: "codex",    label: "Codex",              image: NVIDIA_BASE,                                   description: "OpenAI Codex CLI agent" },
   { id: "copilot",  label: "GitHub Copilot CLI", image: NVIDIA_BASE,                                   description: "GitHub Copilot in the terminal" },
   { id: "pi",       label: "Pi",                 image: `${NVIDIA_COMMUNITY}/pi:latest`,               description: "Collaborative coding agent" },
-  { id: "openclaw", label: "OpenClaw",           image: `${NVIDIA_COMMUNITY}/openclaw:latest`,         description: "NemoClaw blueprint agent" },
+  { id: "openclaw", label: "OpenClaw",           image: `${NVIDIA_COMMUNITY}/openclaw:latest`,         description: "NemoClaw blueprint agent", command: ["openclaw-start"] },
   { id: "ollama",   label: "Ollama",             image: `${NVIDIA_COMMUNITY}/ollama:latest`,           description: "Local LLM sandbox (Claude Code, Codex, OpenCode)" },
   { id: "gemini",   label: "Gemini",             image: `${NVIDIA_COMMUNITY}/gemini:latest`,           description: "Google Gemini CLI agent" },
   { id: "droid",    label: "Droid",              image: `${NVIDIA_COMMUNITY}/droid:latest`,            description: "Android development sandbox" },
@@ -809,4 +811,12 @@ export function openshellImageForAgent(agentId: string, override?: string): stri
   if (override) return override;
   const def = OPENSHELL_AGENTS.find((a) => a.id === agentId);
   return def?.image ?? "ghcr.io/anomalyco/opencode:latest";
+}
+
+/** Resolves the sandbox startup command for an agent. Agents may override
+ *  the default `["sh", "-c", "<id>"]` — e.g. OpenClaw uses `openclaw-start`
+ *  which runs the onboard wizard and starts the gateway. */
+export function openshellCommandForAgent(agentId: string): string[] {
+  const def = OPENSHELL_AGENTS.find((a) => a.id === agentId);
+  return def?.command ?? ["sh", "-c", agentId];
 }
