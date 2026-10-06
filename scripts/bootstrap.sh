@@ -6,6 +6,7 @@
 #   ./scripts/bootstrap.sh              # Full setup
 #   ./scripts/bootstrap.sh --resume     # Skip credential prompts if already configured
 #   ./scripts/bootstrap.sh --teardown   # Remove everything from cluster
+#   ./scripts/bootstrap.sh --reset-local # Clear all local state (fresh start, no cluster changes)
 #   ./scripts/bootstrap.sh --verbose    # Show debug API call info
 # =============================================================================
 set -euo pipefail
@@ -22,6 +23,7 @@ BOOTSTRAP_START=""
 RESUME=0
 VERBOSE=0
 TEARDOWN=0
+RESET_LOCAL=0
 
 # =============================================================================
 # Color constants
@@ -342,14 +344,16 @@ set_secret() {
 # =============================================================================
 for arg in "$@"; do
   case "$arg" in
-    --resume)  RESUME=1 ;;
-    --verbose) VERBOSE=1 ;;
-    --teardown) TEARDOWN=1 ;;
+    --resume)      RESUME=1 ;;
+    --verbose)     VERBOSE=1 ;;
+    --teardown)    TEARDOWN=1 ;;
+    --reset-local) RESET_LOCAL=1 ;;
     --help|-h)
-      echo "Usage: bootstrap.sh [--resume] [--teardown] [--verbose]"
-      echo "  --resume    Skip credential prompts if already configured"
-      echo "  --teardown  Remove all AgentStore resources from the cluster"
-      echo "  --verbose   Show debug API call info"
+      echo "Usage: bootstrap.sh [--resume] [--teardown] [--reset-local] [--verbose]"
+      echo "  --resume      Skip credential prompts if already configured"
+      echo "  --teardown    Remove all AgentStore resources from the cluster"
+      echo "  --reset-local Clear all local state (.data/, bootstrap config/logs)"
+      echo "  --verbose     Show debug API call info"
       exit 0
       ;;
     *) die "Unknown argument: $arg" ;;
@@ -525,6 +529,51 @@ if [[ "$TEARDOWN" == "1" ]]; then
   echo -e "${C_BOLD}║${C_RESET}  Re-run ${C_DIM}bootstrap.sh${C_RESET} to set up again.                        ${C_BOLD}║${C_RESET}"
   echo -e "${C_BOLD}║${C_RESET}                                                              ${C_BOLD}║${C_RESET}"
   echo -e "${C_BOLD}╚══════════════════════════════════════════════════════════════╝${C_RESET}"
+  exit 0
+fi
+
+# =============================================================================
+# RESET-LOCAL MODE
+# =============================================================================
+if [[ "$RESET_LOCAL" == "1" ]]; then
+  echo -e "\n${C_PHASE}══ Reset Local State ══${C_RESET}\n"
+  echo -e "  This will delete all local AgentStore data, including:"
+  echo ""
+  echo -e "    • Platform settings     ${C_DIM}(cluster URLs, deploy state, AAP IDs)${C_RESET}"
+  echo -e "    • Encrypted secrets     ${C_DIM}(OCP token, AAP token, API keys)${C_RESET}"
+  echo -e "    • Catalog overrides     ${C_DIM}(admin edits to seed listings)${C_RESET}"
+  echo -e "    • Custom listings       ${C_DIM}(manually-created listings)${C_RESET}"
+  echo -e "    • Provider config       ${C_DIM}(LLM provider settings)${C_RESET}"
+  echo -e "    • Tasks & audit log"
+  echo -e "    • Bootstrap config/logs ${C_DIM}(saved inputs from previous runs)${C_RESET}"
+  echo ""
+  echo -e "  ${C_DIM}The encryption key (secrets.key) is preserved.${C_RESET}"
+  echo -e "  ${C_WARN}No cluster resources are affected — only local files.${C_RESET}"
+  echo ""
+  ask "Continue? [y/N]: "
+  read -r confirm
+  [[ ! "$confirm" =~ ^[Yy] ]] && { info "Aborted."; exit 0; }
+
+  local_data="$REPO_DIR/apps/web/.data"
+  rm -f "$local_data/platform.json" 2>/dev/null || true
+  rm -f "$local_data/vault.json" 2>/dev/null || true
+  rm -f "$local_data/secrets.json" 2>/dev/null || true
+  rm -f "$local_data/catalog-overrides.json" 2>/dev/null || true
+  rm -f "$local_data/deleted-listings.json" 2>/dev/null || true
+  rm -f "$local_data/providers.json" 2>/dev/null || true
+  rm -f "$local_data/engine-settings.json" 2>/dev/null || true
+  rm -f "$local_data/tasks.json" 2>/dev/null || true
+  rm -f "$local_data/audit-log.jsonl" 2>/dev/null || true
+  rm -rf "$local_data/custom-listings" 2>/dev/null || true
+  rm -f "$CONFIG_FILE" 2>/dev/null || true
+  rm -f "$LOG_FILE" 2>/dev/null || true
+  rm -f "$DEVSERVER_LOG" 2>/dev/null || true
+
+  echo ""
+  ok "Local state cleared"
+  info "Remaining: $(ls "$local_data" 2>/dev/null | tr '\n' ' ')"
+  echo ""
+  echo -e "  Run ${C_DIM}./scripts/bootstrap.sh${C_RESET} to set up a fresh cluster."
   exit 0
 fi
 
