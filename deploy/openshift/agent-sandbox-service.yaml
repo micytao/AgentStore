@@ -98,6 +98,8 @@ metadata:
   namespace: agent-workloads
   labels:
     app.kubernetes.io/managed-by: agentstore
+  annotations:
+    haproxy.router.openshift.io/timeout: 300s
 spec:
   to:
     kind: Service

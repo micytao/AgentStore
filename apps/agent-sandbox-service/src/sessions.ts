@@ -4,6 +4,21 @@ import { sandboxImageForAgent } from "./config.js";
 import { buildOpenCodeConfig, isNativeProvider, nativeProviderEnvVar } from "./opencodeConfig.js";
 import { getClient } from "./openshellClient.js";
 
+/**
+ * Baseline sandbox policy attached at create-time. The supervisor fetches this
+ * via gRPC to learn the isolation boundary — without it sandboxes like OpenClaw
+ * never become "ready" because the supervisor can't discover a policy.
+ */
+const DEFAULT_SANDBOX_POLICY = {
+  version: 1,
+  filesystem: {
+    includeWorkdir: true,
+    readOnly: ["/bin", "/usr", "/lib", "/proc", "/dev/urandom", "/etc", "/var/log"],
+    readWrite: ["/tmp", "/dev/null"],
+  },
+  landlock: { compatibility: "best_effort" },
+};
+
 export type SessionPhase = "Provisioning" | "Running" | "Failed" | "Cancelled";
 
 export interface SessionRecord {
@@ -130,14 +145,22 @@ export async function createSession(input: CreateSessionInput): Promise<SessionR
     // Create sandbox with the agent command directly. Terminal access
     // uses execInteractive to spawn a separate shell session alongside
     // the running agent — no tmux needed.
-    await client.sandbox.create({
+    //
+    // A policy is required so the supervisor can discover it via gRPC.
+    // Without one the supervisor loops on "Server returned no policy".
+    // Extracted to a variable because the SDK declares `policy?:
+    // MessageInitShape<…>` but the installed @bufbuild/protobuf does
+    // not export MessageInitShape — collapsing the field to `never`
+    // and triggering excess-property errors on object literals.
+    const sandboxSpec = {
       name: id,
       image: sandboxImageForAgent(input.agent, input.sandboxImage),
       providers: providerNames,
       command: ["sh", "-c", input.agent],
       tty: true,
-      restartPolicy: "on-failure",
-    });
+      policy: DEFAULT_SANDBOX_POLICY,
+    };
+    await client.sandbox.create(sandboxSpec as Parameters<typeof client.sandbox.create>[0]);
 
     // Wait for the sandbox to become ready before uploading config.
     await client.sandbox.waitReady(id, 120);
