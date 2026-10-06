@@ -29,6 +29,7 @@ import {
 import { Table, Tbody, Td, Th, Thead, Tr } from "@patternfly/react-table";
 import {
   departmentLabel,
+  openshellImageForAgent,
   type AgentSandboxControllerStatus,
   type AgentSandboxServiceInstallStatus,
   type GatewayWorkloadKind,
@@ -648,6 +649,7 @@ export function OpenShellPanel() {
                     <Th>Listing</Th>
                     <Th>Department</Th>
                     <Th>OpenShell agent</Th>
+                    <Th>Sandbox image</Th>
                   </Tr>
                 </Thead>
                 <Tbody>
@@ -658,6 +660,12 @@ export function OpenShellPanel() {
                       </Td>
                       <Td dataLabel="Department">{departmentLabel(listing.department)}</Td>
                       <Td dataLabel="OpenShell agent">{listing.openshellAgent}</Td>
+                      <Td dataLabel="Sandbox image">
+                        <code style={{ fontSize: "0.85em" }}>
+                          {listing.agentConfig?.openshellSandboxImage ??
+                            openshellImageForAgent(listing.openshellAgent ?? "opencode")}
+                        </code>
+                      </Td>
                     </Tr>
                   ))}
                 </Tbody>

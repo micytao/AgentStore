@@ -3,6 +3,8 @@
  * with its own connection to the OpenShell gateway (via the SDK, not the CLI).
  */
 
+import { openshellImageForAgent } from "@agentstore/shared";
+
 export function port(): number {
   const raw = process.env.PORT;
   const n = raw ? Number(raw) : NaN;
@@ -65,7 +67,18 @@ export function oidcClientSecret(): string | undefined {
   return process.env.OPENSHELL_OIDC_CLIENT_SECRET || undefined;
 }
 
-/** Default sandbox image when no agent-specific image is configured. */
+/** @deprecated Use sandboxImageForAgent() instead. Kept for env-var fallback. */
 export function defaultSandboxImage(): string {
   return process.env.OPENSHELL_DEFAULT_SANDBOX_IMAGE || "ghcr.io/anomalyco/opencode:latest";
+}
+
+/** Resolves the sandbox container image for an agent. Priority:
+ *  1. Explicit override (admin-configured per-listing)
+ *  2. OPENSHELL_DEFAULT_SANDBOX_IMAGE env var (global admin override)
+ *  3. Built-in registry lookup from @agentstore/shared
+ *  4. ghcr.io/anomalyco/opencode:latest (proven working fallback) */
+export function sandboxImageForAgent(agent: string, override?: string): string {
+  if (override) return override;
+  if (process.env.OPENSHELL_DEFAULT_SANDBOX_IMAGE) return process.env.OPENSHELL_DEFAULT_SANDBOX_IMAGE;
+  return openshellImageForAgent(agent);
 }

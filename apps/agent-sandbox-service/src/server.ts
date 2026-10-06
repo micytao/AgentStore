@@ -44,6 +44,7 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
 interface CreateSessionBody {
   taskId: string;
   agent: string;
+  sandboxImage?: string;
   model?: OpenShellModelConfig;
   mcpServers?: OpenShellMcpServerConfig[];
   gitUrl?: string;

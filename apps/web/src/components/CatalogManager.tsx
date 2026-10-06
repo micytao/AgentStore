@@ -43,6 +43,7 @@ import {
 import { Table, Tbody, Td, Th, Thead, Tr } from "@patternfly/react-table";
 import {
   DEPARTMENTS,
+  OPENSHELL_AGENTS,
   departmentLabel,
   type AgentRuntime,
   type DepartmentId,
@@ -1588,7 +1589,7 @@ function OnboardAgentWizard({
   const [pricingUnit, setPricingUnit] = useState<PricingUnit>("per-task");
   const [pricingAmount, setPricingAmount] = useState("0.80");
   const [runtime, setRuntime] = useState<AgentRuntime>("generic-chat");
-  const [openshellAgent, setOpenshellAgent] = useState("");
+  const [openshellAgent, setOpenshellAgent] = useState("opencode");
   const [gitUrl, setGitUrl] = useState("");
   const [providerId, setProviderId] = useState("");
   const [toolBindings, setToolBindings] = useState<{ serverId: string; tool: string }[]>([]);
@@ -1616,8 +1617,8 @@ function OnboardAgentWizard({
   }
 
   function validateModes(): string | null {
-    if (runtime === "openshell" && !openshellAgent.trim()) {
-      return "OpenShell agent identifier is required for the OpenShell runtime";
+    if (runtime === "openshell" && !openshellAgent) {
+      return "Please select an OpenShell agent from the dropdown";
     }
     return null;
   }
@@ -1763,13 +1764,16 @@ function OnboardAgentWizard({
               </FormGroup>
               {runtime === "openshell" && (
                 <>
-                  <FormGroup label="OpenShell agent identifier" isRequired fieldId="wizard-openshell-agent">
-                    <TextInput
+                  <FormGroup label="OpenShell agent" isRequired fieldId="wizard-openshell-agent">
+                    <FormSelect
                       id="wizard-openshell-agent"
                       value={openshellAgent}
                       onChange={(_e, v) => setOpenshellAgent(v)}
-                      placeholder="e.g. claude"
-                    />
+                    >
+                      {OPENSHELL_AGENTS.map((a) => (
+                        <FormSelectOption key={a.id} value={a.id} label={`${a.label} — ${a.description}`} />
+                      ))}
+                    </FormSelect>
                   </FormGroup>
                   <FormGroup label="Repository URL" fieldId="wizard-git-url">
                     <TextInput

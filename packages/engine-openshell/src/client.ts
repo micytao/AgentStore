@@ -17,6 +17,8 @@ export interface RemoteSession {
 export interface CreateSessionRequest {
   taskId: string;
   agent: string;
+  /** Override the auto-resolved sandbox image for this agent. */
+  sandboxImage?: string;
   model?: OpenShellModelConfig;
   mcpServers?: OpenShellMcpServerConfig[];
   gitUrl?: string;

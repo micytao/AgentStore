@@ -69,6 +69,7 @@ export async function startOpenShellSession(listingId: string): Promise<Listing>
     session = await client.createSession({
       taskId: listing.id,
       agent: listing.openshellAgent ?? "opencode",
+      sandboxImage: listing.agentConfig?.openshellSandboxImage,
       model: openshellModelFor(listing),
       mcpServers: mcpServersFor(listing),
       gitUrl: listing.agentConfig?.gitUrl,

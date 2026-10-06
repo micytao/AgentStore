@@ -1,0 +1,13 @@
+id: openclaw-enterprise
+name: OpenClaw Enterprise
+department: engineering
+category: AI agent development
+description: NemoClaw blueprint agent for building, testing, and deploying AI agents on NVIDIA's enterprise stack. Interactive sandbox with tool-use and agentic workflow support.
+icon: robot
+runtime: openshell
+riskTier: medium
+reviewStatus: published
+pricing:
+  unit: per-hour
+  amount: 3.2
+openshellAgent: openclaw

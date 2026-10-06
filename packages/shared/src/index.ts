@@ -112,6 +112,10 @@ export interface AgentConfig {
   /** Repository to clone once into an `openshell` listing's sandbox at
    * deploy time. Unused for `generic-chat` listings. */
   gitUrl?: string;
+  /** Override the auto-resolved sandbox container image for an `openshell`
+   * listing. When unset, `openshellImageForAgent()` resolves the image
+   * from the built-in registry based on `listing.openshellAgent`. */
+  openshellSandboxImage?: string;
 }
 
 /** A reusable instruction bundle an admin can author once and attach to any
@@ -772,4 +776,37 @@ export const DEPARTMENTS: { id: DepartmentId | "all"; name: string }[] = [
 
 export function departmentLabel(id: DepartmentId | "all"): string {
   return DEPARTMENTS.find((d) => d.id === id)?.name ?? id;
+}
+
+// --- OpenShell agent registry --------------------------------------------
+
+export interface OpenshellAgentDef {
+  id: string;
+  label: string;
+  image: string;
+  description: string;
+}
+
+const NVIDIA_BASE = "ghcr.io/nvidia/openshell-community/sandboxes/base:latest";
+const NVIDIA_COMMUNITY = "ghcr.io/nvidia/openshell-community/sandboxes";
+
+export const OPENSHELL_AGENTS: OpenshellAgentDef[] = [
+  { id: "opencode", label: "OpenCode",           image: "ghcr.io/anomalyco/opencode:latest",           description: "Open-source coding agent" },
+  { id: "claude",   label: "Claude Code",        image: NVIDIA_BASE,                                   description: "Anthropic's coding agent" },
+  { id: "codex",    label: "Codex",              image: NVIDIA_BASE,                                   description: "OpenAI Codex CLI agent" },
+  { id: "copilot",  label: "GitHub Copilot CLI", image: NVIDIA_BASE,                                   description: "GitHub Copilot in the terminal" },
+  { id: "pi",       label: "Pi",                 image: `${NVIDIA_COMMUNITY}/pi:latest`,               description: "Collaborative coding agent" },
+  { id: "openclaw", label: "OpenClaw",           image: `${NVIDIA_COMMUNITY}/openclaw:latest`,         description: "NemoClaw blueprint agent" },
+  { id: "ollama",   label: "Ollama",             image: `${NVIDIA_COMMUNITY}/ollama:latest`,           description: "Local LLM sandbox (Claude Code, Codex, OpenCode)" },
+  { id: "gemini",   label: "Gemini",             image: `${NVIDIA_COMMUNITY}/gemini:latest`,           description: "Google Gemini CLI agent" },
+  { id: "droid",    label: "Droid",              image: `${NVIDIA_COMMUNITY}/droid:latest`,            description: "Android development sandbox" },
+];
+
+/** Resolves the container image for an OpenShell agent. Returns the
+ *  override if provided, otherwise looks up the built-in registry,
+ *  falling back to the current working opencode image for unknown agents. */
+export function openshellImageForAgent(agentId: string, override?: string): string {
+  if (override) return override;
+  const def = OPENSHELL_AGENTS.find((a) => a.id === agentId);
+  return def?.image ?? "ghcr.io/anomalyco/opencode:latest";
 }

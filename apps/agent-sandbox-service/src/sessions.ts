@@ -1,6 +1,6 @@
 import type { OpenShellMcpServerConfig, OpenShellModelConfig } from "@agentstore/shared";
 import { SdkError } from "@nvidia/openshell-sdk";
-import { defaultSandboxImage } from "./config.js";
+import { sandboxImageForAgent } from "./config.js";
 import { buildOpenCodeConfig, isNativeProvider, nativeProviderEnvVar } from "./opencodeConfig.js";
 import { getClient } from "./openshellClient.js";
 
@@ -17,6 +17,8 @@ export interface SessionRecord {
 export interface CreateSessionInput {
   taskId: string;
   agent: string;
+  /** Override the auto-resolved sandbox image for this session. */
+  sandboxImage?: string;
   model?: OpenShellModelConfig;
   mcpServers?: OpenShellMcpServerConfig[];
   gitUrl?: string;
@@ -130,7 +132,7 @@ export async function createSession(input: CreateSessionInput): Promise<SessionR
     // the running agent — no tmux needed.
     await client.sandbox.create({
       name: id,
-      image: defaultSandboxImage(),
+      image: sandboxImageForAgent(input.agent, input.sandboxImage),
       providers: providerNames,
       command: ["sh", "-c", input.agent],
       tty: true,
