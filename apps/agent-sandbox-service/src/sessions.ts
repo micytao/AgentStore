@@ -164,7 +164,9 @@ export async function createSession(input: CreateSessionInput): Promise<SessionR
     await client.sandbox.create(sandboxSpec as Parameters<typeof client.sandbox.create>[0]);
 
     // Wait for the sandbox to become ready before uploading config.
-    await client.sandbox.waitReady(id, 120);
+    // 300s to cover first-time image pulls + supervisor bootstrap on
+    // cold clusters (the supervisor alone can take ~3 min on first run).
+    await client.sandbox.waitReady(id, 300);
 
     // Upload the opencode config via exec + stdin (replaces CLI --upload).
     const configJson = JSON.stringify(config, null, 2);
