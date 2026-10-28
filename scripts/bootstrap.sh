@@ -60,7 +60,7 @@ progress() {
   echo -ne "\r  ${C_BOLD}${spin}${C_RESET} ${C_PROGRESS}$1${C_RESET}  "
 }
 ask()       { echo -ne "  ${C_PROMPT}? $1${C_RESET} "; }
-debug()     { [[ "$VERBOSE" == "1" ]] && echo -e "  ${C_DIM}$1${C_RESET}" || true; }
+debug()     { [[ "$VERBOSE" == "1" ]] && echo -e "  ${C_DIM}$1${C_RESET}" >&2 || true; }
 
 die() {
   echo -e "\n  ${C_FATAL}FATAL: $1${C_RESET}\n" >&2
