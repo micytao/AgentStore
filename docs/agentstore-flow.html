@@ -1,0 +1,736 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AgentStore — Animated Architecture Flows</title>
+<link rel="stylesheet" href="https://noyitz.github.io/flowstory/templates/style.css">
+</head>
+<body>
+<button class="fs-theme-toggle" id="fs-theme">&#9790;</button>
+<div class="fs-brand" id="fs-brand"></div>
+<div class="fs-title" id="fs-title"></div>
+<div class="fs-panel">
+  <div class="fs-flow-bar">
+    <select id="fs-flow-select"></select>
+    <button class="fs-start" id="fs-play">&#9654; Start</button>
+    <button id="fs-speed">1x</button>
+    <button id="fs-loop">&#8635; Loop</button>
+    <button class="fs-reset" id="fs-reset">Reset</button>
+  </div>
+  <div class="fs-steps" id="fs-steps">
+    <div class="fs-steps-title">Flow Steps</div>
+    <div id="fs-steps-container"></div>
+  </div>
+</div>
+<div id="fs-highlight-box" style="display:none;position:fixed;z-index:350;border-radius:10px;pointer-events:none"></div>
+<div id="fs-overlay" onclick="if(event.target===this)window.__flowstory?.closeOverlay()" style="display:none;position:fixed;top:0;left:0;right:380px;bottom:0;z-index:300;background:rgba(0,0,0,0.6)">
+  <div id="fs-overlay-card" style="position:absolute;background:#161b22ee;border:1px solid #30363d;border-radius:14px;max-width:440px;padding:22px 26px;box-shadow:0 12px 40px rgba(0,0,0,0.5);transition:opacity .2s">
+    <button onclick="window.__flowstory?.closeOverlay()" style="position:absolute;top:10px;right:14px;background:none;border:none;color:#8b949e;font-size:18px;cursor:pointer;padding:4px 8px;border-radius:6px">&#10005;</button>
+    <div id="fs-overlay-accent" style="width:4px;height:24px;border-radius:2px;position:absolute;left:0;top:22px"></div>
+    <h2 id="fs-overlay-title" style="margin:0 0 6px;font-size:18px;color:#c9d1d9;font-family:system-ui"></h2>
+    <p id="fs-overlay-desc" style="margin:0 0 14px;font-size:13px;color:#8b949e;line-height:1.5;font-family:system-ui"></p>
+    <div id="fs-overlay-details" style="font-size:12px;font-family:'SF Mono',Menlo,monospace"></div>
+    <button onclick="window.__flowstory?.closeOverlay()" style="margin-top:14px;padding:7px 20px;border:1px solid #3fb950;border-radius:8px;background:transparent;color:#3fb950;font-size:13px;cursor:pointer;font-family:system-ui">&#9654; Resume Flow</button>
+  </div>
+</div>
+<div class="fs-legend" id="fs-legend"></div>
+<canvas id="fs-canvas"></canvas>
+<script type="module">
+import { FlowStory } from 'https://noyitz.github.io/flowstory/src/index.js';
+
+const viz = new FlowStory(document.getElementById('fs-canvas'), {
+  panelElement: document.querySelector('.fs-panel'),
+  flowSelect: document.getElementById('fs-flow-select'),
+  playBtn: document.getElementById('fs-play'),
+  speedBtn: document.getElementById('fs-speed'),
+  loopBtn: document.getElementById('fs-loop'),
+  resetBtn: document.getElementById('fs-reset'),
+  stepsContainer: document.getElementById('fs-steps-container'),
+  overlayElement: document.getElementById('fs-overlay'),
+  overlayCard: document.getElementById('fs-overlay-card'),
+  overlayTitle: document.getElementById('fs-overlay-title'),
+  overlayDesc: document.getElementById('fs-overlay-desc'),
+  overlayDetails: document.getElementById('fs-overlay-details'),
+  overlayAccent: document.getElementById('fs-overlay-accent'),
+  highlightBox: document.getElementById('fs-highlight-box'),
+  brandElement: document.getElementById('fs-brand'),
+  titleElement: document.getElementById('fs-title'),
+  legendElement: document.getElementById('fs-legend'),
+  themeBtn: document.getElementById('fs-theme')
+});
+
+window.__flowstory = viz;
+
+const diagram = {
+  "meta": {
+    "title": "AgentStore — Architecture & Workflow Flows",
+    "author": "AgentStore",
+    "branding": {
+      "logo": "",
+      "title": "AgentStore — Architecture Flows"
+    }
+  },
+  "canvas": { "width": 1500, "height": 920 },
+  "nodes": {
+    "user":  { "x": -50, "y": 200, "w": 110, "h": 50, "label": "Business User", "type": "icon" },
+    "admin": { "x": -50, "y": 450, "w": 110, "h": 50, "label": "Admin",  "type": "icon" },
+    "rhdh_user": { "x": -50, "y": 700, "w": 110, "h": 50, "label": "RHDH User", "type": "icon" },
+
+    "c_console": { "x": 90, "y": 30, "w": 380, "h": 870, "type": "boundary", "label": "AgentStore Console (Next.js)" },
+
+    "c_catalog": { "x": 110, "y": 70, "w": 340, "h": 200, "type": "container", "label": "Catalog & Listings", "color": "#58a6ff" },
+    "n_browse": { "x": 130, "y": 110, "w": 145, "h": 42, "label": "Browse Catalog", "sublabel": "department-first view", "color": "#58a6ff", "fontSize": 11 },
+    "n_listing": { "x": 290, "y": 110, "w": 140, "h": 42, "label": "Listing Detail", "sublabel": "name · desc · risk · runtime", "color": "#58a6ff", "fontSize": 10 },
+    "n_onboard": { "x": 130, "y": 168, "w": 145, "h": 42, "label": "Onboard Agent", "sublabel": "wizard → draft listing", "color": "#58a6ff", "fontSize": 11 },
+    "n_review": { "x": 290, "y": 168, "w": 140, "h": 42, "label": "Publish / Review", "sublabel": "draft → published", "color": "#58a6ff", "fontSize": 11 },
+    "n_agent_config": { "x": 130, "y": 226, "w": 300, "h": 32, "label": "Agent Config: provider · skills · MCP tools · job template", "color": "#58a6ff", "fontSize": 10 },
+
+    "c_admin": { "x": 110, "y": 290, "w": 340, "h": 250, "type": "container", "label": "Admin Console", "color": "#ffa657" },
+    "n_providers": { "x": 130, "y": 330, "w": 145, "h": 40, "label": "Providers", "sublabel": "Anthropic · OpenAI · MaaS", "color": "#ffa657", "fontSize": 11 },
+    "n_mcp": { "x": 290, "y": 330, "w": 140, "h": 40, "label": "MCP Servers", "sublabel": "stdio · http · sse", "color": "#ffa657", "fontSize": 11 },
+    "n_skills": { "x": 130, "y": 385, "w": 145, "h": 40, "label": "Skills", "sublabel": "Red Hat Skill Packs", "color": "#ffa657", "fontSize": 11 },
+    "n_secrets": { "x": 290, "y": 385, "w": 140, "h": 40, "label": "Secrets Vault", "sublabel": "AAP · OCP · OpenShell", "color": "#ffa657", "fontSize": 11 },
+    "n_platform": { "x": 130, "y": 440, "w": 300, "h": 36, "label": "Platform: AAP URL · OpenShift API · namespace", "color": "#ffa657", "fontSize": 10 },
+    "n_engine": { "x": 130, "y": 490, "w": 300, "h": 36, "label": "Engine: AAP status · OpenShift status · OpenShell status", "color": "#ffa657", "fontSize": 10 },
+
+    "c_deploy_flows": { "x": 110, "y": 560, "w": 340, "h": 150, "type": "container", "label": "Deploy Actions (one-time per listing)", "color": "#3fb950" },
+    "n_deploy_generic": { "x": 130, "y": 600, "w": 145, "h": 45, "label": "Deploy generic-chat", "sublabel": "AAP → K8s Deployment", "color": "#3fb950", "fontSize": 10 },
+    "n_deploy_openshell": { "x": 290, "y": 600, "w": 140, "h": 45, "label": "Deploy openshell", "sublabel": "→ Sandbox Service", "color": "#d2a8ff", "fontSize": 10 },
+    "n_deploy_poll": { "x": 130, "y": 660, "w": 300, "h": 32, "label": "Poll: refreshDeployment() / refreshOpenShellSession()", "color": "#3fb950", "fontSize": 10 },
+
+    "c_rhdh": { "x": 110, "y": 730, "w": 340, "h": 150, "type": "container", "label": "RHDH Integration (optional)", "color": "#79c0ff" },
+    "n_rhdh_operator": { "x": 130, "y": 770, "w": 145, "h": 40, "label": "RHDH Operator", "sublabel": "install from AgentStore", "color": "#79c0ff", "fontSize": 10 },
+    "n_rhdh_instance": { "x": 290, "y": 770, "w": 140, "h": 40, "label": "RHDH Instance", "sublabel": "Backstage CR + Route", "color": "#79c0ff", "fontSize": 10 },
+    "n_rhdh_templates": { "x": 130, "y": 825, "w": 300, "h": 36, "label": "Software Templates: Request Agent · Deploy Agent", "color": "#79c0ff", "fontSize": 10 },
+
+    "c_infra": { "x": 500, "y": 30, "w": 970, "h": 870, "type": "boundary", "label": "OpenShift Cluster" },
+
+    "c_aap": { "x": 520, "y": 70, "w": 280, "h": 270, "type": "container", "label": "Ansible Automation Platform", "color": "#ffa657" },
+    "n_aap_project": { "x": 540, "y": 110, "w": 240, "h": 36, "label": "AAP Project", "sublabel": "Git → ansible/ playbooks", "color": "#ffa657", "fontSize": 11 },
+    "n_aap_cred": { "x": 540, "y": 160, "w": 120, "h": 36, "label": "K8s Credential", "sublabel": "Bearer Token", "color": "#ffa657", "fontSize": 10 },
+    "n_aap_inventory": { "x": 670, "y": 160, "w": 110, "h": 36, "label": "Inventory", "sublabel": "localhost", "color": "#ffa657", "fontSize": 10 },
+    "n_aap_jt_generic": { "x": 540, "y": 210, "w": 240, "h": 36, "label": "JT: provision-generic-agent.yml", "sublabel": "Autonomous deploy", "color": "#ffa657", "fontSize": 10 },
+    "n_aap_jt_gateway": { "x": 540, "y": 260, "w": 240, "h": 36, "label": "JT: provision-openshell-gateway.yml", "sublabel": "Helm install gateway", "color": "#ffa657", "fontSize": 10 },
+    "n_aap_ee": { "x": 540, "y": 300, "w": 240, "h": 28, "label": "Execution Environment (kubernetes.core + helm)", "color": "#ffa657", "fontSize": 10 },
+
+    "c_workloads": { "x": 520, "y": 370, "w": 280, "h": 280, "type": "container", "label": "agent-workloads namespace", "color": "#3fb950" },
+    "n_deployment": { "x": 540, "y": 410, "w": 240, "h": 45, "label": "agent-<id> Deployment", "sublabel": "agent-runtime container", "color": "#3fb950", "fontSize": 11 },
+    "n_service": { "x": 540, "y": 470, "w": 120, "h": 36, "label": "Service", "sublabel": "port 8080", "color": "#3fb950", "fontSize": 10 },
+    "n_route": { "x": 670, "y": 470, "w": 110, "h": 36, "label": "Route", "sublabel": "HTTPS URL", "color": "#3fb950", "fontSize": 10 },
+    "n_config_cm": { "x": 540, "y": 520, "w": 120, "h": 36, "label": "Config CM", "sublabel": "config.json", "color": "#3fb950", "fontSize": 10 },
+    "n_provider_secret": { "x": 670, "y": 520, "w": 110, "h": 36, "label": "API Key Secret", "sublabel": "secretKeyRef", "color": "#3fb950", "fontSize": 10 },
+    "n_result_cm": { "x": 540, "y": 570, "w": 240, "h": 36, "label": "deploy-result ConfigMap", "sublabel": "routeHost → back to AgentStore", "color": "#3fb950", "fontSize": 10 },
+    "n_chat_url": { "x": 540, "y": 614, "w": 240, "h": 26, "label": "Persistent chat URL → users open directly", "color": "#3fb950", "fontSize": 10 },
+
+    "c_runtime": { "x": 830, "y": 70, "w": 310, "h": 270, "type": "container", "label": "Agent Runtime (per-listing container)", "color": "#79c0ff" },
+    "n_runtime_server": { "x": 850, "y": 110, "w": 270, "h": 40, "label": "Express: GET / · POST /api/chat", "sublabel": "HTML chat page + API", "color": "#79c0ff", "fontSize": 11 },
+    "n_agent_core": { "x": 850, "y": 165, "w": 135, "h": 40, "label": "agent-core", "sublabel": "runTurn() chat loop", "color": "#79c0ff", "fontSize": 11 },
+    "n_session_store": { "x": 1000, "y": 165, "w": 120, "h": 40, "label": "Session Store", "sublabel": "per-cookie history", "color": "#79c0ff", "fontSize": 10 },
+    "n_sys_prompt": { "x": 850, "y": 220, "w": 135, "h": 36, "label": "System Prompt", "sublabel": "introLines + skills menu", "color": "#79c0ff", "fontSize": 10 },
+    "n_load_skill": { "x": 1000, "y": 220, "w": 120, "h": 36, "label": "load_skill tool", "sublabel": "progressive disclosure", "color": "#79c0ff", "fontSize": 10 },
+    "n_tool_hop": { "x": 850, "y": 270, "w": 270, "h": 36, "label": "Tool-hop: MCP tool calls → forward → return result", "color": "#79c0ff", "fontSize": 10 },
+
+    "c_openshell": { "x": 830, "y": 370, "w": 310, "h": 280, "type": "container", "label": "OpenShell (Collaborative)", "color": "#d2a8ff" },
+    "n_sandbox_svc": { "x": 850, "y": 410, "w": 270, "h": 42, "label": "Agent Sandbox Service", "sublabel": "REST + WebSocket API", "color": "#d2a8ff", "fontSize": 11 },
+    "n_sdk_client": { "x": 850, "y": 466, "w": 135, "h": 40, "label": "OpenShell SDK", "sublabel": "@nvidia/openshell-sdk", "color": "#d2a8ff", "fontSize": 10 },
+    "n_gateway": { "x": 1000, "y": 466, "w": 120, "h": 40, "label": "OpenShell GW", "sublabel": "Helm chart · gRPC", "color": "#d2a8ff", "fontSize": 10 },
+    "n_sandbox_pod": { "x": 850, "y": 520, "w": 270, "h": 42, "label": "Sandbox Pod (opencode / claude / codex / pi …)", "sublabel": "real isolated sandbox with agent CLI", "color": "#d2a8ff", "fontSize": 10 },
+    "n_terminal_ws": { "x": 850, "y": 576, "w": 135, "h": 40, "label": "WS /terminal", "sublabel": "live terminal relay", "color": "#d2a8ff", "fontSize": 10 },
+    "n_exec_interactive": { "x": 1000, "y": 576, "w": 120, "h": 40, "label": "execInteractive", "sublabel": "/bin/sh session", "color": "#d2a8ff", "fontSize": 10 },
+
+    "c_model": { "x": 1170, "y": 70, "w": 280, "h": 160, "type": "container", "label": "Model Serving", "color": "#f0883e" },
+    "n_maas": { "x": 1190, "y": 110, "w": 240, "h": 40, "label": "OpenShift AI / MaaS", "sublabel": "vLLM model serving", "color": "#f0883e", "fontSize": 12 },
+    "n_external_llm": { "x": 1190, "y": 165, "w": 240, "h": 40, "label": "External LLM API", "sublabel": "Anthropic · OpenAI · Gemini", "color": "#f0883e", "fontSize": 11 },
+
+    "c_build": { "x": 1170, "y": 260, "w": 280, "h": 390, "type": "container", "label": "OpenShift Builds (agentstore ns)", "color": "#e3b341" },
+    "n_bc_ee": { "x": 1190, "y": 300, "w": 240, "h": 42, "label": "BuildConfig: agentstore-ee", "sublabel": "Execution Environment image", "color": "#e3b341", "fontSize": 10 },
+    "n_bc_runtime": { "x": 1190, "y": 356, "w": 240, "h": 42, "label": "BuildConfig: agentstore-agent-runtime", "sublabel": "agent-runtime chat image", "color": "#e3b341", "fontSize": 10 },
+    "n_bc_sandbox": { "x": 1190, "y": 412, "w": 240, "h": 42, "label": "BuildConfig: agent-sandbox-service", "sublabel": "OpenShell adapter image", "color": "#e3b341", "fontSize": 10 },
+    "n_bc_agentstore": { "x": 1190, "y": 468, "w": 240, "h": 42, "label": "BuildConfig: agentstore", "sublabel": "Next.js console image", "color": "#e3b341", "fontSize": 10 },
+    "n_imagestream": { "x": 1190, "y": 524, "w": 240, "h": 36, "label": "ImageStream → internal registry", "sublabel": "image-registry.openshift-…", "color": "#e3b341", "fontSize": 10 },
+    "n_ee_register": { "x": 1190, "y": 575, "w": 240, "h": 36, "label": "Register EE in AAP", "sublabel": "findOrCreateExecutionEnv()", "color": "#e3b341", "fontSize": 10 },
+
+    "c_agentstore_ocp": { "x": 1170, "y": 680, "w": 280, "h": 190, "type": "container", "label": "AgentStore on OpenShift", "color": "#8b949e" },
+    "n_as_ns": { "x": 1190, "y": 720, "w": 120, "h": 36, "label": "NS: agentstore", "sublabel": "PVC for .data/", "color": "#8b949e", "fontSize": 10 },
+    "n_as_deploy": { "x": 1320, "y": 720, "w": 110, "h": 36, "label": "Deployment", "sublabel": "Next.js pod", "color": "#8b949e", "fontSize": 10 },
+    "n_as_route": { "x": 1190, "y": 770, "w": 120, "h": 36, "label": "Route", "sublabel": "console URL", "color": "#8b949e", "fontSize": 10 },
+    "n_as_rhdh_proxy": { "x": 1320, "y": 770, "w": 110, "h": 36, "label": "RHDH proxy", "sublabel": "svc:3000/api", "color": "#8b949e", "fontSize": 10 },
+    "n_as_sync": { "x": 1190, "y": 820, "w": 240, "h": 36, "label": "POST /api/admin/sync — data handoff from laptop", "color": "#8b949e", "fontSize": 10 }
+  },
+  "tooltips": {
+    "user": {
+      "title": "Business User",
+      "description": "Browses the AgentStore catalog by department, opens deployed agents via their persistent chat URL or live terminal link — no admin access, no per-launch approval.",
+      "details": [
+        ["Interface", "AgentStore catalog (or RHDH portal)"],
+        ["Actions", "Browse → Open deployed agent → Chat or Terminal"]
+      ]
+    },
+    "admin": {
+      "title": "Admin",
+      "description": "Manages the full AgentStore lifecycle: catalog, providers, MCP, skills, secrets, platform connections, and deploy actions. Switches via the 'Demo' chip in the sidebar.",
+      "details": [
+        ["Tabs", "Catalog · Providers · MCP · Skills · Secrets · Platform · Engine · Self-service Portal"],
+        ["Key actions", "Onboard agent · Bind config · Deploy · Install gateway"]
+      ]
+    },
+    "rhdh_user": {
+      "title": "RHDH Self-service User",
+      "description": "Uses Red Hat Developer Hub's Software Templates to request or deploy agents without direct admin access to AgentStore.",
+      "details": [
+        ["Templates", "Request a New AI Agent · Deploy an Existing Agent"],
+        ["Flow", "Fill wizard → creates/triggers listing in AgentStore → admin reviews"]
+      ]
+    },
+    "n_browse": {
+      "title": "Browse Catalog",
+      "description": "Department-first catalog view: Support, Finance & HR, Data, Security, Engineering. Each listing shows name, description, risk tier, pricing, and deployment status.",
+      "details": [
+        ["API", "GET /api/listings"],
+        ["Departments", "support · finance · data · security · engineering"]
+      ]
+    },
+    "n_listing": {
+      "title": "Listing Detail",
+      "description": "Each listing has a runtime type that determines how it's deployed and accessed: 'generic-chat' for persistent Autonomous agents, or 'openshell' for interactive Collaborative sandboxes.",
+      "details": [
+        ["Fields", "name · department · description · riskTier · reviewStatus · runtime"],
+        ["Runtimes", "generic-chat (Skills Agent) or openshell (CLI sandbox)"]
+      ]
+    },
+    "n_onboard": {
+      "title": "Onboard New Agent",
+      "description": "Admin → Catalog → '+ Onboard new agent' wizard creates a new draft listing. Supports both engine types.",
+      "details": [
+        ["Engines", "Hosted agent API (AAP → OpenShift) or OpenShell (Collaborative)"],
+        ["Result", "Draft listing ready for review/publish"]
+      ]
+    },
+    "n_review": {
+      "title": "Publish / Review",
+      "description": "Draft → In Review → Published lifecycle. Only published listings appear in the user-facing catalog.",
+      "details": [
+        ["Statuses", "draft → in-review → published → deprecated"]
+      ]
+    },
+    "n_agent_config": {
+      "title": "Agent Config (per-listing)",
+      "description": "Admin binds a model provider, selects MCP tool bindings, attaches Skills packs, and optionally overrides the AAP job template or sandbox image — all per-listing.",
+      "details": [
+        ["Fields", "providerId · mcpToolBindings · skillIds · aapJobTemplateId · gitUrl · openshellSandboxImage"],
+        ["Type", "AgentConfig in packages/shared"]
+      ]
+    },
+    "n_providers": {
+      "title": "Model Providers",
+      "description": "Admin → Providers: register and activate LLM endpoints. Supported kinds: Anthropic, OpenAI, OpenAI-compatible (MaaS/vLLM), Gemini. Test connection before activating.",
+      "details": [
+        ["Kinds", "anthropic · openai · openai-compatible · gemini"],
+        ["Actions", "Add · Test · Activate · Bind to listing"]
+      ]
+    },
+    "n_mcp": {
+      "title": "MCP Servers",
+      "description": "Admin → MCP Servers: register Model Context Protocol tool servers. Tools from MCP servers become available to agents via the tool-hop mechanism.",
+      "details": [
+        ["Transports", "stdio (local only) · streamable-http · sse"],
+        ["Note", "Only http/sse transports work for cluster-deployed agents"]
+      ]
+    },
+    "n_skills": {
+      "title": "Skills (Red Hat Skill Packs)",
+      "description": "Reusable instruction bundles loaded on demand via the synthetic load_skill tool. Ships with real Red Hat Agentic Skill Packs (SRE, Customer Support, Virt, etc.).",
+      "details": [
+        ["Packs", "rh-sre · rh-developer · rh-basic · ocp-admin · rh-virt · rh-ai-engineer · rh-automation"],
+        ["Mechanism", "Name/desc in system prompt → model calls load_skill → full instructions injected"]
+      ]
+    },
+    "n_secrets": {
+      "title": "Secrets Vault",
+      "description": "Encrypted at-rest vault for sensitive tokens used by platform connections and agent deploys.",
+      "details": [
+        ["Slots", "AAP_TOKEN · OPENSHIFT_TOKEN · OPENSHELL_SERVICE_TOKEN · GIT_PAT · GITHUB_PACKAGES_TOKEN · AGENTSTORE_SERVICE_TOKEN"],
+        ["Groups", "platform (AAP/OCP) · tooling (OpenShell/Git)"]
+      ]
+    },
+    "n_platform": {
+      "title": "Platform Settings",
+      "description": "Admin → Platform: connect AAP controller URL, OpenShift API, and configure namespaces. This is where all infrastructure endpoints are registered.",
+      "details": [
+        ["AAP", "controllerUrl · jobTemplateId · consoleUrl · insecureTls"],
+        ["OpenShift", "apiUrl · namespace · consoleUrl · insecureTls"],
+        ["OpenShell", "serviceUrl · gatewayChartRef · gatewayNamespace"]
+      ]
+    },
+    "n_engine": {
+      "title": "Engine Status",
+      "description": "Admin → Engine: live connection status checks for all three infrastructure backends.",
+      "details": [
+        ["Checks", "AAP configured/connected · OpenShift configured/connected · OpenShell Service reachable"]
+      ]
+    },
+    "n_deploy_generic": {
+      "title": "Deploy Generic-Chat (Autonomous)",
+      "description": "One-time admin action per listing. Launches provision-generic-agent.yml via AAP, which creates a Deployment + Service + Route + Secret + ConfigMap in agent-workloads.",
+      "details": [
+        ["Trigger", "Admin → Catalog → listing → 'Deploy to OpenShift'"],
+        ["Code", "deployments.ts → engine-ansible/genericAgentDeploy.ts → AAP API"],
+        ["Result", "Persistent chat URL users open directly"]
+      ]
+    },
+    "n_deploy_openshell": {
+      "title": "Deploy OpenShell (Collaborative)",
+      "description": "One-time admin action per listing. Creates a persistent Agent Sandbox Service session (keyed by listing id) — not via AAP, directly via the REST API.",
+      "details": [
+        ["Trigger", "Admin → Catalog → listing → 'Deploy'"],
+        ["Code", "openshellDeploy.ts → engine-openshell/client.ts → Sandbox Service REST"],
+        ["Result", "Live terminal URL users can connect to"]
+      ]
+    },
+    "n_deploy_poll": {
+      "title": "Deploy Status Polling",
+      "description": "Admin UI polls refreshDeployment() (generic-chat) or refreshOpenShellSession() (openshell) on an interval until status transitions from 'deploying' to 'running' or 'failed'.",
+      "details": [
+        ["generic-chat", "Polls AAP job status → reads deploy-result ConfigMap → extracts Route URL"],
+        ["openshell", "Polls sandbox phase via GET /sessions/:id"]
+      ]
+    },
+    "n_aap_project": {
+      "title": "AAP Project",
+      "description": "SCM type Git, pointing at the AgentStore repo. Contains ansible/provision-generic-agent.yml and ansible/provision-openshell-gateway.yml.",
+      "details": [
+        ["Source", "aapProjectGitUrl / aapProjectGitBranch from Platform settings"],
+        ["Create", "Auto: 'Create job templates' action, or manual in AAP UI"]
+      ]
+    },
+    "n_aap_cred": {
+      "title": "Kubernetes Credential",
+      "description": "OpenShift Bearer Token credential — injects K8S_AUTH_HOST / K8S_AUTH_API_KEY / K8S_AUTH_VERIFY_SSL env vars into playbook execution.",
+      "details": [
+        ["Reuses", "Same OpenShift API URL/token from Admin → Platform"],
+        ["Used by", "Both Job Templates (k8s tasks authenticate via this)"]
+      ]
+    },
+    "n_aap_jt_generic": {
+      "title": "JT: provision-generic-agent.yml",
+      "description": "Creates a Deployment + Service + Route + Secret + ConfigMap in agent-workloads. Takes extra_vars with deployment_name, provider config, skills, MCP servers.",
+      "details": [
+        ["extra_vars", "deployment_name · namespace · provider_kind · provider_api_key · intro_lines · skills · mcp_servers · agent_runtime_image"],
+        ["ask_variables_on_launch", "true (AgentStore always passes extra_vars)"]
+      ]
+    },
+    "n_aap_jt_gateway": {
+      "title": "JT: provision-openshell-gateway.yml",
+      "description": "Runs 'helm upgrade --install' for the OpenShell gateway chart in its own namespace. One-time cluster prerequisite for Collaborative agents.",
+      "details": [
+        ["extra_vars", "release_name · namespace · chart_ref · chart_version · workload_kind"],
+        ["Requires", "EE with kubernetes.core collection + helm CLI"]
+      ]
+    },
+    "n_aap_ee": {
+      "title": "Execution Environment",
+      "description": "Custom Ansible EE with kubernetes.core collection and helm CLI. Can be built from source inside OpenShift (Admin → Platform → 'Build from source') or pushed manually.",
+      "details": [
+        ["Contents", "ansible-core + kubernetes.core + helm CLI"],
+        ["Build", "agentstore-ee BuildConfig in agentstore namespace"]
+      ]
+    },
+    "n_deployment": {
+      "title": "Agent Deployment",
+      "description": "Per-listing Kubernetes Deployment running the agent-runtime image. One image, many Deployments — each configured via env vars + mounted config.json.",
+      "details": [
+        ["Name", "agent-<short-listing-id>"],
+        ["Image", "PlatformSettings.agentRuntimeImage (built from source or pushed manually)"],
+        ["Config", "Env vars (PROVIDER_KIND, API key via secretKeyRef) + /etc/agent/config.json volume mount"]
+      ]
+    },
+    "n_service": {
+      "title": "Kubernetes Service",
+      "description": "Internal Service exposing the agent-runtime container's port 8080.",
+      "details": [["Port", "8080"]]
+    },
+    "n_route": {
+      "title": "OpenShift Route",
+      "description": "TLS-terminated Route providing the external HTTPS URL. This is the persistent chat URL users bookmark and open directly.",
+      "details": [["URL", "https://agent-<id>.apps.<cluster>/"]]
+    },
+    "n_config_cm": {
+      "title": "Config ConfigMap",
+      "description": "GenericAgentRuntimeConfig JSON mounted at /etc/agent/config.json inside the container. Contains listingName, introLines, skills (with full instructions), and mcpServers.",
+      "details": [
+        ["Type", "GenericAgentRuntimeConfig"],
+        ["Mount", "/etc/agent/config.json"]
+      ]
+    },
+    "n_provider_secret": {
+      "title": "Provider API Key Secret",
+      "description": "Provider API key (from the vault) stored as a Kubernetes Secret and injected via secretKeyRef into the PROVIDER_API_KEY env var.",
+      "details": [["Injection", "secretKeyRef → PROVIDER_API_KEY env var"]]
+    },
+    "n_result_cm": {
+      "title": "Deploy Result ConfigMap",
+      "description": "The playbook writes a ConfigMap named '<deployment_name>-deploy-result' with routeHost. AgentStore's refreshDeployment() reads it back to surface the persistent chat URL.",
+      "details": [
+        ["Key", "routeHost"],
+        ["Read by", "ocp.readDeploymentResult() → refreshDeployment()"]
+      ]
+    },
+    "n_runtime_server": {
+      "title": "Agent Runtime HTTP Surface",
+      "description": "A minimal Express server serving a dependency-free HTML/JS chat page (GET /) and a chat API endpoint (POST /api/chat) backed by agent-core's runTurn().",
+      "details": [
+        ["GET /", "HTML chat page with inline JS — no React, no bundler"],
+        ["POST /api/chat", "{ message } → { reply } — runs one full turn"],
+        ["GET /health", "Liveness check"]
+      ]
+    },
+    "n_agent_core": {
+      "title": "agent-core (packages/agent-core)",
+      "description": "The shared chat loop engine: runTurn() calls the model, handles load_skill tool calls locally, forwards MCP tool calls, and loops until the model produces a text response.",
+      "details": [
+        ["Loop", "message → model → (tool calls? → execute → loop) → text response"],
+        ["Skills", "load_skill resolved locally; full instructions injected mid-turn"],
+        ["Tools", "MCP tools forwarded to their servers; results returned to model"]
+      ]
+    },
+    "n_session_store": {
+      "title": "Session Store",
+      "description": "In-memory Map keyed by httpOnly session cookie. Each user gets isolated chat history and active skill set. Lost on pod restart (acceptable for v1).",
+      "details": [
+        ["Key", "httpOnly cookie"],
+        ["Value", "message history + active skill IDs"]
+      ]
+    },
+    "n_sys_prompt": {
+      "title": "System Prompt",
+      "description": "Built by buildSystemPrompt(): persona intro lines (from config.json) + skills menu (name/description list, not full instructions).",
+      "details": [
+        ["Parts", "introLines (persona) + skillsMenu (id: name — desc)"],
+        ["Progressive", "Full skill body injected only after load_skill call"]
+      ]
+    },
+    "n_load_skill": {
+      "title": "load_skill Tool",
+      "description": "Synthetic tool handled locally by agent-core (never forwarded to MCP). When the model calls it, the full skill instructions are injected into context for that turn.",
+      "details": [
+        ["Input", "{ skill_id: string }"],
+        ["Visibility", "Tools claimed by a skill's allowedTools appear only after that skill is loaded"]
+      ]
+    },
+    "n_tool_hop": {
+      "title": "Tool-Hop (MCP forwarding)",
+      "description": "When the model requests an MCP tool call, agent-core forwards it to the appropriate MCP server, receives the result, and feeds it back to the model for the next loop iteration.",
+      "details": [
+        ["Supported", "streamable-http · sse (from cluster); stdio only from laptop"],
+        ["Auth", "Bearer tokens from vault, forwarded per-server"]
+      ]
+    },
+    "n_sandbox_svc": {
+      "title": "Agent Sandbox Service",
+      "description": "AgentStore's own in-cluster microservice (apps/agent-sandbox-service). REST + WebSocket API for sandbox lifecycle and terminal relay. Uses @nvidia/openshell-sdk internally.",
+      "details": [
+        ["Routes", "POST /sessions · GET /sessions/:id · DELETE /sessions/:id · POST /sessions/:id/terminal-token · WS /sessions/:id/terminal"],
+        ["Auth", "Bearer OPENSHELL_SERVICE_TOKEN on all /sessions* routes"]
+      ]
+    },
+    "n_sdk_client": {
+      "title": "OpenShell SDK Client",
+      "description": "Singleton @nvidia/openshell-sdk client connecting to the gateway via gRPC. Auth mode: OIDC client-credentials (production) or unauthenticated h2c (eval).",
+      "details": [
+        ["Package", "@nvidia/openshell-sdk"],
+        ["Connection", "OpenShellClient.connect({ gateway, oidcTokenProvider? })"],
+        ["Auth", "OIDC env vars set → client-credentials; unset → no auth (eval)"]
+      ]
+    },
+    "n_gateway": {
+      "title": "OpenShell Gateway",
+      "description": "NVIDIA's sandboxing runtime (Helm chart). Manages sandbox pods with isolation policies. Installed once per cluster via AAP.",
+      "details": [
+        ["Chart", "oci://ghcr.io/nvidia/openshell/helm-chart"],
+        ["Kinds", "StatefulSet/SQLite (demo) or Deployment/Postgres (HA)"],
+        ["Prereq", "Agent Sandbox controller/CRDs (cluster-scoped, one-time)"]
+      ]
+    },
+    "n_sandbox_pod": {
+      "title": "Sandbox Pod",
+      "description": "Isolated container running the agent CLI (opencode, claude, codex, pi, etc.). Image resolved from OPENSHELL_AGENTS registry in packages/shared. Config uploaded via exec + stdin.",
+      "details": [
+        ["Agents", "opencode · claude · codex · copilot · pi · openclaw · ollama · gemini · droid"],
+        ["Config", "opencode.json uploaded after sandbox becomes ready"],
+        ["Policy", "Filesystem isolation: read-only /bin,/usr,/lib; read-write /tmp"]
+      ]
+    },
+    "n_terminal_ws": {
+      "title": "Terminal WebSocket",
+      "description": "WS /sessions/:id/terminal — bidirectional byte relay between the browser and the sandbox shell. Short-lived HMAC-signed token for auth.",
+      "details": [
+        ["Auth", "?token= query param (HMAC-signed, default 5 min TTL)"],
+        ["Resize", "Send {type:'resize',cols:N,rows:N} as text frame"],
+        ["Protocol", "wss (TLS-terminated Route) or ws (local dev)"]
+      ]
+    },
+    "n_exec_interactive": {
+      "title": "execInteractive",
+      "description": "SDK's execInteractive(name, ['/bin/sh']) spawns an independent shell alongside the agent's canonical process. Each terminal tab gets its own session.",
+      "details": [
+        ["Command", "['/bin/sh'] for each new terminal session"],
+        ["Lifecycle", "Separate from the agent process — disconnect/reconnect safe"],
+        ["Note", "Uses independent sibling exec, not tmux reattach"]
+      ]
+    },
+    "n_maas": {
+      "title": "OpenShift AI / MaaS",
+      "description": "Model-as-a-Service: vLLM model serving on OpenShift AI. OpenAI-compatible /v1/chat/completions endpoint reachable from within the cluster.",
+      "details": [
+        ["Provider kind", "openai-compatible"],
+        ["Endpoint", "In-cluster /v1/chat/completions"],
+        ["Used by", "agent-runtime containers + OpenShell sandbox agents"]
+      ]
+    },
+    "n_external_llm": {
+      "title": "External LLM APIs",
+      "description": "External model APIs (Anthropic, OpenAI, Gemini) accessible from both the laptop console and cluster-deployed agents.",
+      "details": [
+        ["Supported", "anthropic · openai · openai-compatible · gemini"],
+        ["Auth", "API key from vault, injected as env var or forwarded"]
+      ]
+    },
+    "n_bc_ee": {
+      "title": "EE BuildConfig",
+      "description": "Builds ansible/execution-environment/Containerfile. Result pushed to ImageStream, then registered in AAP as an Execution Environment.",
+      "details": [
+        ["Name", "agentstore-ee"],
+        ["Context", "ansible/execution-environment/"],
+        ["Post-build", "findOrCreateExecutionEnvironment() → AAP registration"]
+      ]
+    },
+    "n_bc_runtime": {
+      "title": "Agent Runtime BuildConfig",
+      "description": "Builds apps/agent-runtime/Containerfile. Needs full monorepo as context (packages/shared, packages/agent-core). No AAP registration — image ref used directly.",
+      "details": [
+        ["Name", "agentstore-agent-runtime"],
+        ["Context", "repository root (entire monorepo)"],
+        ["Result", "PlatformSettings.agentRuntimeImage auto-populated"]
+      ]
+    },
+    "n_bc_sandbox": {
+      "title": "Sandbox Service BuildConfig",
+      "description": "Builds apps/agent-sandbox-service/Containerfile. Requires GITHUB_PACKAGES_TOKEN for @nvidia/openshell-sdk. Followed by Deployment/Service/Route apply.",
+      "details": [
+        ["Name", "agent-sandbox-service"],
+        ["Special", "Needs GITHUB_PACKAGES_TOKEN build secret for npm"],
+        ["Post-build", "Apply deploy/openshift/agent-sandbox-service.yaml + wait rollout"]
+      ]
+    },
+    "n_bc_agentstore": {
+      "title": "AgentStore BuildConfig",
+      "description": "Builds apps/web/Containerfile (the console itself). Followed by applying deploy/openshift/agentstore.yaml (NS + PVC + Deployment + Service + Route).",
+      "details": [
+        ["Name", "agentstore"],
+        ["Context", "repository root"],
+        ["Post-build", "Apply agentstore.yaml → wait for Route"]
+      ]
+    },
+    "n_imagestream": {
+      "title": "ImageStream → Internal Registry",
+      "description": "Every BuildConfig pushes to a same-named ImageStream. The image's pullable reference (sha256 digest from OpenShift's internal registry) is read back after build completes.",
+      "details": [
+        ["Registry", "image-registry.openshift-image-registry.svc:5000/<ns>/<name>"],
+        ["Read back", "ocp.getEeImageReference(name, 'latest', ns)"]
+      ]
+    },
+    "n_ee_register": {
+      "title": "Register EE in AAP",
+      "description": "After the EE BuildConfig completes, the built image is registered as an AAP Execution Environment via findOrCreateExecutionEnvironment(). Optional registry credential for cross-cluster pulls.",
+      "details": [
+        ["API", "AAP REST API → Execution Environments endpoint"],
+        ["Idempotent", "find-or-create by name"]
+      ]
+    },
+    "n_rhdh_operator": {
+      "title": "RHDH Operator Install",
+      "description": "Admin → Self-service Portal → 'Install Operator': creates rhdh namespace, OperatorGroup, and Subscription from redhat-operators CatalogSource. Polls until CRD appears.",
+      "details": [
+        ["Namespace", "rhdh"],
+        ["Source", "redhat-operators CatalogSource"]
+      ]
+    },
+    "n_rhdh_instance": {
+      "title": "RHDH Instance",
+      "description": "Creates ConfigMaps, Secret, and Backstage CR. The operator rolls out the Developer Hub pod and creates a Route.",
+      "details": [
+        ["CR", "Backstage CR in rhdh namespace"],
+        ["Config", "app-config-snippet with AgentStore proxy URL"]
+      ]
+    },
+    "n_rhdh_templates": {
+      "title": "Software Templates",
+      "description": "Two AgentStore templates live: 'Request a New AI Agent' (creates draft listing) and 'Deploy an Existing Agent' (triggers AAP deploy for a published listing).",
+      "details": [
+        ["Catalog sync", "GET /api/rhdh/catalog-sync returns catalog-info YAML"],
+        ["Agents", "Appear in Software Catalog as type: ai-agent"]
+      ]
+    },
+    "n_as_ns": {
+      "title": "agentstore Namespace",
+      "description": "Hosts the AgentStore console Deployment, Service, Route, and a PVC for persistent .data/ storage (tasks, catalog overrides, secrets vault, platform.json).",
+      "details": [["PVC", "ReadWriteOnce for .data/"]]
+    },
+    "n_as_deploy": {
+      "title": "AgentStore Deployment",
+      "description": "Runs the Next.js console image built by the agentstore BuildConfig. Same code that runs on a laptop, just containerized.",
+      "details": [["Port", "3000"]]
+    },
+    "n_as_route": {
+      "title": "AgentStore Route",
+      "description": "Externally-reachable console URL. Appears in Admin → Platform once deploy completes.",
+      "details": [["URL", "https://agentstore.apps.<cluster>/"]]
+    },
+    "n_as_rhdh_proxy": {
+      "title": "RHDH Proxy",
+      "description": "In-cluster Service URL (http://agentstore.agentstore.svc:3000/api) that RHDH's proxy config targets — avoids external Route for RHDH → AgentStore traffic.",
+      "details": [["Auth", "X-AgentStore-Token header with AGENTSTORE_SERVICE_TOKEN"]]
+    },
+    "n_as_sync": {
+      "title": "Data Sync (POST /api/admin/sync)",
+      "description": "After deploying to OpenShift, the local instance can push its current state (catalog, secrets, platform) to the on-cluster instance via a signed sync token.",
+      "details": [["Auth", "syncToken generated at deploy time, injected as AGENTSTORE_SYNC_TOKEN env var"]]
+    }
+  },
+  "flows": {
+    "agentstore_workflow": {
+      "label": "AgentStore Workflow",
+      "steps": [
+        { "text": "1. Admin opens AgentStore console (localhost:3000 or OpenShift Route)", "mode": "lightup", "target": "c_console", "badge": "1" },
+        { "text": "2. Configure Platform connections: AAP controller + OpenShift API", "mode": "lightup", "target": "n_platform", "badge": "2" },
+        { "text": "3. Save secrets: AAP_TOKEN, OPENSHIFT_TOKEN", "mode": "lightup", "target": "n_secrets", "badge": "3" },
+        { "text": "4. Register model provider(s): Anthropic, OpenAI, or MaaS endpoint", "mode": "lightup", "target": "n_providers", "badge": "4" },
+        { "text": "5. Optionally register MCP tool servers", "mode": "lightup", "target": "n_mcp", "badge": "5" },
+        { "text": "6. Review Skills: Red Hat Skill Packs auto-imported from catalog/skills/", "mode": "lightup", "target": "n_skills", "badge": "6" },
+        { "text": "7. Browse the built-in catalog (Support, Engineering, etc.)", "mode": "arrow", "from": "admin", "to": "n_browse", "color": "#58a6ff", "num": 7 },
+        { "text": "8. Or onboard a new agent via the wizard", "mode": "lightup", "target": "n_onboard", "badge": "8" },
+        { "text": "9. Bind per-agent config: provider, skills, MCP tools", "mode": "lightup", "target": "n_agent_config", "badge": "9" },
+        { "text": "10. Publish the listing (draft → published)", "mode": "lightup", "target": "n_review", "badge": "✓" },
+        { "text": "11a. Deploy: generic-chat listing → launches AAP job", "mode": "arrow", "from": "n_deploy_generic", "to": "n_aap_jt_generic", "color": "#3fb950", "num": 11, "glow": "c_aap" },
+        { "text": "12. AAP creates Deployment + Service + Route in agent-workloads", "mode": "arrow", "from": "n_aap_jt_generic", "to": "n_deployment", "color": "#ffa657", "num": 12, "glow": "c_workloads" },
+        { "text": "13. Config.json mounted, API key injected via Secret", "mode": "lightup", "target": "n_config_cm", "badge": "13" },
+        { "text": "14. Playbook writes deploy-result ConfigMap with Route host", "mode": "lightup", "target": "n_result_cm", "badge": "14" },
+        { "text": "15. AgentStore polls → reads Route URL → status 'running'", "mode": "arrow", "from": "n_result_cm", "to": "n_deploy_poll", "color": "#3fb950", "num": 15 },
+        { "text": "16. Persistent chat URL now available — users open it directly", "mode": "lightup", "target": "n_chat_url", "badge": "✓" },
+        { "text": "17. User sends a message in the chat page", "mode": "arrow", "from": "user", "to": "n_runtime_server", "color": "#79c0ff", "num": 17 },
+        { "text": "18. agent-core runs the turn: system prompt + skills + model call", "mode": "lightup", "target": "n_agent_core", "badge": "18" },
+        { "text": "19. Model may call load_skill → full instructions injected", "mode": "lightup", "target": "n_load_skill", "badge": "19" },
+        { "text": "20. Model may call MCP tools → tool-hop forwards and returns", "mode": "lightup", "target": "n_tool_hop", "badge": "20" },
+        { "text": "21. Model calls LLM API (MaaS or external)", "mode": "arrow", "from": "n_agent_core", "to": "n_maas", "color": "#f0883e", "num": 21 },
+        { "text": "22. Response returned to user in the chat page", "mode": "arrow", "from": "n_runtime_server", "to": "user", "color": "#79c0ff", "num": 22 },
+        { "text": "11b. Deploy: openshell listing → creates sandbox session directly", "mode": "arrow", "from": "n_deploy_openshell", "to": "n_sandbox_svc", "color": "#d2a8ff", "num": 11, "glow": "c_openshell" },
+        { "text": "23. SDK creates sandbox pod on the gateway", "mode": "arrow", "from": "n_sdk_client", "to": "n_gateway", "color": "#d2a8ff", "num": 23 },
+        { "text": "24. Sandbox running — user connects via terminal WebSocket", "mode": "arrow", "from": "user", "to": "n_terminal_ws", "color": "#d2a8ff", "num": 24 },
+        { "text": "25. Six Red Hat products, one story: RHDH → AgentStore → AAP → OCP → OCP AI → MaaS", "mode": "lightup", "target": "c_infra", "badge": "✓" }
+      ]
+    },
+    "build_process": {
+      "label": "Build Process",
+      "steps": [
+        { "text": "1. Admin opens Platform → AAP Job Templates card", "mode": "arrow", "from": "admin", "to": "n_platform", "color": "#ffa657", "num": 1 },
+        { "text": "2. Click 'Create job templates' — auto-creates AAP Project, Inventory, Credential, both JTs", "mode": "arrow", "from": "n_platform", "to": "c_aap", "color": "#ffa657", "num": 2, "glow": "c_aap" },
+        { "text": "3. AAP Project syncs from Git (this repo's ansible/ directory)", "mode": "lightup", "target": "n_aap_project", "badge": "3" },
+        { "text": "4. K8s Credential created from the same OpenShift token in Platform settings", "mode": "lightup", "target": "n_aap_cred", "badge": "4" },
+        { "text": "5. Inventory (localhost) + both Job Templates created", "mode": "lightup", "target": "n_aap_jt_generic", "badge": "5" },
+        { "text": "6. Template IDs auto-saved to PlatformSettings", "mode": "arrow", "from": "c_aap", "to": "n_platform", "color": "#ffa657", "num": 6 },
+        { "text": "7. Build EE: Admin clicks '+ Build from source' on AAP Job Templates card", "mode": "arrow", "from": "n_platform", "to": "n_bc_ee", "color": "#e3b341", "num": 7, "glow": "c_build" },
+        { "text": "8. OpenShift creates BuildConfig + ImageStream for agentstore-ee", "mode": "lightup", "target": "n_bc_ee", "badge": "8" },
+        { "text": "9. Build runs: Containerfile from ansible/execution-environment/", "mode": "lightup", "target": "n_imagestream", "badge": "⏳" },
+        { "text": "10. Image pushed to internal registry via ImageStream", "mode": "lightup", "target": "n_imagestream", "badge": "✓" },
+        { "text": "11. Built image registered as AAP Execution Environment", "mode": "arrow", "from": "n_imagestream", "to": "n_ee_register", "color": "#e3b341", "num": 11 },
+        { "text": "12. EE ID saved to PlatformSettings.aapExecutionEnvironmentId", "mode": "arrow", "from": "n_ee_register", "to": "n_platform", "color": "#e3b341", "num": 12 },
+        { "text": "13. Build Agent Runtime: Admin → Platform → Agent Runtime → 'Start build'", "mode": "arrow", "from": "n_platform", "to": "n_bc_runtime", "color": "#e3b341", "num": 13 },
+        { "text": "14. BuildConfig uses full monorepo as context (apps/ + packages/)", "mode": "lightup", "target": "n_bc_runtime", "badge": "14" },
+        { "text": "15. Build completes → image ref saved to agentRuntimeImage", "mode": "arrow", "from": "n_bc_runtime", "to": "n_imagestream", "color": "#e3b341", "num": 15 },
+        { "text": "16. Every future generic-chat deploy uses this image automatically", "mode": "arrow", "from": "n_imagestream", "to": "n_deployment", "color": "#3fb950", "num": 16 },
+        { "text": "17. Build Agent Sandbox Service: Admin → LLMs → OpenShell → 'Install'", "mode": "arrow", "from": "n_platform", "to": "n_bc_sandbox", "color": "#e3b341", "num": 17 },
+        { "text": "18. Needs GITHUB_PACKAGES_TOKEN for @nvidia/openshell-sdk", "mode": "lightup", "target": "n_bc_sandbox", "badge": "🔑" },
+        { "text": "19. Post-build: apply Deployment/Service/Route + wait for rollout", "mode": "arrow", "from": "n_bc_sandbox", "to": "n_sandbox_svc", "color": "#d2a8ff", "num": 19 },
+        { "text": "20. Service URL + token auto-saved to Platform settings", "mode": "arrow", "from": "n_sandbox_svc", "to": "n_platform", "color": "#d2a8ff", "num": 20 },
+        { "text": "21. Deploy AgentStore itself: Admin → Platform → 'Deploy'", "mode": "arrow", "from": "n_platform", "to": "n_bc_agentstore", "color": "#8b949e", "num": 21 },
+        { "text": "22. Build: apps/web/Containerfile (Next.js console)", "mode": "lightup", "target": "n_bc_agentstore", "badge": "22" },
+        { "text": "23. Post-build: apply agentstore.yaml (NS + PVC + Deploy + Svc + Route)", "mode": "arrow", "from": "n_bc_agentstore", "to": "n_as_deploy", "color": "#8b949e", "num": 23, "glow": "c_agentstore_ocp" },
+        { "text": "24. Route URL appears — console now running on-cluster", "mode": "lightup", "target": "n_as_route", "badge": "✓" },
+        { "text": "25. RHDH can proxy to in-cluster svc:3000/api (no external Route needed)", "mode": "lightup", "target": "n_as_rhdh_proxy", "badge": "25" },
+        { "text": "26. Data sync: laptop pushes state to on-cluster instance", "mode": "lightup", "target": "n_as_sync", "badge": "26" },
+        { "text": "27. All four images built from source inside OpenShift — no local tooling required", "mode": "lightup", "target": "c_build", "badge": "✓" }
+      ]
+    },
+    "openshell_via_sdk": {
+      "label": "OpenShell (via SDK)",
+      "steps": [
+        { "text": "1. Prerequisites: Agent Sandbox controller CRDs installed (cluster-scoped, one-time)", "mode": "lightup", "target": "n_gateway", "badge": "①" },
+        { "text": "2. Admin installs OpenShell gateway via AAP → helm upgrade --install", "mode": "arrow", "from": "admin", "to": "n_aap_jt_gateway", "color": "#ffa657", "num": 2 },
+        { "text": "3. Gateway pod running in openshell namespace", "mode": "arrow", "from": "n_aap_jt_gateway", "to": "n_gateway", "color": "#d2a8ff", "num": 3, "glow": "c_openshell" },
+        { "text": "4. Agent Sandbox Service built and deployed (apps/agent-sandbox-service)", "mode": "lightup", "target": "n_sandbox_svc", "badge": "4" },
+        { "text": "5. SDK client connects to gateway: OpenShellClient.connect()", "mode": "arrow", "from": "n_sandbox_svc", "to": "n_sdk_client", "color": "#d2a8ff", "num": 5 },
+        { "text": "6. OIDC client-credentials (production) or no auth (eval mode)", "mode": "lightup", "target": "n_sdk_client", "badge": "🔐" },
+        { "text": "7. Admin deploys an openshell listing (e.g. OpenCode)", "mode": "arrow", "from": "n_deploy_openshell", "to": "n_sandbox_svc", "color": "#d2a8ff", "num": 7 },
+        { "text": "8. engine-openshell: POST /sessions → { taskId, agent, model, mcpServers }", "mode": "arrow", "from": "n_deploy_openshell", "to": "n_sandbox_svc", "color": "#d2a8ff", "num": 8 },
+        { "text": "9. Sessions module resolves sandbox image from OPENSHELL_AGENTS registry", "mode": "lightup", "target": "n_sandbox_pod", "badge": "🖼️" },
+        { "text": "10. SDK: client.sandbox.create() with image, command, isolation policy", "mode": "arrow", "from": "n_sdk_client", "to": "n_gateway", "color": "#d2a8ff", "num": 10 },
+        { "text": "11. Sandbox command: openshellCommandForAgent() → e.g. ['sh','-c','opencode']", "mode": "lightup", "target": "n_sandbox_pod", "badge": "11" },
+        { "text": "12. SDK: client.sandbox.waitReady(name, 300s) — covers cold image pulls", "mode": "lightup", "target": "n_sandbox_pod", "badge": "⏳" },
+        { "text": "13. Upload config: exec(['sh','-c','cat > .config/opencode/opencode.json']) via stdin", "mode": "lightup", "target": "n_sandbox_pod", "badge": "📋" },
+        { "text": "14. Optionally: git clone repo into /workspace", "mode": "lightup", "target": "n_sandbox_pod", "badge": "14" },
+        { "text": "15. Session phase → 'Running', persisted onto listing.openshellSession", "mode": "arrow", "from": "n_sandbox_svc", "to": "n_deploy_openshell", "color": "#3fb950", "num": 15 },
+        { "text": "16. User clicks 'Open terminal' on the listing page", "mode": "arrow", "from": "user", "to": "n_listing", "color": "#58a6ff", "num": 16 },
+        { "text": "17. Console calls POST /sessions/:id/terminal-token → short-lived HMAC token", "mode": "arrow", "from": "n_listing", "to": "n_sandbox_svc", "color": "#d2a8ff", "num": 17 },
+        { "text": "18. Console opens WebSocket: wss://<route>/sessions/:id/terminal?token=...", "mode": "arrow", "from": "n_listing", "to": "n_terminal_ws", "color": "#d2a8ff", "num": 18 },
+        { "text": "19. Server verifies HMAC token, calls attach() → execInteractive(id, ['/bin/sh'])", "mode": "lightup", "target": "n_exec_interactive", "badge": "19" },
+        { "text": "20. SDK: independent /bin/sh session alongside agent's canonical process", "mode": "arrow", "from": "n_exec_interactive", "to": "n_sandbox_pod", "color": "#d2a8ff", "num": 20 },
+        { "text": "21. Bidirectional byte relay: browser ↔ WebSocket ↔ execInteractive output", "mode": "lightup", "target": "n_terminal_ws", "badge": "↔" },
+        { "text": "22. User types in live terminal — agent runs inside sandbox", "mode": "arrow", "from": "user", "to": "n_terminal_ws", "color": "#d2a8ff", "num": 22 },
+        { "text": "23. Resize: {type:'resize',cols:N,rows:N} text frame → session.resize()", "mode": "lightup", "target": "n_terminal_ws", "badge": "↕" },
+        { "text": "24. On disconnect: last viewer leaves → killSession() cleans up shell", "mode": "lightup", "target": "n_exec_interactive", "badge": "🔌" },
+        { "text": "25. Agent keeps running in sandbox — next 'Open terminal' gets fresh shell", "mode": "lightup", "target": "n_sandbox_pod", "badge": "✓" },
+        { "text": "26. Admin can stop: DELETE /sessions/:id → sandbox.delete() on gateway", "mode": "arrow", "from": "n_deploy_openshell", "to": "n_sandbox_svc", "color": "#f85149", "num": 26 },
+        { "text": "27. Listing status reset to 'not-deployed' — ready for fresh deploy", "mode": "lightup", "target": "n_deploy_openshell", "badge": "↺" }
+      ]
+    }
+  },
+  "flowOrder": ["agentstore_workflow", "build_process", "openshell_via_sdk"],
+  "defaultFlow": "agentstore_workflow",
+  "legend": [
+    { "color": "#58a6ff", "label": "Catalog & Listings" },
+    { "color": "#ffa657", "label": "Admin / AAP" },
+    { "color": "#3fb950", "label": "Autonomous (generic-chat) Deploy" },
+    { "color": "#d2a8ff", "label": "Collaborative (OpenShell)" },
+    { "color": "#79c0ff", "label": "Agent Runtime / RHDH" },
+    { "color": "#f0883e", "label": "Model Serving (MaaS / LLM)" },
+    { "color": "#e3b341", "label": "OpenShift Builds" },
+    { "color": "#8b949e", "label": "AgentStore on OpenShift" },
+    { "color": "#f85149", "label": "Teardown / Error" }
+  ]
+};
+
+await viz.load(diagram);
+
+const cvs = document.getElementById('fs-canvas');
+cvs.addEventListener('mousemove', e => {
+  const rect = cvs.getBoundingClientRect();
+  const eng = viz._engine;
+  const mx = (e.clientX - rect.left - eng._ox) / eng._sc;
+  const my = (e.clientY - rect.top - eng._oy) / eng._sc;
+  let hit = false;
+  for (const [k, n] of Object.entries(eng.state.nodes)) {
+    if (n.type === 'boundary' || n.type === 'container') continue;
+    if (eng.state.tooltips[k] && mx >= n.x && mx <= n.x + n.w && my >= n.y && my <= n.y + n.h) {
+      hit = true;
+      break;
+    }
+  }
+  cvs.style.cursor = hit ? 'pointer' : 'default';
+});
+
+viz.state.loopMode = true;
+viz.play();
+</script>
+</body>
+</html>
