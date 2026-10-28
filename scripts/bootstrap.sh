@@ -8,6 +8,7 @@
 #   ./scripts/bootstrap.sh --teardown   # Remove everything from cluster
 #   ./scripts/bootstrap.sh --reset-local # Clear all local state (fresh start, no cluster changes)
 #   ./scripts/bootstrap.sh --verbose    # Show debug API call info
+#   ./scripts/bootstrap.sh --data-dir .data-tmm   # Use a separate data directory
 # =============================================================================
 set -euo pipefail
 
@@ -24,6 +25,7 @@ RESUME=0
 VERBOSE=0
 TEARDOWN=0
 RESET_LOCAL=0
+DATA_DIR=""
 
 # =============================================================================
 # Color constants
@@ -339,23 +341,42 @@ set_secret() {
 # =============================================================================
 # Parse arguments
 # =============================================================================
-for arg in "$@"; do
+ARGS=("$@")
+i=0
+while [[ $i -lt ${#ARGS[@]} ]]; do
+  arg="${ARGS[$i]}"
   case "$arg" in
     --resume)      RESUME=1 ;;
     --verbose)     VERBOSE=1 ;;
     --teardown)    TEARDOWN=1 ;;
     --reset-local) RESET_LOCAL=1 ;;
+    --data-dir)
+      ((i++)) || true
+      [[ $i -ge ${#ARGS[@]} ]] && die "--data-dir requires a value (e.g. --data-dir .data-tmm)"
+      DATA_DIR="${ARGS[$i]}"
+      ;;
+    --data-dir=*)  DATA_DIR="${arg#*=}" ;;
     --help|-h)
-      echo "Usage: bootstrap.sh [--resume] [--teardown] [--reset-local] [--verbose]"
-      echo "  --resume      Skip credential prompts if already configured"
-      echo "  --teardown    Remove all AgentStore resources from the cluster"
-      echo "  --reset-local Clear all local state (.data/, bootstrap config/logs)"
-      echo "  --verbose     Show debug API call info"
+      echo "Usage: bootstrap.sh [--resume] [--teardown] [--reset-local] [--verbose] [--data-dir DIR]"
+      echo "  --resume        Skip credential prompts if already configured"
+      echo "  --teardown      Remove all AgentStore resources from the cluster"
+      echo "  --reset-local   Clear all local state (.data/, bootstrap config/logs)"
+      echo "  --verbose       Show debug API call info"
+      echo "  --data-dir DIR  Use DIR instead of .data/ for state (isolate per-cluster)"
       exit 0
       ;;
     *) die "Unknown argument: $arg" ;;
   esac
+  ((i++)) || true
 done
+
+# If --data-dir is set, export SECRETS_DATA_DIR so the dev server uses it,
+# and use a per-dir config file so --resume picks up the right saved state.
+if [[ -n "$DATA_DIR" ]]; then
+  export SECRETS_DATA_DIR="$REPO_DIR/apps/web/$DATA_DIR"
+  CONFIG_FILE="$SCRIPT_DIR/.bootstrap-config-${DATA_DIR//\//-}"
+  mkdir -p "$SECRETS_DATA_DIR"
+fi
 
 # =============================================================================
 # TEARDOWN MODE
@@ -508,7 +529,8 @@ if [[ "$RESET_LOCAL" == "1" ]]; then
   read -r confirm
   [[ ! "$confirm" =~ ^[Yy] ]] && { info "Aborted."; exit 0; }
 
-  local_data="$REPO_DIR/apps/web/.data"
+  local_data="${SECRETS_DATA_DIR:-$REPO_DIR/apps/web/.data}"
+  [[ -n "$DATA_DIR" ]] && info "Data dir: $local_data"
   rm -f "$local_data/platform.json" 2>/dev/null || true
   rm -f "$local_data/vault.json" 2>/dev/null || true
   rm -f "$local_data/secrets.json" 2>/dev/null || true
@@ -541,6 +563,7 @@ echo -e "\n${C_BOLD}╔═══════════════════
 echo -e "${C_BOLD}║              AgentStore Bootstrap                            ║${C_RESET}"
 echo -e "${C_BOLD}╚══════════════════════════════════════════════════════════════╝${C_RESET}"
 info "Log: $LOG_FILE"
+[[ -n "$DATA_DIR" ]] && info "Data dir: ${SECRETS_DATA_DIR} (isolated)"
 echo ""
 
 # =============================================================================
