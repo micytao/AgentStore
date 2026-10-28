@@ -3,7 +3,10 @@ kind: Namespace
 metadata:
   name: agent-workloads
   labels:
+    app: agentstore
+    app.kubernetes.io/part-of: agentstore
     app.kubernetes.io/managed-by: agentstore
+    app.kubernetes.io/component: infrastructure
 ---
 apiVersion: v1
 kind: ServiceAccount

@@ -7,6 +7,7 @@ import {
   openshiftNamespace,
   openshiftToken,
 } from "./config";
+import { standardLabels } from "./config";
 import { dispatcherFor } from "./tls";
 
 async function ocpFetch(path: string, init: RequestInit = {}): Promise<Response> {
@@ -316,7 +317,7 @@ export async function findOrCreateAgentSandboxServiceTokenSecret(
     body: JSON.stringify({
       apiVersion: "v1",
       kind: "Secret",
-      metadata: { name, namespace, labels: { "app.kubernetes.io/managed-by": "agentstore" } },
+      metadata: { name, namespace, labels: standardLabels("agent-sandbox-service", name) },
       stringData: { [key]: token },
     }),
   });
@@ -349,7 +350,7 @@ export async function ensureSecretValue(
       body: JSON.stringify({
         apiVersion: "v1",
         kind: "Secret",
-        metadata: { name, namespace, resourceVersion: body.metadata.resourceVersion, labels: { "app.kubernetes.io/managed-by": "agentstore" } },
+        metadata: { name, namespace, resourceVersion: body.metadata.resourceVersion, labels: standardLabels("infrastructure", name) },
         stringData: { ...Object.fromEntries(Object.entries(body.data ?? {}).map(([k, v]) => [k, Buffer.from(v, "base64").toString("utf8")])), [key]: value },
       }),
     });
@@ -365,7 +366,7 @@ export async function ensureSecretValue(
     body: JSON.stringify({
       apiVersion: "v1",
       kind: "Secret",
-      metadata: { name, namespace, labels: { "app.kubernetes.io/managed-by": "agentstore" } },
+      metadata: { name, namespace, labels: standardLabels("infrastructure", name) },
       stringData: { [key]: value },
     }),
   });
@@ -484,7 +485,7 @@ export interface K8sDeployment {
  * already surfaced per-listing in the Catalog. */
 export async function listAgentDeployments(): Promise<OpenshiftDeploymentSummary[]> {
   const ns = openshiftNamespace();
-  const selector = encodeURIComponent("app.kubernetes.io/managed-by=agentstore");
+  const selector = encodeURIComponent("app=agentstore,app.kubernetes.io/component=agent-runtime");
   const response = await ocpFetch(
     `/apis/apps/v1/namespaces/${ns}/deployments?labelSelector=${selector}`
   );
@@ -566,7 +567,7 @@ export async function ensureNamespace(name: string): Promise<void> {
     body: JSON.stringify({
       apiVersion: "v1",
       kind: "Namespace",
-      metadata: { name, labels: { "app.kubernetes.io/managed-by": "agentstore" } },
+      metadata: { name, labels: standardLabels("infrastructure", name) },
     }),
   });
   if (!response.ok) {
@@ -591,7 +592,7 @@ export async function findOrCreateEeImageStream(name: string, namespace?: string
     body: JSON.stringify({
       apiVersion: "image.openshift.io/v1",
       kind: "ImageStream",
-      metadata: { name, namespace: ns, labels: { "app.kubernetes.io/managed-by": "agentstore" } },
+      metadata: { name, namespace: ns, labels: standardLabels("build", name) },
     }),
   });
   if (!response.ok) {
@@ -650,7 +651,7 @@ export async function findOrCreateEeBuildConfig(input: EeBuildConfigInput, names
     body: JSON.stringify({
       apiVersion: "build.openshift.io/v1",
       kind: "BuildConfig",
-      metadata: { name: input.name, namespace: ns, labels: { "app.kubernetes.io/managed-by": "agentstore" } },
+      metadata: { name: input.name, namespace: ns, labels: standardLabels("build", input.name) },
       spec,
     }),
   });
@@ -792,7 +793,7 @@ export async function applyBackstageCR(
     metadata: {
       name,
       namespace,
-      labels: { "app.kubernetes.io/managed-by": "agentstore" },
+      labels: standardLabels("rhdh", name),
     },
     spec,
   };

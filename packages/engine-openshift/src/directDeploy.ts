@@ -1,5 +1,5 @@
 import type { AgentDeploymentStatus, OpenShellMcpServerConfig, ProviderKind, Skill } from "@agentstore/shared";
-import { agentRuntimeImage as defaultAgentRuntimeImage, isOpenshiftConfigured, openshiftNamespace } from "./config";
+import { agentRuntimeImage as defaultAgentRuntimeImage, isOpenshiftConfigured, openshiftNamespace, standardLabels } from "./config";
 import * as ocp from "./openshift";
 import { createHash } from "node:crypto";
 
@@ -66,6 +66,10 @@ export async function launchDirectDeploy(input: DirectDeployInput): Promise<void
     .update(configJson + input.provider.kind + (input.provider.baseUrl ?? "") + (input.provider.defaultModel ?? "") + (input.provider.apiKey ?? ""))
     .digest("hex");
 
+  const agentLabels = standardLabels("agent-runtime", input.deploymentName, {
+    "agentstore/listing-id": input.listingId,
+  });
+
   // 1. Create/update the config Secret
   await ocp.applyResource(ns, "secrets", `${input.deploymentName}-config`, {
     apiVersion: "v1",
@@ -73,11 +77,7 @@ export async function launchDirectDeploy(input: DirectDeployInput): Promise<void
     metadata: {
       name: `${input.deploymentName}-config`,
       namespace: ns,
-      labels: {
-        "app.kubernetes.io/managed-by": "agentstore",
-        "app.kubernetes.io/name": "agent-runtime",
-        "agentstore/listing-id": input.listingId,
-      },
+      labels: agentLabels,
     },
     type: "Opaque",
     stringData: {
@@ -90,6 +90,12 @@ export async function launchDirectDeploy(input: DirectDeployInput): Promise<void
     },
   });
 
+  // Selector labels must be a stable subset — use component + listing-id
+  const selectorLabels = {
+    "app.kubernetes.io/component": "agent-runtime",
+    "agentstore/listing-id": input.listingId,
+  };
+
   // 2. Create/update the Deployment
   await ocp.applyResource(ns, "deployments", input.deploymentName, {
     apiVersion: "apps/v1",
@@ -97,27 +103,16 @@ export async function launchDirectDeploy(input: DirectDeployInput): Promise<void
     metadata: {
       name: input.deploymentName,
       namespace: ns,
-      labels: {
-        "app.kubernetes.io/managed-by": "agentstore",
-        "app.kubernetes.io/name": "agent-runtime",
-        "agentstore/listing-id": input.listingId,
-      },
+      labels: agentLabels,
     },
     spec: {
       replicas: 1,
       selector: {
-        matchLabels: {
-          "app.kubernetes.io/name": "agent-runtime",
-          "agentstore/listing-id": input.listingId,
-        },
+        matchLabels: selectorLabels,
       },
       template: {
         metadata: {
-          labels: {
-            "app.kubernetes.io/managed-by": "agentstore",
-            "app.kubernetes.io/name": "agent-runtime",
-            "agentstore/listing-id": input.listingId,
-          },
+          labels: agentLabels,
           annotations: {
             "agentstore/config-checksum": configChecksum,
           },
@@ -166,16 +161,10 @@ export async function launchDirectDeploy(input: DirectDeployInput): Promise<void
     metadata: {
       name: input.deploymentName,
       namespace: ns,
-      labels: {
-        "app.kubernetes.io/managed-by": "agentstore",
-        "agentstore/listing-id": input.listingId,
-      },
+      labels: agentLabels,
     },
     spec: {
-      selector: {
-        "app.kubernetes.io/name": "agent-runtime",
-        "agentstore/listing-id": input.listingId,
-      },
+      selector: selectorLabels,
       ports: [{ name: "http", port: 8080, targetPort: 8080 }],
     },
   });
@@ -187,10 +176,7 @@ export async function launchDirectDeploy(input: DirectDeployInput): Promise<void
     metadata: {
       name: input.deploymentName,
       namespace: ns,
-      labels: {
-        "app.kubernetes.io/managed-by": "agentstore",
-        "agentstore/listing-id": input.listingId,
-      },
+      labels: agentLabels,
     },
     spec: {
       to: { kind: "Service", name: input.deploymentName },

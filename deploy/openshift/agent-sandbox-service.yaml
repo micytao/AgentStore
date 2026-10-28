@@ -16,16 +16,24 @@ metadata:
   name: agent-sandbox-service
   namespace: agent-workloads
   labels:
+    app: agentstore
+    app.kubernetes.io/part-of: agentstore
     app.kubernetes.io/managed-by: agentstore
+    app.kubernetes.io/component: agent-sandbox-service
     app.kubernetes.io/name: agent-sandbox-service
 spec:
   replicas: 1
   selector:
     matchLabels:
+      app.kubernetes.io/component: agent-sandbox-service
       app.kubernetes.io/name: agent-sandbox-service
   template:
     metadata:
       labels:
+        app: agentstore
+        app.kubernetes.io/part-of: agentstore
+        app.kubernetes.io/managed-by: agentstore
+        app.kubernetes.io/component: agent-sandbox-service
         app.kubernetes.io/name: agent-sandbox-service
     spec:
       serviceAccountName: agentstore-console
@@ -80,9 +88,14 @@ metadata:
   name: agent-sandbox-service
   namespace: agent-workloads
   labels:
+    app: agentstore
+    app.kubernetes.io/part-of: agentstore
     app.kubernetes.io/managed-by: agentstore
+    app.kubernetes.io/component: agent-sandbox-service
+    app.kubernetes.io/name: agent-sandbox-service
 spec:
   selector:
+    app.kubernetes.io/component: agent-sandbox-service
     app.kubernetes.io/name: agent-sandbox-service
   ports:
     - name: http
@@ -97,7 +110,11 @@ metadata:
   name: agent-sandbox-service
   namespace: agent-workloads
   labels:
+    app: agentstore
+    app.kubernetes.io/part-of: agentstore
     app.kubernetes.io/managed-by: agentstore
+    app.kubernetes.io/component: agent-sandbox-service
+    app.kubernetes.io/name: agent-sandbox-service
   annotations:
     haproxy.router.openshift.io/timeout: 300s
 spec:

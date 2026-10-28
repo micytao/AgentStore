@@ -56,6 +56,8 @@ export {
   openshiftInsecureTls,
   agentRuntimeImage,
   openshiftDeploymentConsoleUrl,
+  standardLabels,
+  type AgentStoreComponent,
 } from "./config";
 export {
   launchDirectDeploy,

@@ -9,7 +9,10 @@ kind: Namespace
 metadata:
   name: agentstore
   labels:
+    app: agentstore
+    app.kubernetes.io/part-of: agentstore
     app.kubernetes.io/managed-by: agentstore
+    app.kubernetes.io/component: infrastructure
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -17,16 +20,24 @@ metadata:
   name: agentstore
   namespace: agentstore
   labels:
+    app: agentstore
+    app.kubernetes.io/part-of: agentstore
     app.kubernetes.io/managed-by: agentstore
+    app.kubernetes.io/component: console
     app.kubernetes.io/name: agentstore
 spec:
   replicas: 1
   selector:
     matchLabels:
+      app.kubernetes.io/component: console
       app.kubernetes.io/name: agentstore
   template:
     metadata:
       labels:
+        app: agentstore
+        app.kubernetes.io/part-of: agentstore
+        app.kubernetes.io/managed-by: agentstore
+        app.kubernetes.io/component: console
         app.kubernetes.io/name: agentstore
     spec:
       serviceAccountName: default
@@ -66,7 +77,10 @@ metadata:
   name: agentstore-data
   namespace: agentstore
   labels:
+    app: agentstore
+    app.kubernetes.io/part-of: agentstore
     app.kubernetes.io/managed-by: agentstore
+    app.kubernetes.io/component: console
 spec:
   accessModes:
     - ReadWriteOnce
@@ -80,9 +94,14 @@ metadata:
   name: agentstore
   namespace: agentstore
   labels:
+    app: agentstore
+    app.kubernetes.io/part-of: agentstore
     app.kubernetes.io/managed-by: agentstore
+    app.kubernetes.io/component: console
+    app.kubernetes.io/name: agentstore
 spec:
   selector:
+    app.kubernetes.io/component: console
     app.kubernetes.io/name: agentstore
   ports:
     - name: http
@@ -95,7 +114,11 @@ metadata:
   name: agentstore
   namespace: agentstore
   labels:
+    app: agentstore
+    app.kubernetes.io/part-of: agentstore
     app.kubernetes.io/managed-by: agentstore
+    app.kubernetes.io/component: console
+    app.kubernetes.io/name: agentstore
   annotations:
     haproxy.router.openshift.io/timeout: 300s
 spec:

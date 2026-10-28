@@ -36,6 +36,43 @@ export function openshiftDeploymentConsoleUrl(name: string, namespace: string): 
   return `${base}/k8s/ns/${namespace}/apps~v1~Deployment/${name}`;
 }
 
+// ---------------------------------------------------------------------------
+// Kubernetes labeling — every resource AgentStore creates gets a consistent
+// set of labels for grouping, filtering, and console visibility.
+//
+//   app: agentstore                              — quick CLI filter
+//   app.kubernetes.io/part-of: agentstore        — groups the whole app
+//   app.kubernetes.io/managed-by: agentstore     — provenance
+//   app.kubernetes.io/component: <component>     — sub-system role
+//   app.kubernetes.io/name: <name>               — specific workload
+// ---------------------------------------------------------------------------
+
+export type AgentStoreComponent =
+  | "console"
+  | "agent-runtime"
+  | "agent-sandbox-service"
+  | "gateway"
+  | "build"
+  | "rhdh"
+  | "infrastructure";
+
+/** Returns the standard label set for any K8s resource managed by AgentStore.
+ *  `component` is required; `name` and `extra` are optional. */
+export function standardLabels(
+  component: AgentStoreComponent,
+  name?: string,
+  extra?: Record<string, string>,
+): Record<string, string> {
+  return {
+    app: "agentstore",
+    "app.kubernetes.io/part-of": "agentstore",
+    "app.kubernetes.io/managed-by": "agentstore",
+    "app.kubernetes.io/component": component,
+    ...(name ? { "app.kubernetes.io/name": name } : {}),
+    ...extra,
+  };
+}
+
 export function applyPlatformEnv(settings: {
   openshiftApiUrl: string;
   openshiftNamespace: string;
