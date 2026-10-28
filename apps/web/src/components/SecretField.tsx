@@ -31,7 +31,7 @@ const SOURCE_LABEL: Record<SecretSummary["source"], string> = {
 };
 
 /** Inline card for viewing/setting/clearing a single fixed secret slot.
- * Shared by the Platform tab (AAP/OpenShift tokens) and the LLMs tab's
+ * Shared by the Platform tab (OpenShift tokens) and the LLMs tab's
  * OpenShell sub-tab (gateway token, git PAT). */
 export function SecretField({
   secret,

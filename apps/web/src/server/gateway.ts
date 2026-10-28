@@ -4,7 +4,7 @@ import { ensurePlatformEnv, getPlatformSettings, savePlatformSettings } from "./
 
 /**
  * The OpenShell gateway's "install once" admin action — previously launched
- * via AAP, now must be installed manually on the cluster (e.g. via
+ * Must be installed manually on the cluster (e.g. via
  * `helm install`). This module persists gateway deployment state and
  * provides a placeholder until automated direct-deploy is implemented.
  *
@@ -41,7 +41,7 @@ export async function refreshGatewayDeployment(): Promise<PlatformSettings> {
     return settings;
   }
 
-  // Without AAP job polling, we can't track deploy progress automatically.
+  // Without automated deploy tracking, mark as needing manual verification.
   // Mark as needing manual verification.
   return persist({
     ...deployment,

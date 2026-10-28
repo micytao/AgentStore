@@ -3,7 +3,7 @@ import { getMcpAuthToken, getMcpServer, listMcpServers } from "./mcp";
 import { apiKeyFor, providerFor } from "./providers";
 
 /** Resolves the model credentials a deployed agent needs, as plain data —
- * used both for the generic-chat AAP deploy (deployments.ts) and the
+ * used both for the generic-chat OpenShift deploy (deployments.ts) and the
  * OpenShell sandbox deploy (openshellDeploy.ts). The console resolves
  * *which* provider (providers.ts's providerFor()); the receiving side
  * (agent-runtime container / Agent Sandbox Service) is the only thing that

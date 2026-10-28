@@ -27,7 +27,7 @@ export default function PlatformSettingsPage() {
     <AdminPageHeader
       eyebrow="Settings"
       title="Platform"
-      description="Connect Ansible Automation Platform and OpenShift so agents can be deployed for real."
+      description="Connect OpenShift so agents can be deployed for real."
       action={
         <Button variant="link" isDanger onClick={() => setConfirmOpen(true)}>
           Reset for New Cluster
@@ -41,8 +41,7 @@ export default function PlatformSettingsPage() {
           <ModalHeader title="Reset for New Cluster?" titleIconVariant="warning" />
           <ModalBody>
             This will clear all deploy statuses, build results, image references,
-            and sync tokens — keeping your connection URLs, AAP job template IDs,
-            execution environment IDs, and project configuration.
+            and sync tokens — keeping your connection URLs and project configuration.
             <br /><br />
             Use this when switching to a new cluster so stale state from
             the previous cluster doesn&apos;t interfere.

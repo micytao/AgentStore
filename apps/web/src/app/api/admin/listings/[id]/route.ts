@@ -25,7 +25,7 @@ export async function PATCH(
  * ever hid the listing while its Deployment/Route (generic-chat) or
  * sandbox session (openshell) kept running forever, orphaned with no
  * catalog entry left to manage or even see it from. Failures here (e.g.
- * AAP/cluster unreachable) are reported back as a `warning` instead of
+ * cluster unreachable) are reported back as a `warning` instead of
  * blocking the delete — the catalog entry is the source of truth for
  * "should this exist", so it must always be removable even if the infra
  * call fails; the warning tells the admin to clean up manually. */

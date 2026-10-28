@@ -7,10 +7,9 @@ import { openshiftNamespace } from "./config";
  * builds apps/agent-sandbox-service/Containerfile inside the OpenShift
  * cluster itself — the same OpenShift BuildConfig mechanism eeBuild.ts and
  * agentRuntimeBuild.ts use, just with a different Containerfile/context
- * and no AAP involvement at all (this service talks to OpenShift/the
- * OpenShell gateway directly, never through AAP).
+ * (this service talks to OpenShift/the OpenShell gateway directly).
  *
- * Unlike eeBuild.ts, there's no AAP-registration step — the built image's
+ * The built image's
  * reference feeds straight into deploy/openshift/agent-sandbox-service.yaml's
  * Deployment spec (see apps/web/src/server/agentSandbox.ts's
  * startAgentSandboxServiceInstall()/refreshAgentSandboxServiceInstall()
@@ -43,9 +42,7 @@ function buildNamespace(): string {
 export interface AgentSandboxServiceImageBuildInput {
   /** Any repo/branch containing apps/agent-sandbox-service/Containerfile
    * at that path — in practice the same one already configured for the
-   * AAP Project (PlatformSettings.aapProjectGitUrl/aapProjectGitBranch),
-   * reused purely because it's the one Git source AgentStore already has
-   * on hand, not because AAP is otherwise involved. */
+   * Platform settings (PlatformSettings.projectGitUrl/projectGitBranch). */
   gitUrl: string;
   gitBranch: string;
   gitSecretName?: string;
@@ -102,7 +99,7 @@ export interface AgentSandboxServiceImageBuildResult {
 /** Phase 2: polls the Build from phase 1; returns undefined while it's
  * still New/Pending/Running (the caller should try again shortly). Once
  * it's Complete, just reads back the built image's pullable reference —
- * no AAP registration step, same as agentRuntimeBuild.ts. */
+ * no separate registration step — the image ref is used directly. */
 export async function getAgentSandboxServiceImageBuildResult(
   buildName: string
 ): Promise<AgentSandboxServiceImageBuildResult | undefined> {

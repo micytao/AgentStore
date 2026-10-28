@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { requireAdmin } from "@/server/auth";
 import { refreshGatewayDeployment, startGatewayDeployment } from "@/server/gateway";
 
-/** Starts (or re-starts) the "install the OpenShell gateway" AAP job.
+/** Starts (or re-starts) the "install the OpenShell gateway" action.
  * Mirrors apps/web/src/app/api/admin/listings/[id]/deploy/route.ts, just
  * platform-scoped instead of per-listing. */
 export async function POST(request: Request) {

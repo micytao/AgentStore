@@ -159,8 +159,8 @@ export function getActiveProvider(): ProviderConfig | undefined {
   );
 }
 
-/** Resolves which configured provider a listing's deploy (generic-chat AAP
- * deploy, or an OpenShell sandbox session) should use: its own per-agent
+/** Resolves which configured provider a listing's deploy (generic-chat
+ * OpenShift deploy, or an OpenShell sandbox session) should use: its own per-agent
  * binding if set (and it still exists), otherwise the global active
  * provider — so listings with no explicit binding keep working. */
 export function providerFor(listing: Listing): ProviderConfig | undefined {

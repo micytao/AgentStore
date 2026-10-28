@@ -11,13 +11,13 @@ metadata:
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: aap-agent-provisioner
+  name: agentstore-provisioner
   namespace: agent-workloads
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
-  name: aap-agent-provisioner
+  name: agentstore-provisioner
   namespace: agent-workloads
 rules:
   - apiGroups: ["batch"]
@@ -41,16 +41,16 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: aap-agent-provisioner
+  name: agentstore-provisioner
   namespace: agent-workloads
 subjects:
   - kind: ServiceAccount
-    name: aap-agent-provisioner
+    name: agentstore-provisioner
     namespace: agent-workloads
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
-  name: aap-agent-provisioner
+  name: agentstore-provisioner
 ---
 # Optional: let the AgentStore console (running off-cluster) watch Jobs with a
 # dedicated token. Create a token Secret in your cluster, then paste it into

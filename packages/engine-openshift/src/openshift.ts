@@ -73,8 +73,8 @@ export async function pingOpenshift(): Promise<{ ok: boolean; error?: string }> 
 /** Live preflight for the OpenShell tab's "Agent Sandbox controller"
  * status (installed/missing) — GETs the cluster's API discovery root
  * (`/apis`, the same general "ask the server what it serves" technique
- * as controllerApiPrefix() in aap.ts, just against Kubernetes's own
- * discovery endpoint instead of AAP's) and checks whether
+ * technique — querying Kubernetes's own
+ * API discovery endpoint) and checks whether
  * `agents.x-k8s.io` is among the served API groups — exactly what the
  * OpenShell Helm chart's own preflight template checks for (see
  * the OpenShift Helm chart.s preflight: "neither
@@ -520,7 +520,7 @@ export async function readDeploymentResult(
  * `<release_name>-gateway-result` ConfigMap in the *admin-supplied*
  * gateway namespace (not the fixed OPENSHIFT_NAMESPACE every other
  * function here uses), since the gateway conventionally lives in its own
- * namespace, separate from AAP's agent Jobs/Deployments. */
+ * namespace, separate from the agent workloads namespace. */
 export async function readGatewayDeployResult(
   releaseName: string,
   namespace: string
@@ -605,7 +605,7 @@ export async function findOrCreateEeImageStream(name: string, namespace?: string
  * in place (fetching `resourceVersion` first, as the Kubernetes API
  * requires for updates) so a changed Git URL/branch always takes effect
  * on the next build, the same way findOrCreateExecutionEnvironment()
- * patches an existing AAP object rather than leaving it stale. */
+ * patches an existing object rather than leaving it stale. */
 export async function findOrCreateEeBuildConfig(input: EeBuildConfigInput, namespace?: string): Promise<void> {
   const ns = namespace ?? openshiftNamespace();
   const path = `/apis/build.openshift.io/v1/namespaces/${ns}/buildconfigs/${input.name}`;
@@ -730,7 +730,7 @@ export async function getEeBuildLogTail(buildName: string, tailLines = 1000, nam
 
 /** Reads back the built image's pullable reference (including registry
  * host + digest) once a Build lands its output on this ImageStreamTag —
- * exactly what AAP's Execution Environment `image` field needs. */
+ * the pullable reference for the built image. */
 export async function getEeImageReference(imageStreamName: string, tag = "latest", namespace?: string): Promise<string> {
   const ns = namespace ?? openshiftNamespace();
   const response = await ocpFetch(

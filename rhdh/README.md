@@ -10,8 +10,7 @@ Templates without needing direct access to the AgentStore admin console.
 | --- | --- |
 | **Red Hat Developer Hub** | End-user self-service portal (discover agents, request new ones) |
 | **AgentStore** | Admin control plane (onboard, configure, bind skills/tools/models) |
-| **Ansible Automation Platform** | Provisioning pipeline (Job Templates, Execution Environments) |
-| **OpenShift** | Agent runtime (Deployments, Routes, BuildConfigs) |
+| **OpenShift** | Agent runtime (Deployments, Routes, BuildConfigs) — provisioned directly via the K8s API |
 | **OpenShift AI / MaaS** | Model serving (inference endpoints for the agents) |
 
 RHDH is an overlay, not a dependency.  AgentStore keeps working without it.

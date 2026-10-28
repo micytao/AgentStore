@@ -4,11 +4,9 @@ import * as ocp from "./openshift";
 import { createHash } from "node:crypto";
 
 /**
- * Direct OpenShift deployment for generic-chat agents — replaces the
- * AAP-based flow (the old genericAgentDeploy.ts). Creates the same
- * Kubernetes resources the Ansible playbook provision-generic-agent.yml
- * used to create, but via direct OpenShift API calls instead of
- * launching an AAP Job Template.
+ * Direct OpenShift deployment for generic-chat agents. Creates
+ * Kubernetes resources (Secret, Deployment, Service, Route) via direct
+ * OpenShift API calls.
  *
  * Resources created per agent (all in the configured namespace):
  *   - Secret `<deploymentName>-config` (env scalars + config.json)
@@ -61,7 +59,7 @@ export async function launchDirectDeploy(input: DirectDeployInput): Promise<void
   });
 
   // Compute a config checksum to force pod rollouts on config changes
-  // (same technique the Ansible playbook used via an annotation).
+  // Config-checksum annotation forces pod rollout on config changes.
   const configChecksum = createHash("sha256")
     .update(configJson + input.provider.kind + (input.provider.baseUrl ?? "") + (input.provider.defaultModel ?? "") + (input.provider.apiKey ?? ""))
     .digest("hex");
@@ -191,7 +189,7 @@ export async function launchDirectDeploy(input: DirectDeployInput): Promise<void
 
 /**
  * Polls the deployment status by checking the Deployment readiness and
- * Route host directly — no AAP job or ConfigMap read-back needed.
+ * Route host directly.
  */
 export async function getDirectDeployStatus(
   deploymentName: string

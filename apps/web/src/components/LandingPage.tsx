@@ -84,7 +84,7 @@ const VALUE_PROPS: {
     color: "purple",
     tag: "Runtimes",
     title: "Two governed runtimes, one console",
-    body: "Ship always-on chat agents (persistent Deployment + Route via AAP/OpenShift) and interactive coding sandboxes (OpenShell) from the same admin experience.",
+    body: "Ship always-on chat agents (persistent Deployment + Route on OpenShift) and interactive coding sandboxes (OpenShell) from the same admin experience.",
   },
   {
     icon: ShareAltIcon,

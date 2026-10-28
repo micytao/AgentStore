@@ -22,7 +22,7 @@ export async function GET(request: Request) {
 
 /** Applies the vendored Agent Sandbox controller manifest via the
  * OpenShift API. Mirrors apps/web/src/app/api/admin/platform/gateway/route.ts's
- * POST, just synchronous (no AAP job to launch) — see
+ * POST, just synchronous — see
  * apps/web/src/server/agentSandbox.ts for why. */
 export async function POST(request: Request) {
   const denied = requireAdmin(request);

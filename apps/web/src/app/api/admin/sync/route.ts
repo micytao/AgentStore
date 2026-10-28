@@ -32,7 +32,7 @@ export async function POST(request: Request) {
     // --- Platform settings: merge config, preserve deploy status --------
     // Uses savePlatformSettings() which updates the in-memory cache AND
     // hydrates process.env (applyPlatformEnv), so the running process
-    // picks up the new AAP/OCP URLs immediately — not just on next restart.
+    // picks up the new OCP URLs immediately — not just on next restart.
     if (body.platformSettings) {
       const dataDir = getDataDir();
       const filePath = path.join(dataDir, "platform.json");

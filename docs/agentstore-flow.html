@@ -84,18 +84,18 @@ const diagram = {
     "n_listing": { "x": 290, "y": 110, "w": 140, "h": 42, "label": "Listing Detail", "sublabel": "name · desc · risk · runtime", "color": "#58a6ff", "fontSize": 10 },
     "n_onboard": { "x": 130, "y": 168, "w": 145, "h": 42, "label": "Onboard Agent", "sublabel": "wizard → draft listing", "color": "#58a6ff", "fontSize": 11 },
     "n_review": { "x": 290, "y": 168, "w": 140, "h": 42, "label": "Publish / Review", "sublabel": "draft → published", "color": "#58a6ff", "fontSize": 11 },
-    "n_agent_config": { "x": 130, "y": 226, "w": 300, "h": 32, "label": "Agent Config: provider · skills · MCP tools · job template", "color": "#58a6ff", "fontSize": 10 },
+    "n_agent_config": { "x": 130, "y": 226, "w": 300, "h": 32, "label": "Agent Config: provider · skills · MCP tools", "color": "#58a6ff", "fontSize": 10 },
 
     "c_admin": { "x": 110, "y": 290, "w": 340, "h": 250, "type": "container", "label": "Admin Console", "color": "#ffa657" },
     "n_providers": { "x": 130, "y": 330, "w": 145, "h": 40, "label": "Providers", "sublabel": "Anthropic · OpenAI · MaaS", "color": "#ffa657", "fontSize": 11 },
     "n_mcp": { "x": 290, "y": 330, "w": 140, "h": 40, "label": "MCP Servers", "sublabel": "stdio · http · sse", "color": "#ffa657", "fontSize": 11 },
     "n_skills": { "x": 130, "y": 385, "w": 145, "h": 40, "label": "Skills", "sublabel": "Red Hat Skill Packs", "color": "#ffa657", "fontSize": 11 },
-    "n_secrets": { "x": 290, "y": 385, "w": 140, "h": 40, "label": "Secrets Vault", "sublabel": "AAP · OCP · OpenShell", "color": "#ffa657", "fontSize": 11 },
-    "n_platform": { "x": 130, "y": 440, "w": 300, "h": 36, "label": "Platform: AAP URL · OpenShift API · namespace", "color": "#ffa657", "fontSize": 10 },
-    "n_engine": { "x": 130, "y": 490, "w": 300, "h": 36, "label": "Engine: AAP status · OpenShift status · OpenShell status", "color": "#ffa657", "fontSize": 10 },
+    "n_secrets": { "x": 290, "y": 385, "w": 140, "h": 40, "label": "Secrets Vault", "sublabel": "OCP · OpenShell", "color": "#ffa657", "fontSize": 11 },
+    "n_platform": { "x": 130, "y": 440, "w": 300, "h": 36, "label": "Platform: OpenShift API · namespace · Git URL", "color": "#ffa657", "fontSize": 10 },
+    "n_engine": { "x": 130, "y": 490, "w": 300, "h": 36, "label": "Engine: OpenShift status · OpenShell status", "color": "#ffa657", "fontSize": 10 },
 
     "c_deploy_flows": { "x": 110, "y": 560, "w": 340, "h": 150, "type": "container", "label": "Deploy Actions (one-time per listing)", "color": "#3fb950" },
-    "n_deploy_generic": { "x": 130, "y": 600, "w": 145, "h": 45, "label": "Deploy generic-chat", "sublabel": "AAP → K8s Deployment", "color": "#3fb950", "fontSize": 10 },
+    "n_deploy_generic": { "x": 130, "y": 600, "w": 145, "h": 45, "label": "Deploy generic-chat", "sublabel": "Direct → K8s Deployment", "color": "#3fb950", "fontSize": 10 },
     "n_deploy_openshell": { "x": 290, "y": 600, "w": 140, "h": 45, "label": "Deploy openshell", "sublabel": "→ Sandbox Service", "color": "#d2a8ff", "fontSize": 10 },
     "n_deploy_poll": { "x": 130, "y": 660, "w": 300, "h": 32, "label": "Poll: refreshDeployment() / refreshOpenShellSession()", "color": "#3fb950", "fontSize": 10 },
 
@@ -106,13 +106,12 @@ const diagram = {
 
     "c_infra": { "x": 500, "y": 30, "w": 970, "h": 870, "type": "boundary", "label": "OpenShift Cluster" },
 
-    "c_aap": { "x": 520, "y": 70, "w": 280, "h": 270, "type": "container", "label": "Ansible Automation Platform", "color": "#ffa657" },
-    "n_aap_project": { "x": 540, "y": 110, "w": 240, "h": 36, "label": "AAP Project", "sublabel": "Git → ansible/ playbooks", "color": "#ffa657", "fontSize": 11 },
-    "n_aap_cred": { "x": 540, "y": 160, "w": 120, "h": 36, "label": "K8s Credential", "sublabel": "Bearer Token", "color": "#ffa657", "fontSize": 10 },
-    "n_aap_inventory": { "x": 670, "y": 160, "w": 110, "h": 36, "label": "Inventory", "sublabel": "localhost", "color": "#ffa657", "fontSize": 10 },
-    "n_aap_jt_generic": { "x": 540, "y": 210, "w": 240, "h": 36, "label": "JT: provision-generic-agent.yml", "sublabel": "Autonomous deploy", "color": "#ffa657", "fontSize": 10 },
-    "n_aap_jt_gateway": { "x": 540, "y": 260, "w": 240, "h": 36, "label": "JT: provision-openshell-gateway.yml", "sublabel": "Helm install gateway", "color": "#ffa657", "fontSize": 10 },
-    "n_aap_ee": { "x": 540, "y": 300, "w": 240, "h": 28, "label": "Execution Environment (kubernetes.core + helm)", "color": "#ffa657", "fontSize": 10 },
+    "c_direct_deploy": { "x": 520, "y": 70, "w": 280, "h": 270, "type": "container", "label": "Direct OpenShift Provisioning", "color": "#3fb950" },
+    "n_direct_deploy_secret": { "x": 540, "y": 110, "w": 240, "h": 36, "label": "Create Secret", "sublabel": "env + config.json", "color": "#3fb950", "fontSize": 11 },
+    "n_direct_deploy_deployment": { "x": 540, "y": 160, "w": 240, "h": 36, "label": "Create Deployment", "sublabel": "agent-runtime container", "color": "#3fb950", "fontSize": 10 },
+    "n_direct_deploy_svc_route": { "x": 540, "y": 210, "w": 240, "h": 36, "label": "Create Service + Route", "sublabel": "TLS edge termination", "color": "#3fb950", "fontSize": 10 },
+    "n_direct_deploy_poll": { "x": 540, "y": 260, "w": 240, "h": 36, "label": "Poll readiness + Route host", "sublabel": "getDirectDeployStatus()", "color": "#3fb950", "fontSize": 10 },
+    "n_direct_deploy_labels": { "x": 540, "y": 300, "w": 240, "h": 28, "label": "Labels: app=agentstore · component · listing-id", "color": "#3fb950", "fontSize": 10 },
 
     "c_workloads": { "x": 520, "y": 370, "w": 280, "h": 280, "type": "container", "label": "agent-workloads namespace", "color": "#3fb950" },
     "n_deployment": { "x": 540, "y": 410, "w": 240, "h": 45, "label": "agent-<id> Deployment", "sublabel": "agent-runtime container", "color": "#3fb950", "fontSize": 11 },
@@ -144,12 +143,12 @@ const diagram = {
     "n_external_llm": { "x": 1190, "y": 165, "w": 240, "h": 40, "label": "External LLM API", "sublabel": "Anthropic · OpenAI · Gemini", "color": "#f0883e", "fontSize": 11 },
 
     "c_build": { "x": 1170, "y": 260, "w": 280, "h": 390, "type": "container", "label": "OpenShift Builds (agentstore ns)", "color": "#e3b341" },
-    "n_bc_ee": { "x": 1190, "y": 300, "w": 240, "h": 42, "label": "BuildConfig: agentstore-ee", "sublabel": "Execution Environment image", "color": "#e3b341", "fontSize": 10 },
+    "n_bc_ee": { "x": 1190, "y": 300, "w": 240, "h": 42, "label": "BuildConfig: agentstore-ee", "sublabel": "Tooling image (optional)", "color": "#e3b341", "fontSize": 10 },
     "n_bc_runtime": { "x": 1190, "y": 356, "w": 240, "h": 42, "label": "BuildConfig: agentstore-agent-runtime", "sublabel": "agent-runtime chat image", "color": "#e3b341", "fontSize": 10 },
     "n_bc_sandbox": { "x": 1190, "y": 412, "w": 240, "h": 42, "label": "BuildConfig: agent-sandbox-service", "sublabel": "OpenShell adapter image", "color": "#e3b341", "fontSize": 10 },
     "n_bc_agentstore": { "x": 1190, "y": 468, "w": 240, "h": 42, "label": "BuildConfig: agentstore", "sublabel": "Next.js console image", "color": "#e3b341", "fontSize": 10 },
     "n_imagestream": { "x": 1190, "y": 524, "w": 240, "h": 36, "label": "ImageStream → internal registry", "sublabel": "image-registry.openshift-…", "color": "#e3b341", "fontSize": 10 },
-    "n_ee_register": { "x": 1190, "y": 575, "w": 240, "h": 36, "label": "Register EE in AAP", "sublabel": "findOrCreateExecutionEnv()", "color": "#e3b341", "fontSize": 10 },
+    "n_ee_register": { "x": 1190, "y": 575, "w": 240, "h": 36, "label": "Image ready in registry", "sublabel": "pullable reference saved", "color": "#e3b341", "fontSize": 10 },
 
     "c_agentstore_ocp": { "x": 1170, "y": 680, "w": 280, "h": 190, "type": "container", "label": "AgentStore on OpenShift", "color": "#8b949e" },
     "n_as_ns": { "x": 1190, "y": 720, "w": 120, "h": 36, "label": "NS: agentstore", "sublabel": "PVC for .data/", "color": "#8b949e", "fontSize": 10 },
@@ -203,7 +202,7 @@ const diagram = {
       "title": "Onboard New Agent",
       "description": "Admin → Catalog → '+ Onboard new agent' wizard creates a new draft listing. Supports both engine types.",
       "details": [
-        ["Engines", "Hosted agent API (AAP → OpenShift) or OpenShell (Collaborative)"],
+        ["Engines", "Hosted agent API (direct OpenShift deploy) or OpenShell (Collaborative)"],
         ["Result", "Draft listing ready for review/publish"]
       ]
     },
@@ -216,9 +215,9 @@ const diagram = {
     },
     "n_agent_config": {
       "title": "Agent Config (per-listing)",
-      "description": "Admin binds a model provider, selects MCP tool bindings, attaches Skills packs, and optionally overrides the AAP job template or sandbox image — all per-listing.",
+      "description": "Admin binds a model provider, selects MCP tool bindings, attaches Skills packs, and optionally overrides the sandbox image — all per-listing.",
       "details": [
-        ["Fields", "providerId · mcpToolBindings · skillIds · aapJobTemplateId · gitUrl · openshellSandboxImage"],
+        ["Fields", "providerId · mcpToolBindings · skillIds · gitUrl · openshellSandboxImage"],
         ["Type", "AgentConfig in packages/shared"]
       ]
     },
@@ -250,16 +249,16 @@ const diagram = {
       "title": "Secrets Vault",
       "description": "Encrypted at-rest vault for sensitive tokens used by platform connections and agent deploys.",
       "details": [
-        ["Slots", "AAP_TOKEN · OPENSHIFT_TOKEN · OPENSHELL_SERVICE_TOKEN · GIT_PAT · GITHUB_PACKAGES_TOKEN · AGENTSTORE_SERVICE_TOKEN"],
-        ["Groups", "platform (AAP/OCP) · tooling (OpenShell/Git)"]
+        ["Slots", "OPENSHIFT_TOKEN · OPENSHELL_SERVICE_TOKEN · GIT_PAT · GITHUB_PACKAGES_TOKEN · AGENTSTORE_SERVICE_TOKEN"],
+        ["Groups", "platform (OCP) · tooling (OpenShell/Git)"]
       ]
     },
     "n_platform": {
       "title": "Platform Settings",
-      "description": "Admin → Platform: connect AAP controller URL, OpenShift API, and configure namespaces. This is where all infrastructure endpoints are registered.",
+      "description": "Admin → Platform: connect OpenShift API, configure namespace, and set the Project Git URL. This is where all infrastructure endpoints are registered.",
       "details": [
-        ["AAP", "controllerUrl · jobTemplateId · consoleUrl · insecureTls"],
         ["OpenShift", "apiUrl · namespace · consoleUrl · insecureTls"],
+        ["Project", "projectGitUrl · projectGitBranch"],
         ["OpenShell", "serviceUrl · gatewayChartRef · gatewayNamespace"]
       ]
     },
@@ -267,21 +266,21 @@ const diagram = {
       "title": "Engine Status",
       "description": "Admin → Engine: live connection status checks for all three infrastructure backends.",
       "details": [
-        ["Checks", "AAP configured/connected · OpenShift configured/connected · OpenShell Service reachable"]
+        ["Checks", "OpenShift configured/connected · OpenShell Service reachable"]
       ]
     },
     "n_deploy_generic": {
       "title": "Deploy Generic-Chat (Autonomous)",
-      "description": "One-time admin action per listing. Launches provision-generic-agent.yml via AAP, which creates a Deployment + Service + Route + Secret + ConfigMap in agent-workloads.",
+      "description": "One-time admin action per listing. Creates a Secret + Deployment + Service + Route directly via the K8s API (directDeploy.ts).",
       "details": [
         ["Trigger", "Admin → Catalog → listing → 'Deploy to OpenShift'"],
-        ["Code", "deployments.ts → engine-ansible/genericAgentDeploy.ts → AAP API"],
+        ["Code", "deployments.ts → engine-openshift/directDeploy.ts → K8s API"],
         ["Result", "Persistent chat URL users open directly"]
       ]
     },
     "n_deploy_openshell": {
       "title": "Deploy OpenShell (Collaborative)",
-      "description": "One-time admin action per listing. Creates a persistent Agent Sandbox Service session (keyed by listing id) — not via AAP, directly via the REST API.",
+      "description": "One-time admin action per listing. Creates a persistent Agent Sandbox Service session (keyed by listing id) directly via the REST API.",
       "details": [
         ["Trigger", "Admin → Catalog → listing → 'Deploy'"],
         ["Code", "openshellDeploy.ts → engine-openshell/client.ts → Sandbox Service REST"],
@@ -292,48 +291,48 @@ const diagram = {
       "title": "Deploy Status Polling",
       "description": "Admin UI polls refreshDeployment() (generic-chat) or refreshOpenShellSession() (openshell) on an interval until status transitions from 'deploying' to 'running' or 'failed'.",
       "details": [
-        ["generic-chat", "Polls AAP job status → reads deploy-result ConfigMap → extracts Route URL"],
+        ["generic-chat", "Polls Deployment readiness → reads Route host → extracts URL"],
         ["openshell", "Polls sandbox phase via GET /sessions/:id"]
       ]
     },
-    "n_aap_project": {
-      "title": "AAP Project",
-      "description": "SCM type Git, pointing at the AgentStore repo. Contains ansible/provision-generic-agent.yml and ansible/provision-openshell-gateway.yml.",
+    "n_direct_deploy_secret": {
+      "title": "Create Config Secret",
+      "description": "directDeploy.ts creates a Kubernetes Secret named '<deploymentName>-config' containing env vars (PROVIDER_KIND, API key) and a config.json with skills, MCP servers, intro lines.",
       "details": [
-        ["Source", "aapProjectGitUrl / aapProjectGitBranch from Platform settings"],
-        ["Create", "Auto: 'Create job templates' action, or manual in AAP UI"]
+        ["Keys", "LISTING_NAME · PROVIDER_KIND · PROVIDER_BASE_URL · PROVIDER_DEFAULT_MODEL · PROVIDER_API_KEY · config.json"],
+        ["Labels", "app=agentstore · component=agent-runtime · listing-id"]
       ]
     },
-    "n_aap_cred": {
-      "title": "Kubernetes Credential",
-      "description": "OpenShift Bearer Token credential — injects K8S_AUTH_HOST / K8S_AUTH_API_KEY / K8S_AUTH_VERIFY_SSL env vars into playbook execution.",
+    "n_direct_deploy_deployment": {
+      "title": "Create Deployment",
+      "description": "Creates a Kubernetes Deployment running the agent-runtime image with health probes, the config Secret as envFrom + volume mount, and a config-checksum annotation for rollout on changes.",
       "details": [
-        ["Reuses", "Same OpenShift API URL/token from Admin → Platform"],
-        ["Used by", "Both Job Templates (k8s tasks authenticate via this)"]
+        ["Image", "PlatformSettings.agentRuntimeImage"],
+        ["Config", "envFrom secretRef + /etc/agent/config.json volume mount"]
       ]
     },
-    "n_aap_jt_generic": {
-      "title": "JT: provision-generic-agent.yml",
-      "description": "Creates a Deployment + Service + Route + Secret + ConfigMap in agent-workloads. Takes extra_vars with deployment_name, provider config, skills, MCP servers.",
+    "n_direct_deploy_svc_route": {
+      "title": "Create Service + Route",
+      "description": "Creates a Service (port 8080) and a Route (TLS edge termination) for the agent Deployment.",
       "details": [
-        ["extra_vars", "deployment_name · namespace · provider_kind · provider_api_key · intro_lines · skills · mcp_servers · agent_runtime_image"],
-        ["ask_variables_on_launch", "true (AgentStore always passes extra_vars)"]
+        ["Service", "port 8080 → containerPort 8080"],
+        ["Route", "TLS edge termination · Redirect insecure"]
       ]
     },
-    "n_aap_jt_gateway": {
-      "title": "JT: provision-openshell-gateway.yml",
-      "description": "Runs 'helm upgrade --install' for the OpenShell gateway chart in its own namespace. One-time cluster prerequisite for Collaborative agents.",
+    "n_direct_deploy_poll": {
+      "title": "Poll Readiness + Route",
+      "description": "getDirectDeployStatus() polls the Deployment's readiness (at least one Ready replica) and reads the Route's spec.host directly — no ConfigMap read-back needed.",
       "details": [
-        ["extra_vars", "release_name · namespace · chart_ref · chart_version · workload_kind"],
-        ["Requires", "EE with kubernetes.core collection + helm CLI"]
+        ["Ready", "Deployment.status.readyReplicas >= 1"],
+        ["Stalled", "Surfaces ProgressDeadlineExceeded / ReplicaFailure"]
       ]
     },
-    "n_aap_ee": {
-      "title": "Execution Environment",
-      "description": "Custom Ansible EE with kubernetes.core collection and helm CLI. Can be built from source inside OpenShift (Admin → Platform → 'Build from source') or pushed manually.",
+    "n_direct_deploy_labels": {
+      "title": "Standard Labels",
+      "description": "Every resource carries app=agentstore + app.kubernetes.io/part-of, managed-by, component, name labels for grouping, filtering, and cleanup.",
       "details": [
-        ["Contents", "ansible-core + kubernetes.core + helm CLI"],
-        ["Build", "agentstore-ee BuildConfig in agentstore namespace"]
+        ["Filter", "oc get all -l app=agentstore"],
+        ["Components", "console · agent-runtime · agent-sandbox-service · build · gateway · rhdh"]
       ]
     },
     "n_deployment": {
@@ -445,7 +444,7 @@ const diagram = {
     },
     "n_gateway": {
       "title": "OpenShell Gateway",
-      "description": "NVIDIA's sandboxing runtime (Helm chart). Manages sandbox pods with isolation policies. Installed once per cluster via AAP.",
+      "description": "NVIDIA's sandboxing runtime (Helm chart). Manages sandbox pods with isolation policies. Installed once per cluster via Helm.",
       "details": [
         ["Chart", "oci://ghcr.io/nvidia/openshell/helm-chart"],
         ["Kinds", "StatefulSet/SQLite (demo) or Deployment/Postgres (HA)"],
@@ -498,16 +497,16 @@ const diagram = {
     },
     "n_bc_ee": {
       "title": "EE BuildConfig",
-      "description": "Builds ansible/execution-environment/Containerfile. Result pushed to ImageStream, then registered in AAP as an Execution Environment.",
+      "description": "Builds execution-environment/Containerfile. Result pushed to ImageStream. Optional tooling image build.",
       "details": [
         ["Name", "agentstore-ee"],
-        ["Context", "ansible/execution-environment/"],
-        ["Post-build", "findOrCreateExecutionEnvironment() → AAP registration"]
+        ["Context", "execution-environment/"],
+        ["Post-build", "Image reference saved to PlatformSettings"]
       ]
     },
     "n_bc_runtime": {
       "title": "Agent Runtime BuildConfig",
-      "description": "Builds apps/agent-runtime/Containerfile. Needs full monorepo as context (packages/shared, packages/agent-core). No AAP registration — image ref used directly.",
+      "description": "Builds apps/agent-runtime/Containerfile. Needs full monorepo as context (packages/shared, packages/agent-core). Image ref used directly by deploys.",
       "details": [
         ["Name", "agentstore-agent-runtime"],
         ["Context", "repository root (entire monorepo)"],
@@ -541,11 +540,11 @@ const diagram = {
       ]
     },
     "n_ee_register": {
-      "title": "Register EE in AAP",
-      "description": "After the EE BuildConfig completes, the built image is registered as an AAP Execution Environment via findOrCreateExecutionEnvironment(). Optional registry credential for cross-cluster pulls.",
+      "title": "Image Ready in Registry",
+      "description": "After any BuildConfig completes, the built image's pullable reference (sha256 digest) is read back from the ImageStreamTag and saved to PlatformSettings.",
       "details": [
-        ["API", "AAP REST API → Execution Environments endpoint"],
-        ["Idempotent", "find-or-create by name"]
+        ["Read back", "ocp.getEeImageReference(name, 'latest', ns)"],
+        ["Idempotent", "safe to rebuild at any time"]
       ]
     },
     "n_rhdh_operator": {
@@ -566,7 +565,7 @@ const diagram = {
     },
     "n_rhdh_templates": {
       "title": "Software Templates",
-      "description": "Two AgentStore templates live: 'Request a New AI Agent' (creates draft listing) and 'Deploy an Existing Agent' (triggers AAP deploy for a published listing).",
+      "description": "Two AgentStore templates live: 'Request a New AI Agent' (creates draft listing) and 'Deploy an Existing Agent' (triggers deploy for a published listing).",
       "details": [
         ["Catalog sync", "GET /api/rhdh/catalog-sync returns catalog-info YAML"],
         ["Agents", "Appear in Software Catalog as type: ai-agent"]
@@ -603,8 +602,8 @@ const diagram = {
       "label": "AgentStore Workflow",
       "steps": [
         { "text": "1. Admin opens AgentStore console (localhost:3000 or OpenShift Route)", "mode": "lightup", "target": "c_console", "badge": "1" },
-        { "text": "2. Configure Platform connections: AAP controller + OpenShift API", "mode": "lightup", "target": "n_platform", "badge": "2" },
-        { "text": "3. Save secrets: AAP_TOKEN, OPENSHIFT_TOKEN", "mode": "lightup", "target": "n_secrets", "badge": "3" },
+        { "text": "2. Configure Platform connections: OpenShift API + namespace + Project Git URL", "mode": "lightup", "target": "n_platform", "badge": "2" },
+        { "text": "3. Save secrets: OPENSHIFT_TOKEN", "mode": "lightup", "target": "n_secrets", "badge": "3" },
         { "text": "4. Register model provider(s): Anthropic, OpenAI, or MaaS endpoint", "mode": "lightup", "target": "n_providers", "badge": "4" },
         { "text": "5. Optionally register MCP tool servers", "mode": "lightup", "target": "n_mcp", "badge": "5" },
         { "text": "6. Review Skills: Red Hat Skill Packs auto-imported from catalog/skills/", "mode": "lightup", "target": "n_skills", "badge": "6" },
@@ -612,11 +611,11 @@ const diagram = {
         { "text": "8. Or onboard a new agent via the wizard", "mode": "lightup", "target": "n_onboard", "badge": "8" },
         { "text": "9. Bind per-agent config: provider, skills, MCP tools", "mode": "lightup", "target": "n_agent_config", "badge": "9" },
         { "text": "10. Publish the listing (draft → published)", "mode": "lightup", "target": "n_review", "badge": "✓" },
-        { "text": "11a. Deploy: generic-chat listing → launches AAP job", "mode": "arrow", "from": "n_deploy_generic", "to": "n_aap_jt_generic", "color": "#3fb950", "num": 11, "glow": "c_aap" },
-        { "text": "12. AAP creates Deployment + Service + Route in agent-workloads", "mode": "arrow", "from": "n_aap_jt_generic", "to": "n_deployment", "color": "#ffa657", "num": 12, "glow": "c_workloads" },
+        { "text": "11a. Deploy: generic-chat listing → direct K8s API calls", "mode": "arrow", "from": "n_deploy_generic", "to": "n_direct_deploy_secret", "color": "#3fb950", "num": 11, "glow": "c_direct_deploy" },
+        { "text": "12. Creates Secret + Deployment + Service + Route", "mode": "arrow", "from": "n_direct_deploy_deployment", "to": "n_deployment", "color": "#3fb950", "num": 12, "glow": "c_workloads" },
         { "text": "13. Config.json mounted, API key injected via Secret", "mode": "lightup", "target": "n_config_cm", "badge": "13" },
-        { "text": "14. Playbook writes deploy-result ConfigMap with Route host", "mode": "lightup", "target": "n_result_cm", "badge": "14" },
-        { "text": "15. AgentStore polls → reads Route URL → status 'running'", "mode": "arrow", "from": "n_result_cm", "to": "n_deploy_poll", "color": "#3fb950", "num": 15 },
+        { "text": "14. Polls Deployment readiness + reads Route host directly", "mode": "lightup", "target": "n_direct_deploy_poll", "badge": "14" },
+        { "text": "15. AgentStore reads Route URL → status 'running'", "mode": "arrow", "from": "n_direct_deploy_poll", "to": "n_deploy_poll", "color": "#3fb950", "num": 15 },
         { "text": "16. Persistent chat URL now available — users open it directly", "mode": "lightup", "target": "n_chat_url", "badge": "✓" },
         { "text": "17. User sends a message in the chat page", "mode": "arrow", "from": "user", "to": "n_runtime_server", "color": "#79c0ff", "num": 17 },
         { "text": "18. agent-core runs the turn: system prompt + skills + model call", "mode": "lightup", "target": "n_agent_core", "badge": "18" },
@@ -627,47 +626,37 @@ const diagram = {
         { "text": "11b. Deploy: openshell listing → creates sandbox session directly", "mode": "arrow", "from": "n_deploy_openshell", "to": "n_sandbox_svc", "color": "#d2a8ff", "num": 11, "glow": "c_openshell" },
         { "text": "23. SDK creates sandbox pod on the gateway", "mode": "arrow", "from": "n_sdk_client", "to": "n_gateway", "color": "#d2a8ff", "num": 23 },
         { "text": "24. Sandbox running — user connects via terminal WebSocket", "mode": "arrow", "from": "user", "to": "n_terminal_ws", "color": "#d2a8ff", "num": 24 },
-        { "text": "25. Six Red Hat products, one story: RHDH → AgentStore → AAP → OCP → OCP AI → MaaS", "mode": "lightup", "target": "c_infra", "badge": "✓" }
+        { "text": "25. Red Hat products, one story: RHDH → AgentStore → OCP → OCP AI → MaaS", "mode": "lightup", "target": "c_infra", "badge": "✓" }
       ]
     },
     "build_process": {
       "label": "Build Process",
       "steps": [
-        { "text": "1. Admin opens Platform → AAP Job Templates card", "mode": "arrow", "from": "admin", "to": "n_platform", "color": "#ffa657", "num": 1 },
-        { "text": "2. Click 'Create job templates' — auto-creates AAP Project, Inventory, Credential, both JTs", "mode": "arrow", "from": "n_platform", "to": "c_aap", "color": "#ffa657", "num": 2, "glow": "c_aap" },
-        { "text": "3. AAP Project syncs from Git (this repo's ansible/ directory)", "mode": "lightup", "target": "n_aap_project", "badge": "3" },
-        { "text": "4. K8s Credential created from the same OpenShift token in Platform settings", "mode": "lightup", "target": "n_aap_cred", "badge": "4" },
-        { "text": "5. Inventory (localhost) + both Job Templates created", "mode": "lightup", "target": "n_aap_jt_generic", "badge": "5" },
-        { "text": "6. Template IDs auto-saved to PlatformSettings", "mode": "arrow", "from": "c_aap", "to": "n_platform", "color": "#ffa657", "num": 6 },
-        { "text": "7. Build EE: Admin clicks '+ Build from source' on AAP Job Templates card", "mode": "arrow", "from": "n_platform", "to": "n_bc_ee", "color": "#e3b341", "num": 7, "glow": "c_build" },
-        { "text": "8. OpenShift creates BuildConfig + ImageStream for agentstore-ee", "mode": "lightup", "target": "n_bc_ee", "badge": "8" },
-        { "text": "9. Build runs: Containerfile from ansible/execution-environment/", "mode": "lightup", "target": "n_imagestream", "badge": "⏳" },
-        { "text": "10. Image pushed to internal registry via ImageStream", "mode": "lightup", "target": "n_imagestream", "badge": "✓" },
-        { "text": "11. Built image registered as AAP Execution Environment", "mode": "arrow", "from": "n_imagestream", "to": "n_ee_register", "color": "#e3b341", "num": 11 },
-        { "text": "12. EE ID saved to PlatformSettings.aapExecutionEnvironmentId", "mode": "arrow", "from": "n_ee_register", "to": "n_platform", "color": "#e3b341", "num": 12 },
-        { "text": "13. Build Agent Runtime: Admin → Platform → Agent Runtime → 'Start build'", "mode": "arrow", "from": "n_platform", "to": "n_bc_runtime", "color": "#e3b341", "num": 13 },
-        { "text": "14. BuildConfig uses full monorepo as context (apps/ + packages/)", "mode": "lightup", "target": "n_bc_runtime", "badge": "14" },
-        { "text": "15. Build completes → image ref saved to agentRuntimeImage", "mode": "arrow", "from": "n_bc_runtime", "to": "n_imagestream", "color": "#e3b341", "num": 15 },
-        { "text": "16. Every future generic-chat deploy uses this image automatically", "mode": "arrow", "from": "n_imagestream", "to": "n_deployment", "color": "#3fb950", "num": 16 },
-        { "text": "17. Build Agent Sandbox Service: Admin → LLMs → OpenShell → 'Install'", "mode": "arrow", "from": "n_platform", "to": "n_bc_sandbox", "color": "#e3b341", "num": 17 },
-        { "text": "18. Needs GITHUB_PACKAGES_TOKEN for @nvidia/openshell-sdk", "mode": "lightup", "target": "n_bc_sandbox", "badge": "🔑" },
-        { "text": "19. Post-build: apply Deployment/Service/Route + wait for rollout", "mode": "arrow", "from": "n_bc_sandbox", "to": "n_sandbox_svc", "color": "#d2a8ff", "num": 19 },
-        { "text": "20. Service URL + token auto-saved to Platform settings", "mode": "arrow", "from": "n_sandbox_svc", "to": "n_platform", "color": "#d2a8ff", "num": 20 },
-        { "text": "21. Deploy AgentStore itself: Admin → Platform → 'Deploy'", "mode": "arrow", "from": "n_platform", "to": "n_bc_agentstore", "color": "#8b949e", "num": 21 },
-        { "text": "22. Build: apps/web/Containerfile (Next.js console)", "mode": "lightup", "target": "n_bc_agentstore", "badge": "22" },
-        { "text": "23. Post-build: apply agentstore.yaml (NS + PVC + Deploy + Svc + Route)", "mode": "arrow", "from": "n_bc_agentstore", "to": "n_as_deploy", "color": "#8b949e", "num": 23, "glow": "c_agentstore_ocp" },
-        { "text": "24. Route URL appears — console now running on-cluster", "mode": "lightup", "target": "n_as_route", "badge": "✓" },
-        { "text": "25. RHDH can proxy to in-cluster svc:3000/api (no external Route needed)", "mode": "lightup", "target": "n_as_rhdh_proxy", "badge": "25" },
-        { "text": "26. Data sync: laptop pushes state to on-cluster instance", "mode": "lightup", "target": "n_as_sync", "badge": "26" },
-        { "text": "27. All four images built from source inside OpenShift — no local tooling required", "mode": "lightup", "target": "c_build", "badge": "✓" }
+        { "text": "1. Admin opens Platform → configure OpenShift API + Git URL", "mode": "arrow", "from": "admin", "to": "n_platform", "color": "#ffa657", "num": 1 },
+        { "text": "2. Build Agent Runtime: Admin → Platform → Agent Runtime → 'Start build'", "mode": "arrow", "from": "n_platform", "to": "n_bc_runtime", "color": "#e3b341", "num": 2, "glow": "c_build" },
+        { "text": "3. OpenShift creates BuildConfig + ImageStream for agent-runtime", "mode": "lightup", "target": "n_bc_runtime", "badge": "3" },
+        { "text": "4. BuildConfig uses full monorepo as context (apps/ + packages/)", "mode": "lightup", "target": "n_bc_runtime", "badge": "4" },
+        { "text": "5. Build completes → image ref saved to agentRuntimeImage", "mode": "arrow", "from": "n_bc_runtime", "to": "n_imagestream", "color": "#e3b341", "num": 5 },
+        { "text": "6. Every future generic-chat deploy uses this image automatically", "mode": "arrow", "from": "n_imagestream", "to": "n_deployment", "color": "#3fb950", "num": 6 },
+        { "text": "7. Build Agent Sandbox Service: Admin → LLMs → OpenShell → 'Install'", "mode": "arrow", "from": "n_platform", "to": "n_bc_sandbox", "color": "#e3b341", "num": 7 },
+        { "text": "8. Needs GITHUB_PACKAGES_TOKEN for @nvidia/openshell-sdk", "mode": "lightup", "target": "n_bc_sandbox", "badge": "🔑" },
+        { "text": "9. Post-build: apply Deployment/Service/Route + wait for rollout", "mode": "arrow", "from": "n_bc_sandbox", "to": "n_sandbox_svc", "color": "#d2a8ff", "num": 9 },
+        { "text": "10. Service URL + token auto-saved to Platform settings", "mode": "arrow", "from": "n_sandbox_svc", "to": "n_platform", "color": "#d2a8ff", "num": 10 },
+        { "text": "11. Deploy AgentStore itself: Admin → Platform → 'Deploy'", "mode": "arrow", "from": "n_platform", "to": "n_bc_agentstore", "color": "#8b949e", "num": 11 },
+        { "text": "12. Build: apps/web/Containerfile (Next.js console)", "mode": "lightup", "target": "n_bc_agentstore", "badge": "12" },
+        { "text": "13. Post-build: apply agentstore.yaml (NS + PVC + Deploy + Svc + Route)", "mode": "arrow", "from": "n_bc_agentstore", "to": "n_as_deploy", "color": "#8b949e", "num": 13, "glow": "c_agentstore_ocp" },
+        { "text": "14. Route URL appears — console now running on-cluster", "mode": "lightup", "target": "n_as_route", "badge": "✓" },
+        { "text": "15. RHDH can proxy to in-cluster svc:3000/api (no external Route needed)", "mode": "lightup", "target": "n_as_rhdh_proxy", "badge": "15" },
+        { "text": "16. Data sync: laptop pushes state to on-cluster instance", "mode": "lightup", "target": "n_as_sync", "badge": "16" },
+        { "text": "17. All images built from source inside OpenShift — no local tooling required", "mode": "lightup", "target": "c_build", "badge": "✓" }
       ]
     },
     "openshell_via_sdk": {
       "label": "OpenShell (via SDK)",
       "steps": [
         { "text": "1. Prerequisites: Agent Sandbox controller CRDs installed (cluster-scoped, one-time)", "mode": "lightup", "target": "n_gateway", "badge": "①" },
-        { "text": "2. Admin installs OpenShell gateway via AAP → helm upgrade --install", "mode": "arrow", "from": "admin", "to": "n_aap_jt_gateway", "color": "#ffa657", "num": 2 },
-        { "text": "3. Gateway pod running in openshell namespace", "mode": "arrow", "from": "n_aap_jt_gateway", "to": "n_gateway", "color": "#d2a8ff", "num": 3, "glow": "c_openshell" },
+        { "text": "2. Admin installs OpenShell gateway via Helm (manual)", "mode": "arrow", "from": "admin", "to": "n_gateway", "color": "#d2a8ff", "num": 2 },
+        { "text": "3. Gateway pod running in openshell namespace", "mode": "lightup", "target": "n_gateway", "badge": "3" },
         { "text": "4. Agent Sandbox Service built and deployed (apps/agent-sandbox-service)", "mode": "lightup", "target": "n_sandbox_svc", "badge": "4" },
         { "text": "5. SDK client connects to gateway: OpenShellClient.connect()", "mode": "arrow", "from": "n_sandbox_svc", "to": "n_sdk_client", "color": "#d2a8ff", "num": 5 },
         { "text": "6. OIDC client-credentials (production) or no auth (eval mode)", "mode": "lightup", "target": "n_sdk_client", "badge": "🔐" },
@@ -699,7 +688,7 @@ const diagram = {
   "defaultFlow": "agentstore_workflow",
   "legend": [
     { "color": "#58a6ff", "label": "Catalog & Listings" },
-    { "color": "#ffa657", "label": "Admin / AAP" },
+    { "color": "#ffa657", "label": "Admin / Platform" },
     { "color": "#3fb950", "label": "Autonomous (generic-chat) Deploy" },
     { "color": "#d2a8ff", "label": "Collaborative (OpenShell)" },
     { "color": "#79c0ff", "label": "Agent Runtime / RHDH" },

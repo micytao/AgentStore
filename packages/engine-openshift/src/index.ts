@@ -1,7 +1,7 @@
 /**
  * OpenShift engine package — provides direct OpenShift API integration
  * for deploying agents, building images, and managing platform resources.
- * Replaces the previous AAP-based provisioning with native K8s API calls.
+ * Provisions agents natively via K8s API calls.
  */
 export {
   pingOpenshift,

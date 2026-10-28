@@ -12,9 +12,8 @@ export const dynamic = "force-dynamic";
  * Starts (or re-starts) the Agent Runtime card's "Build from source"
  * action — builds apps/agent-runtime/Containerfile as an OpenShift
  * BuildConfig, then persists the built image's reference onto
- * PlatformSettings.agentRuntimeImage (no AAP-registration step, unlike
- * the Execution Environment build — see
- * /api/admin/platform/execution-environment-build for that one).
+ * PlatformSettings.agentRuntimeImage — the image ref is used directly
+ * by subsequent deploys.
  *
  * Accepts an optional `settings` patch in the body (the Project Git
  * URL/branch this build reads) so the Admin UI can save its draft in

@@ -84,7 +84,7 @@ Deployed directly to OpenShift (see
 `apps/web/src/server/deployments.ts`'s `POST /api/admin/listings/[id]/deploy`)
 using whatever image `agent_runtime_image` resolves to — but unlike the
 playbooks themselves, **nothing publishes that image for you by
-default**: `agent-runtime:dev` (`packages/engine-ansible/src/config.ts`'s
+default**: `agent-runtime:dev` (`packages/engine-openshift/src/config.ts`'s
 `agentRuntimeImage()`) is just a placeholder, not a real, pullable
 reference, so a fresh install's first deploy fails trying (and failing)
 to pull it from Docker Hub.
@@ -92,16 +92,12 @@ to pull it from Docker Hub.
 ### Option B (recommended): build inside OpenShift, triggered from AgentStore
 
 Admin → Platform → **Agent Runtime** card → "Start build". Builds this
-directory's `Containerfile` as an OpenShift BuildConfig (source: the same
-Project Git URL/branch already configured on the AAP Job Templates
-card), pushes the result to OpenShift's internal registry, and persists
-the built image's pullable reference onto `PlatformSettings.
-agentRuntimeImage` — every subsequent generic-chat deploy uses it
-automatically. See `packages/engine-ansible/src/agentRuntimeBuild.ts`;
-same OpenShift BuildConfig/Build mechanism as
-`ansible/execution-environment/README.md`'s "Option B", just with no
-AAP-registration step (this is a plain application image, not an
-Execution Environment).
+directory's `Containerfile` as an OpenShift BuildConfig (source: the
+Project Git URL/branch configured on the Platform tab), pushes the
+result to OpenShift's internal registry, and persists the built image's
+pullable reference onto `PlatformSettings.agentRuntimeImage` — every
+subsequent generic-chat deploy uses it automatically. See
+`packages/engine-openshift/src/agentRuntimeBuild.ts`.
 
 ### Option A: build locally (or in CI), then publish yourself
 

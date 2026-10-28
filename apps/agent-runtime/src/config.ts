@@ -11,7 +11,7 @@ import { logInfo, logWarn } from "./log";
  * the structured, variable-length parts — persona intro lines, skills
  * (with full instructions, for `load_skill` to resolve), and MCP servers —
  * come from a mounted Secret-backed JSON file, written by
- * ansible/provision-generic-agent.yml, matching the opencodeConfig.ts
+ * directDeploy.ts, matching the opencodeConfig.ts
  * convention already used for the OpenShell path.
  */
 

@@ -2,11 +2,10 @@ import * as ocp from "./openshift";
 import { openshiftNamespace } from "./config";
 
 /**
- * Execution Environment image build — builds
- * ansible/execution-environment/Containerfile inside the OpenShift cluster
- * via a BuildConfig (Docker strategy). The OpenShift BuildConfig/ImageStream
- * primitives are reused by other build files (agentRuntimeBuild.ts,
- * agentSandboxServiceBuild.ts, agentstoreImageBuild.ts).
+ * Execution Environment image build — builds a Containerfile inside the
+ * OpenShift cluster via a BuildConfig (Docker strategy). The OpenShift
+ * BuildConfig/ImageStream primitives are reused by other build files
+ * (agentRuntimeBuild.ts, agentSandboxServiceBuild.ts, agentstoreImageBuild.ts).
  *
  * Same two-phase start/poll convention: startEeImageBuild() triggers the
  * Build and returns immediately; getEeImageBuildResult() polls it to
@@ -14,11 +13,10 @@ import { openshiftNamespace } from "./config";
  * returns the built image reference.
  */
 
-/** Single shared BuildConfig/ImageStream name — matches the "exactly two
- * shared Job Templates, not per-listing" convention the rest of this
- * bootstrap uses; there's only ever one Execution Environment image. */
+/** Single shared BuildConfig/ImageStream name — there's only ever one
+ * Execution Environment image. */
 const EE_BUILD_NAME = "agentstore-ee";
-const EE_CONTEXT_DIR = "ansible/execution-environment";
+const EE_CONTEXT_DIR = "execution-environment";
 const EE_DOCKERFILE_PATH = "Containerfile";
 const BUILD_LOG_TAIL_LINES = 1000;
 /** All builds run in the same namespace as agent workloads — supports
@@ -28,7 +26,7 @@ function buildNamespace(): string {
 }
 
 export interface EeImageBuildInput {
-  /** Must contain ansible/execution-environment/Containerfile at that path. */
+  /** Must contain execution-environment/Containerfile at that path. */
   gitUrl: string;
   gitBranch: string;
   gitSecretName?: string;

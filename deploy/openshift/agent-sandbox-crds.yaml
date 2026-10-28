@@ -2,10 +2,8 @@
 # CRDs bundle that NVIDIA's OpenShell Helm chart depends on (its own
 # preflight template checks for `agents.x-k8s.io/v1beta1` or `v1alpha1`
 # being served before it will install) -- see
-# ansible/provision-openshell-gateway.yml and deploy/openshift/README.md
-# section 5a for why installing this is kept out of AgentStore's normal
-# self-service AAP flow (it's a cluster-scoped, elevated-privilege,
-# one-time-per-cluster bootstrap).
+# deploy/openshift/README.md section 5a for why this is a separate,
+# one-time-per-cluster bootstrap (cluster-scoped, elevated-privilege).
 #
 # Applied by packages/engine-openshift/src/openshift.ts's
 # applyAgentSandboxManifests() -- driven by the Admin -> LLMs -> OpenShell

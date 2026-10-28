@@ -35,7 +35,7 @@ function buildNamespace(): string {
 export interface AgentRuntimeImageBuildInput {
   /** Any repo/branch containing apps/agent-runtime/Containerfile at
    * that path — in practice the same one already configured for the
-   * AAP Project. */
+   * Platform settings Project Git URL. */
   gitUrl: string;
   gitBranch: string;
   gitSecretName?: string;
@@ -75,7 +75,7 @@ export interface AgentRuntimeImageBuildResult {
 /** Phase 2: polls the Build from phase 1; returns undefined while it's
  * still New/Pending/Running (the caller should try again shortly). Once
  * it's Complete, just reads back the built image's pullable reference —
- * no AAP registration step, unlike getEeImageBuildResult(). */
+ * no separate registration step — the image ref is used directly. */
 export async function getAgentRuntimeImageBuildResult(
   buildName: string
 ): Promise<AgentRuntimeImageBuildResult | undefined> {

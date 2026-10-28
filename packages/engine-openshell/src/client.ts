@@ -3,7 +3,7 @@ import { isOpenShellServiceConfigured, openshellServiceToken, openshellServiceUr
 
 /**
  * Thin REST client for the Agent Sandbox Service — same shape as
- * packages/engine-openshift/src/aap.ts's relationship to the real OpenShift API.
+ * packages/engine-openshift/src/openshift.ts's relationship to the OpenShift API.
  * No CLI, no file uploads, no node-pty on the console side; this package
  * only ever makes `fetch` calls.
  */
@@ -38,7 +38,7 @@ async function serviceFetch(path: string, init: RequestInit = {}): Promise<Respo
     headers.set("Content-Type", "application/json");
   }
   // Live session/health state — see the matching comment in
-  // engine-openshift's aapFetch()/ocpFetch() for why cache: "no-store" is
+  // engine-openshift's ocpFetch() for why cache: "no-store" is
   // needed (Next.js's App Router caches GET fetch() by default).
   return fetch(`${openshellServiceUrl()}${path}`, { ...init, headers, cache: "no-store" });
 }
