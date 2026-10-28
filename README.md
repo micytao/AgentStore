@@ -54,6 +54,19 @@ real SSO — see `docs/DEFERRED.md`). Tabs:
 - **Self-service Portal** — install the RHDH operator and provision a Developer Hub instance with AgentStore integration
 - **Engine** — connection status for OpenShell / OpenShift
 
+## Resource labeling
+
+Every Kubernetes resource AgentStore creates carries a standard label set
+for easy grouping and cleanup inside a shared namespace:
+
+| Label | Value | Purpose |
+| --- | --- | --- |
+| `app` | `agentstore` | Quick CLI filter (`oc get all -l app=agentstore`) |
+| `app.kubernetes.io/part-of` | `agentstore` | OpenShift Console topology grouping |
+| `app.kubernetes.io/managed-by` | `agentstore` | Provenance |
+| `app.kubernetes.io/component` | `console`, `agent-runtime`, `agent-sandbox-service`, `build`, `gateway`, `rhdh`, `infrastructure` | Sub-system role |
+| `app.kubernetes.io/name` | *(resource-specific)* | Specific workload identity |
+
 ## Configuration
 
 | Variable | Purpose |
