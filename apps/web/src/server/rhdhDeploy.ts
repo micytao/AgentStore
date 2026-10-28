@@ -8,6 +8,7 @@ import {
   checkRhdhOperator,
   getNamespaceRouteHost,
   isOpenshiftConfigured,
+  openshiftNamespace,
   pingOpenshift,
   restartNamespaceDeployments,
 } from "@agentstore/engine-openshift";
@@ -65,7 +66,7 @@ export async function getRhdhPreflight(): Promise<RhdhPreflightResult> {
   let asStatus: "running" | "not-deployed" | "failed" = "not-deployed";
   if (ocpStatus === "connected") {
     try {
-      const asReadiness = await checkNamespaceDeploymentReadiness("agentstore");
+      const asReadiness = await checkNamespaceDeploymentReadiness(openshiftNamespace());
       if (asReadiness.ready) {
         asStatus = "running";
       } else if (settings.agentstoreDeploy?.status === "failed") {

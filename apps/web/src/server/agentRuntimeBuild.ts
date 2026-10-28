@@ -5,6 +5,7 @@ import {
   getAgentRuntimeImageBuildPhase,
   getAgentRuntimeImageBuildResult,
   isOpenshiftConfigured,
+  openshiftNamespace,
   startAgentRuntimeImageBuild,
 } from "@agentstore/engine-openshift";
 import { ensurePlatformEnv, getPlatformSettings, savePlatformSettings } from "./platform";
@@ -53,7 +54,7 @@ export async function startAgentRuntimeBuild(): Promise<PlatformSettings> {
   }
 
   try {
-    await ensureNamespace("agentstore");
+    await ensureNamespace(openshiftNamespace());
     const { buildName } = await startAgentRuntimeImageBuild({
       gitUrl: settings.projectGitUrl!,
       gitBranch: settings.projectGitBranch || "main",

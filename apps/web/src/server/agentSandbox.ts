@@ -190,19 +190,18 @@ function getAgentSandboxServiceManifestDocs(image: string, namespace: string): R
       metadata: { name, namespace, labels: { "app.kubernetes.io/managed-by": "agentstore" } },
     }));
 
-  // Images are built in the `agentstore` namespace. If this service
+  // Images are built in the configured namespace. If this service
   // deploys into a different namespace, grant its SAs pull access.
+  const buildNamespace = openshiftNamespace();
   const imagePullerDocs: Record<string, unknown>[] = [];
-  if (namespace !== "agentstore") {
-    // Grant every SA the Deployment references (e.g. "agentstore-console")
-    // plus "default" as a fallback.
+  if (namespace !== buildNamespace) {
     const pullSubjects = new Set(["default", ...referencedServiceAccounts]);
     imagePullerDocs.push({
       apiVersion: "rbac.authorization.k8s.io/v1",
       kind: "RoleBinding",
       metadata: {
         name: "workloads-image-puller",
-        namespace: "agentstore",
+        namespace: buildNamespace,
         labels: { "app.kubernetes.io/managed-by": "agentstore" },
       },
       roleRef: {
@@ -254,7 +253,7 @@ export async function startAgentSandboxServiceInstall(): Promise<PlatformSetting
     // BuildConfig can reference it as a build env var for npm install.
     const githubToken = getSecret("GITHUB_PACKAGES_TOKEN");
     if (githubToken) {
-      await ensureSecretValue("agentstore", "github-packages-token", "GITHUB_TOKEN", githubToken);
+      await ensureSecretValue(openshiftNamespace(), "github-packages-token", "GITHUB_TOKEN", githubToken);
     }
     const { buildName } = await startAgentSandboxServiceImageBuild({
       gitUrl: settings.projectGitUrl!,

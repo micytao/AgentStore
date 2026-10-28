@@ -33,13 +33,18 @@ import {
  *     apps/web/Containerfile from the configured Git repo, same mechanism
  *     as agentRuntimeBuild.ts and agentSandboxServiceBuild.ts.
  *  2. Phase "deploying" — once the image is ready, applies
- *     deploy/openshift/agentstore.yaml (Namespace + PVC + Deployment +
- *     Service + Route) and waits for the Deployment to become Ready.
+ *     deploy/openshift/agentstore.yaml (PVC + Deployment + Service +
+ *     Route) into the configured namespace and waits for the Deployment
+ *     to become Ready.  Namespace docs in the YAML are skipped since
+ *     the user may not have create-namespace permission.
  *
  * Persists progress on PlatformSettings.agentstoreDeploy.
  */
 
-const AGENTSTORE_NAMESPACE = "agentstore";
+/** All resources deploy into the single configured namespace. */
+function agentstoreNamespace(): string {
+  return openshiftNamespace();
+}
 const AGENTSTORE_DEPLOY_NAME = "agentstore";
 
 function now(): string {
@@ -48,16 +53,15 @@ function now(): string {
 
 /** Predicts the AgentStore Route URL from the cluster domain before the
  *  Route actually exists.  OpenShift Route hostnames follow a deterministic
- *  pattern: `<route-name>-<namespace>.<apps-domain>`.  The manifest uses
- *  Route name "agentstore" in namespace "agentstore", giving us
- *  `agentstore-agentstore.<apps-domain>`. */
+ *  pattern: `<route-name>-<namespace>.<apps-domain>`. */
 function predictRouteUrl(settings: PlatformSettings): string {
+  const ns = agentstoreNamespace();
   const consoleUrl = settings.openshiftConsoleUrl || "";
   const match = consoleUrl.match(/console-openshift-console\.(apps\..+)/);
-  if (match) return `https://agentstore-agentstore.${match[1]}`;
+  if (match) return `https://${AGENTSTORE_DEPLOY_NAME}-${ns}.${match[1]}`;
   const apiUrl = settings.openshiftApiUrl || "";
   const apiMatch = apiUrl.match(/api\.(.*?)(?::6443)?$/);
-  if (apiMatch) return `https://agentstore-agentstore.apps.${apiMatch[1]}`;
+  if (apiMatch) return `https://${AGENTSTORE_DEPLOY_NAME}-${ns}.apps.${apiMatch[1]}`;
   return "";
 }
 
@@ -112,10 +116,23 @@ function getAgentStoreManifestDocs(image: string): Record<string, unknown>[] {
   const file = resolveDeployFile("deploy/openshift/agentstore.yaml");
   const docs = parseManifestDocs(file);
 
+  const ns = agentstoreNamespace();
+
+  // Rewrite every doc's namespace to the configured one (the static YAML
+  // uses "agentstore" but single-namespace deploys need user-micyang etc.).
+  // Also skip Namespace docs — on shared clusters the NS already exists
+  // and the user may not have create-namespace permission.
+  const filtered: Record<string, unknown>[] = [];
+  for (const doc of docs) {
+    if (doc.kind === "Namespace") continue;
+    const meta = doc.metadata as Record<string, unknown> | undefined;
+    if (meta) meta.namespace = ns;
+    filtered.push(doc);
+  }
+
   const settings = getPlatformSettings();
   // Prefer the discovered Route URL; fall back to predicting it from the
-  // cluster domain (the Route name "agentstore" in namespace "agentstore"
-  // produces a deterministic hostname in OpenShift).
+  // cluster domain (Route name + namespace → deterministic hostname).
   const routeUrl = settings.agentstoreDeploy?.routeUrl || predictRouteUrl(settings);
   const syncToken = getOrCreateSyncToken();
 
@@ -133,12 +150,12 @@ function getAgentStoreManifestDocs(image: string): Record<string, unknown>[] {
     seedConfigData[`custom-listing-${name}`] = content;
   }
 
-  docs.push({
+  filtered.push({
     apiVersion: "v1",
     kind: "ConfigMap",
     metadata: {
       name: "agentstore-state-seed",
-      namespace: AGENTSTORE_NAMESPACE,
+      namespace: ns,
       labels: { "app.kubernetes.io/managed-by": "agentstore" },
       annotations: { "agentstore.io/seed-timestamp": now() },
     },
@@ -154,12 +171,12 @@ function getAgentStoreManifestDocs(image: string): Record<string, unknown>[] {
     encodedSecrets[key.replace(/:/g, "__COLON__")] = value;
   }
 
-  docs.push({
+  filtered.push({
     apiVersion: "v1",
     kind: "Secret",
     metadata: {
       name: "agentstore-secrets-seed",
-      namespace: AGENTSTORE_NAMESPACE,
+      namespace: ns,
       labels: { "app.kubernetes.io/managed-by": "agentstore" },
     },
     stringData: encodedSecrets,
@@ -167,7 +184,7 @@ function getAgentStoreManifestDocs(image: string): Record<string, unknown>[] {
 
   // --- Patch the Deployment: env vars + seed volume mounts ---------------
 
-  for (const doc of docs) {
+  for (const doc of filtered) {
     if (doc.kind === "Deployment") {
       const spec = doc.spec as {
         template?: {
@@ -214,19 +231,17 @@ function getAgentStoreManifestDocs(image: string): Record<string, unknown>[] {
     }
   }
 
-  // All builds now live in the `agentstore` namespace, but agent pods run
-  // in the workloads namespace (e.g. `agent-workloads`).  Grant the
-  // workloads namespace's default ServiceAccount the system:image-puller
-  // role in `agentstore` so agent pods can pull built images across
-  // namespaces.
+  // When the configured namespace differs from the console namespace,
+  // grant the workloads namespace's default SA the image-puller role so
+  // agent pods can pull built images across namespaces.
   const workloadsNs = openshiftNamespace();
-  if (workloadsNs !== AGENTSTORE_NAMESPACE) {
-    docs.push({
+  if (workloadsNs !== ns) {
+    filtered.push({
       apiVersion: "rbac.authorization.k8s.io/v1",
       kind: "RoleBinding",
       metadata: {
         name: "workloads-image-puller",
-        namespace: AGENTSTORE_NAMESPACE,
+        namespace: ns,
         labels: { "app.kubernetes.io/managed-by": "agentstore" },
       },
       roleRef: {
@@ -244,7 +259,7 @@ function getAgentStoreManifestDocs(image: string): Record<string, unknown>[] {
     });
   }
 
-  return docs;
+  return filtered;
 }
 
 export async function startAgentStoreDeploy(): Promise<PlatformSettings> {
@@ -259,8 +274,9 @@ export async function startAgentStoreDeploy(): Promise<PlatformSettings> {
     );
   }
 
+  const ns = agentstoreNamespace();
   try {
-    await ensureNamespace(AGENTSTORE_NAMESPACE);
+    await ensureNamespace(ns);
     const { buildName } = await startAgentStoreImageBuild({
       gitUrl: settings.projectGitUrl!,
       gitBranch: settings.projectGitBranch || "main",
@@ -279,6 +295,7 @@ export async function refreshAgentStoreDeploy(): Promise<PlatformSettings> {
     return settings;
   }
 
+  const ns = agentstoreNamespace();
   try {
     let image = deploy.image;
     let ocpPhase = deploy.ocpPhase;
@@ -303,9 +320,9 @@ export async function refreshAgentStoreDeploy(): Promise<PlatformSettings> {
     const docs = getAgentStoreManifestDocs(image!);
     await applyAgentSandboxManifests(docs);
     const routeUrl = deploy.routeUrl
-      || await getAgentSandboxServiceRouteHost(AGENTSTORE_NAMESPACE, AGENTSTORE_DEPLOY_NAME);
+      || await getAgentSandboxServiceRouteHost(ns, AGENTSTORE_DEPLOY_NAME);
 
-    const readiness = await getAgentSandboxServiceReadiness(AGENTSTORE_NAMESPACE, AGENTSTORE_DEPLOY_NAME);
+    const readiness = await getAgentSandboxServiceReadiness(ns, AGENTSTORE_DEPLOY_NAME);
     if (!readiness.ready) {
       if (readiness.stalledReason) {
         return persist({

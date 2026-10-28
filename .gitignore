@@ -1,6 +1,7 @@
 node_modules
 .next
 .data
+.data-*
 dist
 *.log
 .env
@@ -10,5 +11,6 @@ apps/web/.data
 *.tsbuildinfo
 .DS_Store
 scripts/.bootstrap-config
+scripts/.bootstrap-config-*
 scripts/bootstrap.log
 scripts/bootstrap-devserver.log
