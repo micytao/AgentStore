@@ -8,7 +8,7 @@ const nextConfig: NextConfig = {
   transpilePackages: [
     "@agentstore/shared",
     "@agentstore/agent-core",
-    "@agentstore/engine-ansible",
+    "@agentstore/engine-openshift",
     "@agentstore/engine-openshell",
     "@patternfly/react-core",
     "@patternfly/react-icons",

@@ -117,10 +117,8 @@ function mergePlatformSettings(dataDir: string): void {
     // Keep cluster-owned status blobs
     agentstoreDeploy: existing.agentstoreDeploy,
     rhdhDeploy: existing.rhdhDeploy,
-    eeBuild: existing.eeBuild,
     agentRuntimeBuild: existing.agentRuntimeBuild,
     agentSandboxServiceInstall: existing.agentSandboxServiceInstall,
-    aapBootstrap: existing.aapBootstrap,
     openshellGatewayDeployment: existing.openshellGatewayDeployment,
   };
 

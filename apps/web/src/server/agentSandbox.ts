@@ -15,12 +15,12 @@ import {
   openshiftNamespace,
   restartAgentSandboxServiceDeployment,
   startAgentSandboxServiceImageBuild,
-} from "@agentstore/engine-ansible";
+} from "@agentstore/engine-openshift";
 import { ensurePlatformEnv, getPlatformSettings, savePlatformSettings } from "./platform";
 import { getSecret, setSecret } from "./secrets";
 
 /**
- * AgentStore-side wiring around packages/engine-ansible's openshift.ts
+ * AgentStore-side wiring around packages/engine-openshift's openshift.ts
  * Agent Sandbox controller functions, for the Admin -> LLMs -> OpenShell
  * tab's live preflight check + "Install Agent Sandbox controller"
  * button. Unlike the gateway Helm install or the EE/Agent Runtime image
@@ -37,13 +37,13 @@ import { getSecret, setSecret } from "./secrets";
  * This file also wires the separate "Install Agent Sandbox Service"
  * admin action — apps/agent-sandbox-service is AgentStore's *own*
  * microservice (no public image), so that one genuinely does need a
- * two-phase build-then-deploy flow (like eeBuild.ts/agentRuntimeBuild.ts),
+ * two-phase build-then-deploy flow (like agentRuntimeBuild.ts),
  * persisted onto PlatformSettings.agentSandboxServiceInstall so the
  * Admin UI can poll it across requests the same way it polls those.
  *
  * Note: imports getPlatformSettings/savePlatformSettings/ensurePlatformEnv
  * from ./platform, so ./platform must NOT import anything from this file
- * (it calls checkAgentSandboxController() from @agentstore/engine-ansible
+ * (it calls checkAgentSandboxController() from @agentstore/engine-openshift
  * directly instead) — see the comment in platform.ts explaining why.
  */
 
@@ -235,7 +235,7 @@ function persistServiceInstall(
  * for phase 2: applying the Deployment/Service/Route once the image is
  * ready). Persists an initial "deploying"/"building" status immediately
  * and returns; the Admin UI polls refreshAgentSandboxServiceInstall()
- * for progress — same two-phase convention as eeBuild.ts/
+ * for progress — same two-phase convention as
  * agentRuntimeBuild.ts.
  */
 export async function startAgentSandboxServiceInstall(): Promise<PlatformSettings> {
@@ -244,9 +244,9 @@ export async function startAgentSandboxServiceInstall(): Promise<PlatformSetting
   if (!isOpenshiftConfigured()) {
     throw new Error("OpenShift is not configured — set the API URL and token in Admin → Platform.");
   }
-  if (!settings.aapProjectGitUrl.trim()) {
+  if (!settings.projectGitUrl?.trim()) {
     throw new Error(
-      "Set a Project Git URL in the AAP Job Templates card (Admin → Platform) first — the OpenShift build uses that same repo/branch."
+      "Set a Project Git URL in Admin → Platform first — the OpenShift build uses that repo/branch."
     );
   }
   try {
@@ -257,8 +257,8 @@ export async function startAgentSandboxServiceInstall(): Promise<PlatformSetting
       await ensureSecretValue("agentstore", "github-packages-token", "GITHUB_TOKEN", githubToken);
     }
     const { buildName } = await startAgentSandboxServiceImageBuild({
-      gitUrl: settings.aapProjectGitUrl,
-      gitBranch: settings.aapProjectGitBranch || "main",
+      gitUrl: settings.projectGitUrl!,
+      gitBranch: settings.projectGitBranch || "main",
       githubPackagesSecretName: githubToken ? "github-packages-token" : undefined,
     });
     return persistServiceInstall({ status: "deploying", phase: "building", buildName, updatedAt: now() });
@@ -328,7 +328,7 @@ export async function refreshAgentSandboxServiceInstall(): Promise<PlatformSetti
       // holds (source of truth is what's mounted into the pod) — safe
       // to call even if this token already matched.
       setSecret("OPENSHELL_SERVICE_TOKEN", token);
-      const docs = getAgentSandboxServiceManifestDocs(image, namespace);
+      const docs = getAgentSandboxServiceManifestDocs(image!, namespace);
       await applyAgentSandboxManifests(docs);
       routeUrl = await getAgentSandboxServiceRouteHost(namespace, AGENT_SANDBOX_SERVICE_NAME);
     }

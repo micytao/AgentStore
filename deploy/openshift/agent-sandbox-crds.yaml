@@ -7,7 +7,7 @@
 # self-service AAP flow (it's a cluster-scoped, elevated-privilege,
 # one-time-per-cluster bootstrap).
 #
-# Applied by packages/engine-ansible/src/openshift.ts's
+# Applied by packages/engine-openshift/src/openshift.ts's
 # applyAgentSandboxManifests() -- driven by the Admin -> LLMs -> OpenShell
 # tab's "Install Agent Sandbox controller" button (see
 # apps/web/src/server/agentSandbox.ts) -- using the same OPENSHIFT_TOKEN

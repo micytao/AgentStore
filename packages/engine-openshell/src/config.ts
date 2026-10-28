@@ -1,5 +1,5 @@
 /** Connection details for the Agent Sandbox Service (Admin -> Platform +
- * Secrets), the same shape as engine-ansible/src/config.ts's AAP settings. */
+ * Secrets), the same shape as engine-openshift/src/config.ts's OpenShift settings. */
 
 export function openshellServiceUrl(): string {
   return (process.env.OPENSHELL_SERVICE_URL ?? "").replace(/\/$/, "");

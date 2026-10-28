@@ -1,14 +1,13 @@
 import type { AgentDeployment, Listing } from "@agentstore/shared";
 import { departmentLabel } from "@agentstore/shared";
 import {
-  aapDefaultJobTemplateId,
   deleteGenericAgentDeployment,
   genericAgentDeploymentName,
-  getGenericAgentDeployStatus,
-  isAapConfigured,
-  launchGenericAgentDeploy,
+  getDirectDeployStatus,
+  isOpenshiftConfigured,
+  launchDirectDeploy,
   openshiftNamespace,
-} from "@agentstore/engine-ansible";
+} from "@agentstore/engine-openshift";
 import { getListing, updateListing } from "./catalog";
 import { mcpServersFor } from "./agentRuntimeConfig";
 import { ensurePlatformEnv, getPlatformSettings } from "./platform";
@@ -16,11 +15,10 @@ import { apiKeyFor, providerFor } from "./providers";
 import { getSkillsByIds } from "./skills";
 
 /**
- * The `generic-chat` runtime's "deploy once" admin action: launches
- * ansible/provision-generic-agent.yml via AAP and persists progress onto
- * the listing's `deployment` field, so every admin just opens the
- * resulting `routeUrl` — a one-time, per-listing action, not something
- * re-provisioned per visit.
+ * The `generic-chat` runtime's "deploy once" admin action: launches a
+ * direct OpenShift deployment and persists progress onto the listing's
+ * `deployment` field, so every admin just opens the resulting `routeUrl`
+ * — a one-time, per-listing action, not something re-provisioned per visit.
  */
 
 function now(): string {
@@ -46,9 +44,9 @@ function persistDeployment(id: string, deployment: AgentDeployment): Listing {
 }
 
 /**
- * Launches (or re-launches, e.g. after a failure) the AAP job that deploys
- * this listing's generic-chat agent. Persists an initial "deploying"
- * AgentDeployment immediately and returns; the Admin UI polls
+ * Launches (or re-launches, e.g. after a failure) the direct OpenShift
+ * deployment for this listing's generic-chat agent. Persists an initial
+ * "deploying" AgentDeployment immediately and returns; the Admin UI polls
  * refreshDeployment() for progress.
  */
 export async function startDeployment(listingId: string): Promise<Listing> {
@@ -58,15 +56,8 @@ export async function startDeployment(listingId: string): Promise<Listing> {
   if (listing.runtime !== "generic-chat") {
     throw new Error(`"${listing.name}" is not a generic-chat runtime listing.`);
   }
-  if (!isAapConfigured()) {
-    throw new Error("AAP is not configured — set the controller URL and token in Admin → Platform.");
-  }
-
-  const templateId = listing.agentConfig?.aapJobTemplateId ?? aapDefaultJobTemplateId();
-  if (!templateId) {
-    throw new Error(
-      "No AAP job template configured for this deploy. Set one on this listing (Agent config → AAP job template), or a Platform default — it must launch provision-generic-agent.yml, not the one-shot playbook."
-    );
+  if (!isOpenshiftConfigured()) {
+    throw new Error("OpenShift is not configured — set the API URL and token in Admin → Platform.");
   }
 
   const provider = providerFor(listing);
@@ -77,11 +68,10 @@ export async function startDeployment(listingId: string): Promise<Listing> {
   }
 
   const deploymentName = genericAgentDeploymentName(listing.id);
-  const { aapJobId, aapJobUrl } = await launchGenericAgentDeploy({
+  await launchDirectDeploy({
     listingId: listing.id,
     listingName: listing.name,
     deploymentName,
-    jobTemplateId: templateId,
     provider: {
       kind: provider.kind,
       baseUrl: provider.baseUrl,
@@ -91,17 +81,11 @@ export async function startDeployment(listingId: string): Promise<Listing> {
     introLines: chatIntroLinesFor(listing),
     skills: getSkillsByIds(listing.agentConfig?.skillIds),
     mcpServers: mcpServersFor(listing),
-    // Falls back to the AGENT_RUNTIME_IMAGE env var (and ultimately the
-    // `agent-runtime:dev` placeholder, which nothing actually publishes)
-    // when the "Build from source" action on Admin -> Platform -> Agent
-    // Runtime hasn't been run yet.
     agentRuntimeImage: getPlatformSettings().agentRuntimeImage,
   });
 
   return persistDeployment(listingId, {
     status: "deploying",
-    aapJobId,
-    aapJobUrl,
     openshiftDeploymentName: deploymentName,
     namespace: openshiftNamespace(),
     updatedAt: now(),
@@ -120,11 +104,11 @@ export async function refreshDeployment(listingId: string): Promise<Listing> {
   if (!listing) throw new Error(`Unknown listing: ${listingId}`);
 
   const deployment = listing.deployment;
-  if (!deployment || deployment.status !== "deploying" || !deployment.aapJobId || !deployment.openshiftDeploymentName) {
+  if (!deployment || deployment.status !== "deploying" || !deployment.openshiftDeploymentName) {
     return listing;
   }
 
-  const result = await getGenericAgentDeployStatus(deployment.aapJobId, deployment.openshiftDeploymentName);
+  const result = await getDirectDeployStatus(deployment.openshiftDeploymentName);
   return persistDeployment(listingId, {
     ...deployment,
     status: result.status,

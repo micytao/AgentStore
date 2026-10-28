@@ -1,3 +1,0 @@
-kubernetes>=24.2.0
-PyYAML>=5.4
-jsonpatch>=1.32

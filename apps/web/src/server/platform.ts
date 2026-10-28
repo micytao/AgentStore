@@ -4,21 +4,13 @@ import type { PlatformSettings, PlatformStatus } from "@agentstore/shared";
 import {
   applyPlatformEnv,
   checkAgentSandboxController,
-  isAapConfigured,
   isOpenshiftConfigured,
   listAgentDeployments,
-  listCredentialsByKind,
-  listExecutionEnvironments,
-  listJobTemplates,
-  listOrganizations,
-  listProjects,
-  listRecentJobs,
-  pingAap,
   pingOpenshift,
-} from "@agentstore/engine-ansible";
+} from "@agentstore/engine-openshift";
 import { applyOpenShellServiceEnv, isOpenShellServiceConfigured, pingOpenShellService } from "@agentstore/engine-openshell";
 // Note: deliberately calling checkAgentSandboxController() directly from
-// @agentstore/engine-ansible here, not the checkAgentSandboxStatus()
+// @agentstore/engine-openshift here, not the checkAgentSandboxStatus()
 // wrapper in ./agentSandbox — that module needs to import
 // getPlatformSettings/savePlatformSettings/ensurePlatformEnv from *this*
 // file for the "Install Agent Sandbox Service" build+deploy flow, and a
@@ -27,14 +19,12 @@ import { applyOpenShellServiceEnv, isOpenShellServiceConfigured, pingOpenShellSe
 // One-directional (agentSandbox.ts -> platform.ts) avoids that entirely.
 
 const DEFAULT_SETTINGS: PlatformSettings = {
-  aapControllerUrl: "",
-  aapJobTemplateId: "",
-  aapConsoleUrl: "",
-  aapInsecureTls: true,
   openshiftApiUrl: "",
   openshiftNamespace: "agent-workloads",
   openshiftConsoleUrl: "",
   openshiftInsecureTls: true,
+  projectGitUrl: "",
+  projectGitBranch: "main",
   openshellServiceUrl: "",
   // Real, published chart — see docs.nvidia.com/openshell/kubernetes/openshift.
   // Left editable for a private mirror or pinned dev build.
@@ -42,13 +32,6 @@ const DEFAULT_SETTINGS: PlatformSettings = {
   openshellGatewayChartVersion: "",
   openshellGatewayNamespace: "openshell",
   openshellGatewayWorkloadKind: "statefulset",
-  openshellGatewayJobTemplateId: "",
-  aapOrganizationName: "Default",
-  aapProjectName: "AgentStore",
-  aapProjectGitUrl: "",
-  aapProjectGitBranch: "main",
-  aapProjectScmCredentialId: "",
-  aapExecutionEnvironmentId: "",
 };
 
 function dataDir(): string {
@@ -103,10 +86,8 @@ export function ensurePlatformEnv(): void {
 }
 
 /** Clears all cluster-specific state (deploy statuses, build results,
- *  image references) while keeping connection URLs, AAP configuration,
- *  and AAP object IDs (job template IDs, EE ID) — those live in AAP,
- *  not the cluster, so they survive a cluster switch if you're using
- *  the same AAP. */
+ *  image references) while keeping connection URLs — those survive a
+ *  cluster switch. */
 export function resetClusterState(): PlatformSettings {
   return savePlatformSettings({
     // Image refs from old cluster's internal registry
@@ -114,77 +95,14 @@ export function resetClusterState(): PlatformSettings {
     // Deploy / build status blobs
     agentstoreDeploy: undefined,
     rhdhDeploy: undefined,
-    eeBuild: undefined,
     agentRuntimeBuild: undefined,
     agentSandboxServiceInstall: undefined,
-    aapBootstrap: undefined,
     openshellGatewayDeployment: undefined,
     // Sync token — will be regenerated on next deploy
     syncToken: undefined,
     // OpenShell service URL — old cluster route
     openshellServiceUrl: "",
   });
-}
-
-function emptyAapLists(): Pick<
-  PlatformStatus["aap"],
-  "jobTemplates" | "recentJobs" | "executionEnvironments" | "credentials" | "organizations" | "projects" | "registryCredentials"
-> {
-  return {
-    jobTemplates: [],
-    recentJobs: [],
-    executionEnvironments: [],
-    credentials: [],
-    organizations: [],
-    projects: [],
-    registryCredentials: [],
-  };
-}
-
-async function probeAap(): Promise<PlatformStatus["aap"]> {
-  const configured = isAapConfigured();
-  if (!configured) {
-    return { configured: false, connected: false, error: "Not configured", ...emptyAapLists() };
-  }
-  const ping = await pingAap();
-  if (!ping.ok) {
-    return { configured: true, connected: false, error: ping.error, ...emptyAapLists() };
-  }
-  try {
-    // executionEnvironments/credentials/organizations/projects/
-    // registryCredentials feed the "AAP Job Templates" bootstrap card's
-    // dropdowns; failures there shouldn't be fatal to the rest of this
-    // probe (e.g. an AAP install with one of these endpoints disabled),
-    // so each independently falls back to an empty list.
-    const [jobTemplates, recentJobs, executionEnvironments, credentials, organizations, projects, registryCredentials] =
-      await Promise.all([
-        listJobTemplates(),
-        listRecentJobs(12),
-        listExecutionEnvironments().catch(() => []),
-        listCredentialsByKind("scm").catch(() => []),
-        listOrganizations().catch(() => []),
-        listProjects().catch(() => []),
-        listCredentialsByKind("registry").catch(() => []),
-      ]);
-    return {
-      configured: true,
-      connected: true,
-      jobTemplates,
-      recentJobs,
-      executionEnvironments,
-      credentials,
-      organizations,
-      projects,
-      registryCredentials,
-    };
-  } catch (err) {
-    return {
-      configured: true,
-      connected: false,
-      error: err instanceof Error ? err.message : String(err),
-      ...emptyAapLists(),
-    };
-  }
 }
 
 async function probeOpenshift(): Promise<PlatformStatus["openshift"]> {
@@ -209,12 +127,6 @@ async function probeOpenshift(): Promise<PlatformStatus["openshift"]> {
     };
   }
   try {
-    // agentSandboxController is its own live check (a separate
-    // low-privilege GET /apis) rather than piggybacking on the
-    // deployments listing above — it needs to keep reporting a real
-    // installed/missing status even if listAgentDeployments() itself
-    // fails below (e.g. the configured token can list API groups but
-    // not this namespace's Deployments).
     const [deployments, agentSandboxController] = await Promise.all([
       listAgentDeployments(),
       checkAgentSandboxController(),
@@ -242,23 +154,20 @@ async function probeOpenshell(): Promise<PlatformStatus["openshellService"]> {
 
 export async function getPlatformStatus(): Promise<PlatformStatus> {
   ensurePlatformEnv();
-  const [aap, openshift, openshellService] = await Promise.all([
-    probeAap(),
+  const [openshift, openshellService] = await Promise.all([
     probeOpenshift(),
     probeOpenshell(),
   ]);
-  return { settings: getPlatformSettings(), aap, openshift, openshellService };
+  return { settings: getPlatformSettings(), openshift, openshellService };
 }
 
-export type PlatformTestTarget = "aap" | "openshift";
+export type PlatformTestTarget = "openshift";
 
 export async function testPlatformTarget(target: PlatformTestTarget): Promise<{
   settings: PlatformStatus["settings"];
-  aap?: PlatformStatus["aap"];
   openshift?: PlatformStatus["openshift"];
 }> {
   ensurePlatformEnv();
   const settings = getPlatformSettings();
-  if (target === "aap") return { settings, aap: await probeAap() };
   return { settings, openshift: await probeOpenshift() };
 }

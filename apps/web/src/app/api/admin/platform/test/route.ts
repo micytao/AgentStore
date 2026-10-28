@@ -10,8 +10,8 @@ export async function POST(request: Request) {
     target?: PlatformTestTarget;
     settings?: Partial<PlatformSettings>;
   };
-  if (body.target !== "aap" && body.target !== "openshift") {
-    return NextResponse.json({ error: "target must be aap or openshift" }, { status: 400 });
+  if (body.target !== "openshift") {
+    return NextResponse.json({ error: "target must be openshift" }, { status: 400 });
   }
   if (body.settings) savePlatformSettings(body.settings);
   return NextResponse.json(await testPlatformTarget(body.target));

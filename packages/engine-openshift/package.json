@@ -1,5 +1,5 @@
 {
-  "name": "@agentstore/engine-ansible",
+  "name": "@agentstore/engine-openshift",
   "version": "0.1.0",
   "private": true,
   "main": "./src/index.ts",

@@ -47,7 +47,7 @@ function phaseToStatus(phase: client.RemoteSession["phase"]): OpenShellSessionSt
  * OpenShell sandbox session. Persists an initial "deploying" state
  * immediately and returns; the Admin UI polls refreshOpenShellSession()
  * for progress, same inline-progress pattern deployments.ts's
- * startDeployment() uses for the generic-chat AAP job.
+ * startDeployment() uses for the generic-chat deploy.
  *
  * If the sandbox already exists on the Agent Sandbox Service (e.g. after
  * a pod restart where the seed preserved the session data but the sandbox

@@ -1,4 +1,5 @@
 import * as ocp from "./openshift";
+import { openshiftNamespace } from "./config";
 
 /**
  * AgentStore console image build — builds apps/web/Containerfile inside
@@ -14,7 +15,12 @@ import * as ocp from "./openshift";
 const AGENTSTORE_BUILD_NAME = "agentstore";
 const AGENTSTORE_CONTEXT_DIR = "";
 const AGENTSTORE_DOCKERFILE_PATH = "apps/web/Containerfile";
-const BUILD_NAMESPACE = "agentstore";
+const BUILD_LOG_TAIL_LINES = 1000;
+/** All builds run in the same namespace as agent workloads — supports
+ * single-namespace deployments on shared clusters. */
+function buildNamespace(): string {
+  return openshiftNamespace();
+}
 
 export interface AgentStoreImageBuildInput {
   gitUrl: string;
@@ -25,7 +31,7 @@ export interface AgentStoreImageBuildInput {
 export async function startAgentStoreImageBuild(
   input: AgentStoreImageBuildInput
 ): Promise<{ buildName: string }> {
-  await ocp.findOrCreateEeImageStream(AGENTSTORE_BUILD_NAME, BUILD_NAMESPACE);
+  await ocp.findOrCreateEeImageStream(AGENTSTORE_BUILD_NAME, buildNamespace());
   await ocp.findOrCreateEeBuildConfig({
     name: AGENTSTORE_BUILD_NAME,
     imageStreamName: AGENTSTORE_BUILD_NAME,
@@ -34,12 +40,12 @@ export async function startAgentStoreImageBuild(
     contextDir: AGENTSTORE_CONTEXT_DIR,
     dockerfilePath: AGENTSTORE_DOCKERFILE_PATH,
     gitSecretName: input.gitSecretName,
-  }, BUILD_NAMESPACE);
-  return ocp.startEeBuild(AGENTSTORE_BUILD_NAME, BUILD_NAMESPACE);
+  }, buildNamespace());
+  return ocp.startEeBuild(AGENTSTORE_BUILD_NAME, buildNamespace());
 }
 
 export async function getAgentStoreImageBuildPhase(buildName: string): Promise<string> {
-  return (await ocp.getEeBuildStatus(buildName, BUILD_NAMESPACE)).phase;
+  return (await ocp.getEeBuildStatus(buildName, buildNamespace())).phase;
 }
 
 export interface AgentStoreImageBuildResult {
@@ -49,7 +55,7 @@ export interface AgentStoreImageBuildResult {
 export async function getAgentStoreImageBuildResult(
   buildName: string
 ): Promise<AgentStoreImageBuildResult | undefined> {
-  const status = await ocp.getEeBuildStatus(buildName, BUILD_NAMESPACE);
+  const status = await ocp.getEeBuildStatus(buildName, buildNamespace());
   if (["New", "Pending", "Running"].includes(status.phase)) return undefined;
   if (status.phase !== "Complete") {
     throw new Error(
@@ -57,10 +63,10 @@ export async function getAgentStoreImageBuildResult(
         `Check Build "${buildName}" logs in the OpenShift console and retry.`
     );
   }
-  const image = await ocp.getEeImageReference(AGENTSTORE_BUILD_NAME, "latest", BUILD_NAMESPACE);
+  const image = await ocp.getEeImageReference(AGENTSTORE_BUILD_NAME, "latest", buildNamespace());
   return { image };
 }
 
-export async function getAgentStoreImageBuildLog(buildName: string, tailLines = 1000): Promise<string> {
-  return ocp.getEeBuildLogTail(buildName, tailLines, BUILD_NAMESPACE);
+export async function getAgentStoreImageBuildLog(buildName: string, tailLines = BUILD_LOG_TAIL_LINES): Promise<string> {
+  return ocp.getEeBuildLogTail(buildName, tailLines, buildNamespace());
 }

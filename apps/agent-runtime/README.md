@@ -4,7 +4,7 @@ The `runtime: "generic-chat"` container: a small chat server built on
 `@agentstore/agent-core` (the same provider/MCP/tool-hop/skills code
 `apps/web/src/server/drafting.ts` uses for Autonomous drafting). One image
 is reused across every generic-chat listing — an admin's "Deploy to
-OpenShift" action (see `ansible/provision-generic-agent.yml`) configures a
+OpenShift" action (see the direct OpenShift deploy flow) configures a
 *new* Deployment+Service+Route from this same image with that listing's
 own persona, skills, MCP servers, and model, rather than building a new
 image per agent.
@@ -80,7 +80,7 @@ PROVIDER_KIND=openai-compatible PROVIDER_BASE_URL=http://localhost:11434/v1 \
 
 ## Deploy
 
-Deployed by `ansible/provision-generic-agent.yml` via AAP (see
+Deployed directly to OpenShift (see
 `apps/web/src/server/deployments.ts`'s `POST /api/admin/listings/[id]/deploy`)
 using whatever image `agent_runtime_image` resolves to — but unlike the
 playbooks themselves, **nothing publishes that image for you by

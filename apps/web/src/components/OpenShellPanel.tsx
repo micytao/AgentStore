@@ -77,7 +77,6 @@ export function OpenShellPanel() {
   const [gatewayChartVersion, setGatewayChartVersion] = useState("");
   const [gatewayNamespace, setGatewayNamespace] = useState("");
   const [gatewayWorkloadKind, setGatewayWorkloadKind] = useState<GatewayWorkloadKind>("statefulset");
-  const [gatewayJobTemplateId, setGatewayJobTemplateId] = useState("");
   const [savingGateway, setSavingGateway] = useState(false);
   const [deployingGateway, setDeployingGateway] = useState(false);
   const [gatewayError, setGatewayError] = useState<string | null>(null);
@@ -118,7 +117,6 @@ export function OpenShellPanel() {
         setGatewayChartVersion(nextPlatform.settings.openshellGatewayChartVersion);
         setGatewayNamespace(nextPlatform.settings.openshellGatewayNamespace);
         setGatewayWorkloadKind(nextPlatform.settings.openshellGatewayWorkloadKind);
-        setGatewayJobTemplateId(String(nextPlatform.settings.openshellGatewayJobTemplateId || ""));
       })
       .catch((err: Error) => setError(err.message));
     loadSecrets();
@@ -153,7 +151,7 @@ export function OpenShellPanel() {
   // (and so isn't served under /apis yet) the instant the apply
   // request returns — same interval-polling shape as the gateway poll
   // above, just against the cheap synchronous status check instead of
-  // an in-flight AAP job.
+  // an in-flight deploy.
   useEffect(() => {
     if (!agentSandboxPolling) return;
     const timer = setInterval(() => {
@@ -267,7 +265,6 @@ export function OpenShellPanel() {
         openshellGatewayChartVersion: gatewayChartVersion,
         openshellGatewayNamespace: gatewayNamespace,
         openshellGatewayWorkloadKind: gatewayWorkloadKind,
-        openshellGatewayJobTemplateId: gatewayJobTemplateId.trim() ? Number(gatewayJobTemplateId) : "",
       });
       setPlatform(next);
     } catch (err) {
@@ -327,7 +324,7 @@ export function OpenShellPanel() {
               NVIDIA OpenShell is the real sandboxing runtime the Agent Sandbox
               Service below talks to. Installing it is a live{" "}
               <code>helm upgrade --install</code> against the chart reference
-              below, run once via AAP — the console never runs Helm itself. See{" "}
+              below, run once via the OpenShift API — the console never runs Helm itself. See{" "}
               <a href="https://docs.nvidia.com/openshell/kubernetes/openshift" target="_blank" rel="noreferrer">
                 docs.nvidia.com/openshell/kubernetes/openshift
               </a>
@@ -417,13 +414,6 @@ export function OpenShellPanel() {
                   {gatewayDeployment.error && (
                     <Alert variant="danger" isInline title={gatewayDeployment.error} style={{ marginTop: "0.5rem" }} />
                   )}
-                  {gatewayDeployment.aapJobUrl && (
-                    <Content component={ContentVariants.small} style={{ marginTop: "0.5rem" }}>
-                      <a href={gatewayDeployment.aapJobUrl} target="_blank" rel="noreferrer">
-                        View AAP job
-                      </a>
-                    </Content>
-                  )}
                 </CardBody>
               </Card>
             )}
@@ -468,23 +458,8 @@ export function OpenShellPanel() {
                     </FormSelect>
                   </FormGroup>
                 </FlexItem>
-                <FlexItem flex={{ default: "flex_1" }}>
-                  <FormGroup label="AAP job template id" fieldId="gateway-job-template">
-                    <TextInput
-                      id="gateway-job-template"
-                      placeholder="e.g. 43"
-                      value={gatewayJobTemplateId}
-                      onChange={(_e, v) => setGatewayJobTemplateId(v)}
-                    />
-                  </FormGroup>
-                </FlexItem>
               </Flex>
             </Form>
-            {platform.aap.jobTemplates.length > 0 && (
-              <Content component={ContentVariants.small}>
-                Templates: {platform.aap.jobTemplates.slice(0, 8).map((t) => `${t.name} (#${t.id})`).join(" · ")}
-              </Content>
-            )}
             {gatewayError && <Alert variant="danger" isInline title={gatewayError} style={{ marginTop: "0.5rem" }} />}
             <Flex spaceItems={{ default: "spaceItemsSm" }} style={{ marginTop: "0.75rem" }}>
               <FlexItem>
@@ -533,7 +508,7 @@ export function OpenShellPanel() {
               <Content component={ContentVariants.small} style={{ marginTop: "0.5rem" }}>
                 Not deployed yet? <strong>Install Agent Sandbox Service</strong> below builds{" "}
                 <code>apps/agent-sandbox-service/Containerfile</code> as an OpenShift BuildConfig
-                (same Project Git URL/branch as the AAP Job Templates card on the Platform tab),
+                (same Project Git URL/branch as the Connections card on the Platform tab),
                 deploys it, and fills in the URL/token below automatically — no separate{" "}
                 <code>podman build</code>/<code>oc apply</code> needed. Needs the same OpenShift
                 token used elsewhere on this tab (namespace-scoped Deployment/Service/Route/Secret

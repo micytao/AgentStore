@@ -3,7 +3,7 @@ import { requireAdmin } from "@/server/auth";
 import { refreshDeployment, startDeployment, stopDeployment } from "@/server/deployments";
 
 /** Starts (or re-starts) the "deploy this generic-chat agent to OpenShift"
- * AAP job. Called once when an admin clicks "Deploy to OpenShift", and
+ * flow. Called once when an admin clicks "Deploy to OpenShift", and
  * again for a "Redeploy" after a failure. */
 export async function POST(
   request: Request,

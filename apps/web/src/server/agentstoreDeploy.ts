@@ -15,7 +15,7 @@ import {
   openshiftNamespace,
   restartAgentSandboxServiceDeployment,
   startAgentStoreImageBuild,
-} from "@agentstore/engine-ansible";
+} from "@agentstore/engine-openshift";
 import { ensurePlatformEnv, getPlatformSettings, savePlatformSettings } from "./platform";
 import { exportDecryptedSecrets } from "./secrets";
 import {
@@ -88,9 +88,9 @@ function parseManifestDocs(file: string): Record<string, unknown>[] {
  *  fields travel in the seed. */
 function seedPlatformSettings(settings: PlatformSettings): Partial<PlatformSettings> {
   const {
-    agentstoreDeploy: _a, rhdhDeploy: _b, eeBuild: _c,
+    agentstoreDeploy: _a, rhdhDeploy: _b,
     agentRuntimeBuild: _d, agentSandboxServiceInstall: _e,
-    aapBootstrap: _f, openshellGatewayDeployment: _g,
+    openshellGatewayDeployment: _g,
     ...config
   } = settings;
   return config;
@@ -253,17 +253,17 @@ export async function startAgentStoreDeploy(): Promise<PlatformSettings> {
   if (!isOpenshiftConfigured()) {
     throw new Error("OpenShift is not configured — set the API URL and token in Admin → Platform.");
   }
-  if (!settings.aapProjectGitUrl.trim()) {
+  if (!settings.projectGitUrl?.trim()) {
     throw new Error(
-      "Set a Project Git URL in the AAP Job Templates card above first — the OpenShift build uses that same repo/branch."
+      "Set a Project Git URL in Admin → Platform first — the OpenShift build uses that repo/branch."
     );
   }
 
   try {
     await ensureNamespace(AGENTSTORE_NAMESPACE);
     const { buildName } = await startAgentStoreImageBuild({
-      gitUrl: settings.aapProjectGitUrl,
-      gitBranch: settings.aapProjectGitBranch || "main",
+      gitUrl: settings.projectGitUrl!,
+      gitBranch: settings.projectGitBranch || "main",
     });
     return persist({ status: "deploying", phase: "building", buildName, updatedAt: now() });
   } catch (err) {
@@ -300,7 +300,7 @@ export async function refreshAgentStoreDeploy(): Promise<PlatformSettings> {
     // and this ensures partial failures (e.g. a previous PVC 422 that
     // aborted before the RoleBinding was created) are recovered on the
     // next poll cycle.
-    const docs = getAgentStoreManifestDocs(image);
+    const docs = getAgentStoreManifestDocs(image!);
     await applyAgentSandboxManifests(docs);
     const routeUrl = deploy.routeUrl
       || await getAgentSandboxServiceRouteHost(AGENTSTORE_NAMESPACE, AGENTSTORE_DEPLOY_NAME);

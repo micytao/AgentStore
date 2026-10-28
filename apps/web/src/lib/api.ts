@@ -57,7 +57,7 @@ export function deleteListingAdmin(id: string): Promise<{ warning?: string }> {
   );
 }
 
-/** Starts (or re-starts) the "Deploy to OpenShift" AAP job for a
+/** Starts (or re-starts) the "Deploy to OpenShift" flow for a
  * generic-chat listing. */
 export function deployListingAdmin(id: string): Promise<Listing> {
   return fetch(`/api/admin/listings/${id}/deploy`, { method: "POST" }).then((r) =>
@@ -121,13 +121,13 @@ export function fetchPlatformStatus(): Promise<PlatformStatus> {
 }
 
 /** Clears all cluster-specific state (deploy statuses, build results,
- *  image refs, AAP IDs) for a fresh-cluster restart. */
+ *  image refs) for a fresh-cluster restart. */
 export function resetClusterState(): Promise<PlatformStatus> {
   return fetch("/api/admin/platform", { method: "DELETE" }).then((r) => parse<PlatformStatus>(r));
 }
 
 /** Starts (or re-starts) the one-time "install the OpenShell gateway"
- * AAP job. Returns the updated PlatformSettings (holding
+ * deploy. Returns the updated PlatformSettings (holding
  * `openshellGatewayDeployment`), not the full PlatformStatus. */
 export function deployGateway(): Promise<PlatformSettings> {
   return fetch("/api/admin/platform/gateway", { method: "POST" }).then((r) =>
@@ -150,8 +150,7 @@ export function fetchAgentSandboxStatus(): Promise<AgentSandboxControllerStatus>
 
 /** Applies the vendored Agent Sandbox controller manifest via the
  * OpenShift API (see deploy/openshift/agent-sandbox-crds.yaml). Reuses
- * the already-configured OpenShift token — no separate AAP job
- * template/credential, unlike the gateway install above. */
+ * the already-configured OpenShift token. */
 export function installAgentSandboxController(): Promise<{
   applied: string[];
   status: AgentSandboxControllerStatus;
@@ -178,76 +177,9 @@ export function fetchAgentSandboxServiceInstallStatus(): Promise<PlatformSetting
   return fetch("/api/admin/platform/agent-sandbox-service").then((r) => parse<PlatformSettings>(r));
 }
 
-/** Starts (or re-starts) the one-time "Create job templates" AAP
- * bootstrap. `settings` is saved server-side in the same request (no
- * separate "Save" step) before the bootstrap kicks off — mirrors
- * `testPlatformConnection()`'s save-as-a-side-effect convention. Returns
- * the updated PlatformSettings (holding `aapBootstrap`). */
-export function createJobTemplates(settings: Partial<PlatformSettings>): Promise<PlatformSettings> {
-  return fetch("/api/admin/platform/job-templates", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ settings }),
-  }).then((r) => parse<PlatformSettings>(r));
-}
-
-/** Polls the in-flight job template bootstrap for progress; safe to call
- * on an interval. */
-export function fetchJobTemplateBootstrapStatus(): Promise<PlatformSettings> {
-  return fetch("/api/admin/platform/job-templates").then((r) => parse<PlatformSettings>(r));
-}
-
-/** Registers an already-built-and-pushed image as an AAP Execution
- * Environment (see ansible/execution-environment/README.md for building
- * it) and auto-selects it. Returns the updated PlatformSettings. */
-export function registerExecutionEnvironment(input: {
-  name: string;
-  image: string;
-  credentialId?: number;
-}): Promise<PlatformSettings> {
-  return fetch("/api/admin/platform/execution-environments", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(input),
-  }).then((r) => parse<PlatformSettings>(r));
-}
-
-/** Starts (or re-starts) the "Build from source" OpenShift build (Admin
- * -> Platform -> AAP Job Templates -> "+ Build from source"). `settings`
- * is saved server-side in the same request (no separate "Save" step),
- * same save-as-a-side-effect convention as createJobTemplates() —
- * otherwise a Git URL/branch typed into the draft but never saved via
- * "Create job templates" would silently be lost. Returns the updated
- * PlatformSettings (holding `eeBuild`). */
-export function startEeImageBuild(input: {
-  name: string;
-  credentialId?: number;
-  settings?: Partial<PlatformSettings>;
-}): Promise<PlatformSettings> {
-  return fetch("/api/admin/platform/execution-environment-build", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(input),
-  }).then((r) => parse<PlatformSettings>(r));
-}
-
-/** Polls the in-flight build for progress; safe to call on an interval. */
-export function fetchEeBuildStatus(): Promise<PlatformSettings> {
-  return fetch("/api/admin/platform/execution-environment-build").then((r) => parse<PlatformSettings>(r));
-}
-
-/** Tail of the build's log, for the "View build log" section — lets an
- * admin see exactly why a build failed without leaving AgentStore. */
-export function fetchEeBuildLog(): Promise<{ log: string }> {
-  return fetch("/api/admin/platform/execution-environment-build/log").then((r) =>
-    parse<{ log: string }>(r)
-  );
-}
-
 /** Starts (or re-starts) the agent-runtime image's "Build from source"
  * OpenShift build (Admin -> Platform -> Agent Runtime). `settings` is
- * saved server-side in the same request, same save-as-a-side-effect
- * convention as startEeImageBuild(). Returns the updated
+ * saved server-side in the same request. Returns the updated
  * PlatformSettings (holding `agentRuntimeBuild`/`agentRuntimeImage`). */
 export function startAgentRuntimeBuild(settings?: Partial<PlatformSettings>): Promise<PlatformSettings> {
   return fetch("/api/admin/platform/agent-runtime-build", {
@@ -280,11 +212,10 @@ export function updatePlatformSettings(
 }
 
 export function testPlatformConnection(
-  target: "aap" | "openshift",
+  target: "openshift",
   settings: Partial<PlatformSettings>
 ): Promise<{
   settings: PlatformSettings;
-  aap?: PlatformStatus["aap"];
   openshift?: PlatformStatus["openshift"];
 }> {
   return fetch("/api/admin/platform/test", {
@@ -294,7 +225,6 @@ export function testPlatformConnection(
   }).then((r) =>
     parse<{
       settings: PlatformSettings;
-      aap?: PlatformStatus["aap"];
       openshift?: PlatformStatus["openshift"];
     }>(r)
   );
@@ -475,7 +405,6 @@ export function syncStateToCluster(): Promise<{ ok: boolean; syncedAt?: string; 
 // --- RHDH self-service portal ---
 
 export interface RhdhPreflightResult {
-  aap: { status: string };
   openshift: { status: string };
   agentstoreOnCluster: { status: string };
   rhdhOperator: { status: string };

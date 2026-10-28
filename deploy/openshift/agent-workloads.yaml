@@ -23,7 +23,7 @@ rules:
   - apiGroups: [""]
     resources: ["pods", "pods/log", "configmaps"]
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-  # generic-chat runtime's "deploy once" flow (provision-generic-agent.yml):
+  # generic-chat runtime deploy-once flow:
   # creates a persistent Deployment+Service+Route instead of a batch Job.
   - apiGroups: ["apps"]
     resources: ["deployments"]

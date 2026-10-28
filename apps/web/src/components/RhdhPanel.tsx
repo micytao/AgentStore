@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import type { ReactNode } from "react";
 import type { RhdhDeployStatus } from "@agentstore/shared";
 import {
-  AnsibleTowerIcon,
+
   CatalogIcon,
   KeyIcon,
   OpenshiftIcon,
@@ -89,7 +89,6 @@ function StatusStat({
 // --- Preflight result type -----------------------------------------------
 
 interface RhdhPreflightResult {
-  aap: { status: string };
   openshift: { status: string };
   agentstoreOnCluster: { status: string };
   rhdhOperator: { status: string };
@@ -264,15 +263,6 @@ export function RhdhPanel() {
         <Card isCompact>
           <CardBody>
             <Flex spaceItems={{ default: "spaceItemsLg" }} flexWrap={{ default: "wrap" }} alignItems={{ default: "alignItemsCenter" }}>
-              <FlexItem>
-                <StatusStat
-                  icon={<AnsibleTowerIcon />}
-                  label="AAP"
-                  value={statLabel(preflight.aap.status)}
-                  color={statColor(preflight.aap.status)}
-                />
-              </FlexItem>
-              <Divider orientation={{ default: "vertical" }} />
               <FlexItem>
                 <StatusStat
                   icon={<OpenshiftIcon />}

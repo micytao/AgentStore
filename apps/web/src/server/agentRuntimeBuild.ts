@@ -6,20 +6,19 @@ import {
   getAgentRuntimeImageBuildResult,
   isOpenshiftConfigured,
   startAgentRuntimeImageBuild,
-} from "@agentstore/engine-ansible";
+} from "@agentstore/engine-openshift";
 import { ensurePlatformEnv, getPlatformSettings, savePlatformSettings } from "./platform";
 
 /**
  * The agent-runtime "Build from source" admin action (Admin -> Platform
  * -> Agent Runtime -> "Start build"): AgentStore-side wiring around
- * packages/engine-ansible's agentRuntimeBuild.ts, following the exact
- * same two-phase start/refresh convention as eeBuild.ts —
+ * packages/engine-openshift's agentRuntimeBuild.ts, following the exact
+ * same two-phase start/refresh convention —
  * startAgentRuntimeBuild() kicks off an OpenShift Build and returns
  * immediately; refreshAgentRuntimeBuild() polls it and, once complete,
  * persists the built image's reference onto
- * PlatformSettings.agentRuntimeImage (no AAP-registration step, unlike
- * the EE — this is a plain application image referenced directly by
- * provision-generic-agent.yml's Deployment spec).
+ * PlatformSettings.agentRuntimeImage — this is a plain application
+ * image referenced directly by the Deployment spec.
  */
 
 function now(): string {
@@ -34,30 +33,30 @@ function persist(build: OcpImageBuildStatus, extra?: Partial<PlatformSettings>):
  * Starts (or re-starts) the "Build from source" OpenShift build.
  * Persists an initial "deploying" status immediately and returns; the
  * Admin UI polls refreshAgentRuntimeBuild() for progress. Needs only
- * OpenShift (unlike the EE build, this never touches AAP).
+ * OpenShift — no intermediate orchestrator needed.
  */
 export async function startAgentRuntimeBuild(): Promise<PlatformSettings> {
   // Note: the route handler saves any draft `settings` (e.g. Project Git
   // URL/branch) via savePlatformSettings() *before* calling this, the
   // same fix applied to the EE build after it once silently started a
   // build against an empty Git URL because the draft had never been
-  // saved — see eeBuild.ts's startEeBuild()/apps/web's route handler.
+  // saved — see startAgentRuntimeBuild()/apps/web's route handler.
   ensurePlatformEnv();
   const settings = getPlatformSettings();
   if (!isOpenshiftConfigured()) {
     throw new Error("OpenShift is not configured — set the API URL and token in Admin → Platform.");
   }
-  if (!settings.aapProjectGitUrl.trim()) {
+  if (!settings.projectGitUrl?.trim()) {
     throw new Error(
-      "Set a Project Git URL in the AAP Job Templates card above first — the OpenShift build uses that same repo/branch."
+      "Set a Project Git URL in Admin → Platform first — the OpenShift build uses that repo/branch."
     );
   }
 
   try {
     await ensureNamespace("agentstore");
     const { buildName } = await startAgentRuntimeImageBuild({
-      gitUrl: settings.aapProjectGitUrl,
-      gitBranch: settings.aapProjectGitBranch || "main",
+      gitUrl: settings.projectGitUrl!,
+      gitBranch: settings.projectGitBranch || "main",
     });
     return persist({ status: "deploying", phase: "building", buildName, updatedAt: now() });
   } catch (err) {
@@ -81,7 +80,7 @@ export async function refreshAgentRuntimeBuild(): Promise<PlatformSettings> {
   try {
     // Peeked separately from getAgentRuntimeImageBuildResult()'s own
     // status check below purely so the progress bar has something to
-    // render mid-poll — see eeBuild.ts's refreshEeBuild() for the same
+    // render mid-poll — see refreshAgentRuntimeBuild() for the same
     // pattern/rationale.
     const ocpPhase = await getAgentRuntimeImageBuildPhase(build.buildName);
     const result = await getAgentRuntimeImageBuildResult(build.buildName);

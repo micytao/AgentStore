@@ -3,15 +3,15 @@
 Internal catalog of governed AI agents. Browse by department, deploy once,
 and let every team member use a shared, persistent agent — either an
 always-on **Autonomous** chat (Skills Agent engine, `agent-core` + Skills,
-via AAP → OpenShift → MaaS/OpenShift AI) or an interactive **Collaborative**
+via OpenShift → OpenShift AI) or an interactive **Collaborative**
 coding sandbox (OpenShell). Mode always follows which engine a listing
 declares (see `deriveAgentMode()` in `packages/shared`).
 
 AgentStore is a **lightweight console**. It can run locally on a laptop or
 be deployed to the same OpenShift cluster as the agents (Admin → Platform →
 "Deploy AgentStore to OpenShift"). When an admin deploys an agent,
-**Ansible Automation Platform** provisions it and the workload runs on
-OpenShift. Admins connect both clusters from the Platform tab.
+it is provisioned directly to OpenShift via the K8s API. Admins configure
+OpenShift connectivity from the Platform tab.
 
 ## Run locally
 
@@ -30,14 +30,10 @@ persistent chat, built on real Red Hat Agentic Skill Packs
 (`redhat-sre-engineer`, `redhat-customer-support`,
 `redhat-openshift-virtualization`):
 
-1. Admin → Catalog → deploy the listing once (AAP provisions a persistent
-   OpenShift Deployment + Route via `ansible/provision-generic-agent.yml`).
+1. Admin → Catalog → deploy the listing once (provisions a persistent
+   OpenShift Deployment + Route directly via the K8s API).
 2. Anyone opens the listing's link and chats with it directly — no
    per-user launch, no approval step.
-
-Without AAP connected the deploy timeline is a **labeled simulated AAP
-job**. With Admin → Platform pointed at a real controller (and `AAP_TOKEN`
-in Secrets), deploy calls the real AAP API.
 
 ### Collaborative Mode (OpenShell sandbox)
 
@@ -54,16 +50,15 @@ real SSO — see `docs/DEFERRED.md`). Tabs:
 
 - **Catalog** — edit listings, bind per-agent config, onboard new agents
 - **Providers / MCP / Skills / Secrets** — model, tools, vault
-- **Platform** — connect AAP and prod OpenShift, bind job templates, deploy AgentStore itself to the cluster, list jobs
+- **Platform** — connect OpenShift, deploy AgentStore itself to the cluster, list deployments
 - **Self-service Portal** — install the RHDH operator and provision a Developer Hub instance with AgentStore integration
-- **Engine** — connection status for OpenShell / AAP / OpenShift
+- **Engine** — connection status for OpenShell / OpenShift
 
 ## Configuration
 
 | Variable | Purpose |
 | --- | --- |
-| `AAP_CONTROLLER_URL` / `AAP_TOKEN` / `AAP_JOB_TEMPLATE_ID` | Live AAP (or set in Admin → Platform / Secrets) |
-| `OPENSHIFT_API_URL` / `OPENSHIFT_TOKEN` / `OPENSHIFT_NAMESPACE` | Watch/stop agent Jobs (or Admin → Platform / Secrets) |
+| `OPENSHIFT_API_URL` / `OPENSHIFT_TOKEN` / `OPENSHIFT_NAMESPACE` | Watch/stop agent Deployments (or Admin → Platform / Secrets) |
 | `OPENSHELL_SERVICE_URL` / `OPENSHELL_SERVICE_TOKEN` | Console → Agent Sandbox Service (or Admin → LLMs → OpenShell / Secrets) |
 | `AGENTSTORE_SERVICE_TOKEN` | Shared secret for RHDH service-to-service auth (or Admin → Secrets) |
 | `CATALOG_DIR` | Override built-in `catalog/listings` |
@@ -82,12 +77,11 @@ apps/
 packages/
   shared/                     Listing / Task / Platform types
   agent-core/                 Provider + MCP + tool-hop + skills chat loop
-  engine-ansible/             AAP live provisioner + simulated fallback
+  engine-openshift/           OpenShift direct provisioner
   engine-openshell/           Thin REST client against agent-sandbox-service
 catalog/
   listings/                   Built-in YAML agent catalog
   skills/                     Red Hat Agentic Skill Packs (imported via scripts/)
-ansible/                      AAP playbooks + Execution Environment definition
 deploy/openshift/             Namespace/RBAC, agent-sandbox-service, OpenShell gateway, AgentStore deploy
 rhdh/                         Red Hat Developer Hub integration (optional)
 docs/                         DEMO walkthrough + DEFERRED design decisions

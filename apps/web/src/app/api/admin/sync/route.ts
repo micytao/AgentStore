@@ -51,10 +51,8 @@ export async function POST(request: Request) {
         // Preserve cluster-owned deploy status blobs
         agentstoreDeploy: existing.agentstoreDeploy,
         rhdhDeploy: existing.rhdhDeploy,
-        eeBuild: existing.eeBuild,
         agentRuntimeBuild: existing.agentRuntimeBuild,
         agentSandboxServiceInstall: existing.agentSandboxServiceInstall,
-        aapBootstrap: existing.aapBootstrap,
         openshellGatewayDeployment: existing.openshellGatewayDeployment,
       };
 

@@ -212,7 +212,7 @@ export function CatalogManager() {
         <Content component={ContentVariants.small}>
           Adjust risk tier, review status, and price per listing — changes
           save immediately. Open Agent config to bind a provider, tools,
-          skills, and the AAP job template, or delete the agent entirely.
+          and skills, or delete the agent entirely.
         </Content>
       </FlexItem>
 
@@ -1028,9 +1028,6 @@ function AgentConfigPanel({
   const [toolBindings, setToolBindings] = useState<{ serverId: string; tool: string }[]>(
     listing.agentConfig?.mcpToolBindings ?? []
   );
-  const [aapJobTemplateId, setAapJobTemplateId] = useState(
-    listing.agentConfig?.aapJobTemplateId ? String(listing.agentConfig.aapJobTemplateId) : ""
-  );
   const [gitUrl, setGitUrl] = useState(listing.agentConfig?.gitUrl ?? "");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -1059,9 +1056,6 @@ function AgentConfigPanel({
           providerId: providerId || undefined,
           skillIds,
           mcpToolBindings: toolBindings,
-          aapJobTemplateId: aapJobTemplateId.trim()
-            ? Number(aapJobTemplateId)
-            : undefined,
           gitUrl: gitUrl.trim() || undefined,
         },
       });
@@ -1079,12 +1073,6 @@ function AgentConfigPanel({
           Bind a specific model provider, tool subset, and skills to this
           agent. Leave provider unset to keep using the global active
           provider.
-          {listing.runtime === "generic-chat" && (
-            <>
-              {" "}The AAP job template below (leave unset for the Platform
-              default) must launch <code>provision-generic-agent.yml</code>.
-            </>
-          )}
         </Content>
       </FlexItem>
 
@@ -1108,22 +1096,7 @@ function AgentConfigPanel({
                 </FormSelect>
               </FormGroup>
             </FlexItem>
-            {listing.runtime === "generic-chat" ? (
-              <FlexItem flex={{ default: "flex_1" }}>
-                <FormGroup label="AAP job template id" fieldId="agent-config-aap-template">
-                  <TextInput
-                    id="agent-config-aap-template"
-                    inputMode="numeric"
-                    placeholder="Platform default"
-                    value={aapJobTemplateId}
-                    onChange={(_e, v) => {
-                      setAapJobTemplateId(v);
-                      setSaved(false);
-                    }}
-                  />
-                </FormGroup>
-              </FlexItem>
-            ) : (
+            {listing.runtime === "openshell" && (
               <FlexItem flex={{ default: "flex_1" }}>
                 <FormGroup label="Repository URL" fieldId="agent-config-git-url">
                   <TextInput
@@ -1210,7 +1183,7 @@ function AgentConfigPanel({
 }
 
 /** "Deploy to OpenShift" action for a generic-chat listing: launches (or
- * re-launches) provision-generic-agent.yml via AAP and polls GET .../deploy
+ * re-launches) the deploy-to-OpenShift flow and polls GET .../deploy
  * while in flight. A one-time, per-listing action — every admin who opens
  * this listing afterwards just clicks "Open agent" on the same running
  * deployment, instead of anything being provisioned per-visit. */
@@ -1274,8 +1247,8 @@ function DeploySection({ listing, onChange }: { listing: Listing; onChange: () =
         <Flex direction={{ default: "column" }} spaceItems={{ default: "spaceItemsMd" }}>
           <FlexItem>
             <Content component={ContentVariants.small}>
-              Generic-chat agents are provisioned once: AAP creates a persistent
-              Deployment + Route on OpenShift, and every user opens the same
+              Generic-chat agents are provisioned once: a persistent
+              Deployment + Route is created on OpenShift, and every user opens the same
               running agent from its link — no per-launch provisioning.
             </Content>
           </FlexItem>
@@ -1307,31 +1280,16 @@ function DeploySection({ listing, onChange }: { listing: Listing; onChange: () =
             </Flex>
           </FlexItem>
 
-          {(deployment?.aapJobUrl || (status === "running" && deployment?.routeUrl)) && (
+          {status === "running" && deployment?.routeUrl && (
             <FlexItem>
-              <Flex alignItems={{ default: "alignItemsCenter" }} spaceItems={{ default: "spaceItemsMd" }}>
-                {deployment?.aapJobUrl && (
-                  <FlexItem>
-                    <Content component={ContentVariants.small}>
-                      <a href={deployment.aapJobUrl} target="_blank" rel="noreferrer">
-                        View AAP job →
-                      </a>
-                    </Content>
-                  </FlexItem>
+              <Button
+                variant="danger"
+                component={(props) => (
+                  <a {...props} href={deployment.routeUrl} target="_blank" rel="noreferrer" />
                 )}
-                {status === "running" && deployment?.routeUrl && (
-                  <FlexItem>
-                    <Button
-                      variant="danger"
-                      component={(props) => (
-                        <a {...props} href={deployment.routeUrl} target="_blank" rel="noreferrer" />
-                      )}
-                    >
-                      Open agent →
-                    </Button>
-                  </FlexItem>
-                )}
-              </Flex>
+              >
+                Open agent →
+              </Button>
             </FlexItem>
           )}
 

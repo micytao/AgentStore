@@ -7,12 +7,10 @@ import {
   checkNamespaceDeploymentReadiness,
   checkRhdhOperator,
   getNamespaceRouteHost,
-  isAapConfigured,
   isOpenshiftConfigured,
-  pingAap,
   pingOpenshift,
   restartNamespaceDeployments,
-} from "@agentstore/engine-ansible";
+} from "@agentstore/engine-openshift";
 import { ensurePlatformEnv, getPlatformSettings, savePlatformSettings } from "./platform";
 import { getSecret } from "./secrets";
 
@@ -22,7 +20,7 @@ import { getSecret } from "./secrets";
  *
  *  1. Preflight — reads connection/deploy state, returns check results.
  *  2. Operator install — creates Namespace + OperatorGroup + Subscription
- *     in the `rhdh` namespace via the OpenShift API (not via AAP).
+ *     in the `rhdh` namespace via the OpenShift API.
  *  3. Instance provision — creates ConfigMaps + Secret + Backstage CR in
  *     the `rhdh` namespace, then polls for the Route.
  *
@@ -43,7 +41,6 @@ function persist(deploy: RhdhDeployStatus): PlatformSettings {
 // --- Preflight -----------------------------------------------------------
 
 export interface RhdhPreflightResult {
-  aap: { status: "connected" | "disconnected" | "not-configured" };
   openshift: { status: "connected" | "disconnected" | "not-configured" };
   agentstoreOnCluster: { status: "running" | "not-deployed" | "failed" };
   rhdhOperator: { status: "installed" | "not-installed"; apiVersion?: string };
@@ -55,12 +52,6 @@ export interface RhdhPreflightResult {
 export async function getRhdhPreflight(): Promise<RhdhPreflightResult> {
   ensurePlatformEnv();
   const settings = getPlatformSettings();
-
-  let aapStatus: "connected" | "disconnected" | "not-configured" = "not-configured";
-  if (isAapConfigured()) {
-    const ping = await pingAap();
-    aapStatus = ping.ok ? "connected" : "disconnected";
-  }
 
   let ocpStatus: "connected" | "disconnected" | "not-configured" = "not-configured";
   if (isOpenshiftConfigured()) {
@@ -140,7 +131,6 @@ export async function getRhdhPreflight(): Promise<RhdhPreflightResult> {
       : rhdhDeploy;
 
   return {
-    aap: { status: aapStatus },
     openshift: { status: ocpStatus },
     agentstoreOnCluster: { status: asStatus },
     rhdhOperator: { status: operatorStatus, apiVersion: operatorApiVersion },
@@ -272,8 +262,8 @@ export async function provisionRhdhInstance(input: RhdhInstanceInput = {}): Prom
   // appends paths like /rhdh/catalog directly after ${AGENTSTORE_URL}.
   const agentstoreUrl = rawUrl.endsWith("/api") ? rawUrl : `${rawUrl}/api`;
   const serviceToken = getSecret("AGENTSTORE_SERVICE_TOKEN") || "";
-  const gitUrl = settings.aapProjectGitUrl || "https://github.com/YOUR_ORG/AgentStore";
-  const gitBranch = settings.aapProjectGitBranch || "main";
+  const gitUrl = settings.projectGitUrl || "https://github.com/YOUR_ORG/AgentStore";
+  const gitBranch = settings.projectGitBranch || "main";
 
   const current = settings.rhdhDeploy ?? {
     operatorStatus: "installed" as const,

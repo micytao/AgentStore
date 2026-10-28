@@ -76,7 +76,7 @@ export async function pingOpenshift(): Promise<{ ok: boolean; error?: string }> 
  * discovery endpoint instead of AAP's) and checks whether
  * `agents.x-k8s.io` is among the served API groups — exactly what the
  * OpenShell Helm chart's own preflight template checks for (see
- * ansible/provision-openshell-gateway.yml's header comment: "neither
+ * the OpenShift Helm chart.s preflight: "neither
  * agents.x-k8s.io/v1beta1 nor v1alpha1 is served"). Read-only,
  * low-privilege (any authenticated user can list API groups), so this
  * works regardless of whether the configured token can actually install
@@ -473,7 +473,7 @@ export interface K8sDeployment {
 
 /** Lists the actual running agent workloads on OpenShift — every
  * generic-chat agent is a `Deployment` (see
- * provision-generic-agent.yml's "Create/update the agent Deployment"
+ * directDeploy.ts.s resource creation
  * task), never a batch/v1 `Job`, so this queries the apps/v1 Deployments
  * API rather than Jobs (a previous version of this function queried
  * Jobs, which no playbook here has ever created — it was always
@@ -501,7 +501,7 @@ export async function listAgentDeployments(): Promise<OpenshiftDeploymentSummary
   }));
 }
 
-/** Read-back for provision-generic-agent.yml's deploy-once flow — same
+/** Read-back for the direct deploy flow — same
  * pattern as readResultConfigMap(), just against a `<deployment_name>
  * -deploy-result` ConfigMap holding the Route host instead of a draft. */
 export async function readDeploymentResult(
@@ -514,7 +514,7 @@ export async function readDeploymentResult(
   return { status: body.data?.status, routeHost: body.data?.routeHost };
 }
 
-/** Read-back for provision-openshell-gateway.yml — same ConfigMap
+/** Read-back for the gateway deploy flow — same ConfigMap
  * read-back pattern as readDeploymentResult(), just against a
  * `<release_name>-gateway-result` ConfigMap in the *admin-supplied*
  * gateway namespace (not the fixed OPENSHIFT_NAMESPACE every other
@@ -943,10 +943,114 @@ export async function getNamespaceRouteHost(namespace: string): Promise<string |
   return host ? `https://${host}` : undefined;
 }
 
-/** Best-effort teardown of everything provision-generic-agent.yml creates
- * for one listing, used when an admin re-deploys or removes a generic-chat
- * agent. Each resource is deleted independently so a 404 on one (already
- * gone) doesn't block the others. */
+// --- Generic resource apply (used by directDeploy.ts) ---------------------
+
+/** Resource-type to API path mapping for applyResource(). */
+const RESOURCE_API_PATHS: Record<string, (ns: string) => { collection: string; apiPrefix: string }> = {
+  secrets: (ns) => ({ collection: `/api/v1/namespaces/${ns}/secrets`, apiPrefix: "/api/v1" }),
+  deployments: (ns) => ({ collection: `/apis/apps/v1/namespaces/${ns}/deployments`, apiPrefix: "/apis/apps/v1" }),
+  services: (ns) => ({ collection: `/api/v1/namespaces/${ns}/services`, apiPrefix: "/api/v1" }),
+  routes: (ns) => ({ collection: `/apis/route.openshift.io/v1/namespaces/${ns}/routes`, apiPrefix: "/apis/route.openshift.io/v1" }),
+  configmaps: (ns) => ({ collection: `/api/v1/namespaces/${ns}/configmaps`, apiPrefix: "/api/v1" }),
+};
+
+/** Idempotent create-or-update for a named Kubernetes resource. GET by
+ * name first, PUT with resourceVersion if it exists, POST to create if
+ * not — same convention as every other find-or-create in this file. */
+export async function applyResource(
+  namespace: string,
+  resourceType: string,
+  name: string,
+  doc: Record<string, unknown>
+): Promise<void> {
+  const mapping = RESOURCE_API_PATHS[resourceType];
+  if (!mapping) throw new Error(`applyResource: unknown resource type "${resourceType}"`);
+
+  const { collection } = mapping(namespace);
+  const itemPath = `${collection}/${name}`;
+
+  const existing = await ocpFetch(itemPath);
+  if (existing.ok) {
+    const existingBody = (await existing.json()) as { metadata?: { resourceVersion?: string } };
+    const metadata = doc.metadata as Record<string, unknown> | undefined;
+    const updated = await ocpFetch(itemPath, {
+      method: "PUT",
+      body: JSON.stringify({
+        ...doc,
+        metadata: { ...metadata, resourceVersion: existingBody.metadata?.resourceVersion },
+      }),
+    });
+    if (!updated.ok) {
+      const text = await updated.text();
+      throw new Error(`OpenShift update ${resourceType}/${name} failed (${updated.status}): ${text.slice(0, 400)}`);
+    }
+    return;
+  }
+  if (existing.status !== 404) {
+    throw new Error(`OpenShift get ${resourceType}/${name}: HTTP ${existing.status}`);
+  }
+  const created = await ocpFetch(collection, {
+    method: "POST",
+    body: JSON.stringify(doc),
+  });
+  if (!created.ok) {
+    const text = await created.text();
+    throw new Error(`OpenShift create ${resourceType}/${name} failed (${created.status}): ${text.slice(0, 400)}`);
+  }
+}
+
+// --- Deployment readiness check (used by directDeploy.ts) ------------------
+
+/** Checks whether a Deployment has at least one ready replica. Also
+ * surfaces stall reasons (ProgressDeadlineExceeded, ReplicaFailure)
+ * so callers can distinguish "still rolling" from "stuck". */
+export async function getDeploymentReadiness(
+  namespace: string,
+  name: string
+): Promise<{ ready: boolean; readyReplicas: number; stalledReason?: string }> {
+  const response = await ocpFetch(`/apis/apps/v1/namespaces/${namespace}/deployments/${name}`);
+  if (response.status === 404) {
+    return { ready: false, readyReplicas: 0 };
+  }
+  if (!response.ok) throw new Error(`OpenShift get deployment ${name}: HTTP ${response.status}`);
+  const body = (await response.json()) as {
+    status?: {
+      readyReplicas?: number;
+      conditions?: Array<{ type?: string; status?: string; reason?: string; message?: string }>;
+    };
+  };
+  const readyReplicas = body.status?.readyReplicas ?? 0;
+  const conditions = body.status?.conditions ?? [];
+  const stalled = conditions.find(
+    (c) =>
+      (c.type === "ReplicaFailure" && c.status === "True") ||
+      (c.type === "Progressing" && c.status === "False" && c.reason === "ProgressDeadlineExceeded")
+  );
+  return {
+    ready: readyReplicas > 0,
+    readyReplicas,
+    stalledReason: stalled ? `${stalled.reason ?? "Unknown"}: ${stalled.message ?? ""}`.trim() : undefined,
+  };
+}
+
+// --- Route host read-back (used by directDeploy.ts) ------------------------
+
+/** Reads the Route's spec.host for a named Route. Returns undefined if
+ * the Route doesn't exist yet (caller polls). */
+export async function getRouteHost(namespace: string, name: string): Promise<string | undefined> {
+  const response = await ocpFetch(`/apis/route.openshift.io/v1/namespaces/${namespace}/routes/${name}`);
+  if (!response.ok) return undefined;
+  const body = (await response.json()) as {
+    status?: { ingress?: Array<{ host?: string }> };
+    spec?: { host?: string };
+  };
+  return body.status?.ingress?.[0]?.host ?? body.spec?.host;
+}
+
+/** Best-effort teardown of everything a direct deploy creates for one
+ * listing, used when an admin re-deploys or removes a generic-chat agent.
+ * Each resource is deleted independently so a 404 on one (already gone)
+ * doesn't block the others. */
 export async function deleteGenericAgentDeployment(deploymentName: string): Promise<void> {
   const ns = openshiftNamespace();
   const targets = [
@@ -961,10 +1065,10 @@ export async function deleteGenericAgentDeployment(deploymentName: string): Prom
       try {
         const response = await ocpFetch(path, { method: "DELETE" });
         if (!response.ok && response.status !== 404) {
-          console.warn(`[engine-ansible] delete ${path} returned HTTP ${response.status}`);
+          console.warn(`[engine-openshift] delete ${path} returned HTTP ${response.status}`);
         }
       } catch (err) {
-        console.warn(`[engine-ansible] delete ${path} failed: ${err instanceof Error ? err.message : String(err)}`);
+        console.warn(`[engine-openshift] delete ${path} failed: ${err instanceof Error ? err.message : String(err)}`);
       }
     })
   );
