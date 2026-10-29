@@ -178,6 +178,18 @@ function getAgentSandboxServiceManifestDocs(image: string, namespace: string): R
         throw new Error("agent-sandbox-service.yaml's Deployment has no spec.template.spec.containers[0] to set the image on.");
       }
       container.image = image;
+      // Patch the gateway URL to point at the correct namespace — the
+      // static YAML hardcodes "openshell.openshell" but single-namespace
+      // deploys put the gateway in the same namespace as everything else.
+      const envList = (container as Record<string, unknown>).env as
+        | Array<{ name: string; value?: string }>
+        | undefined;
+      if (envList) {
+        const gwEnv = envList.find((e) => e.name === "OPENSHELL_GATEWAY_URL");
+        if (gwEnv) {
+          gwEnv.value = `http://openshell.${namespace}:8080`;
+        }
+      }
       const saName = spec?.template?.spec?.serviceAccountName;
       if (saName) referencedServiceAccounts.add(saName);
     }
