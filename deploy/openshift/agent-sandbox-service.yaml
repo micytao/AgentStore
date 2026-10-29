@@ -50,9 +50,10 @@ spec:
                 secretKeyRef:
                   name: agent-sandbox-service-token
                   key: OPENSHELL_SERVICE_TOKEN
-            # In-cluster gateway URL — required.
+            # In-cluster gateway URL — required.  The install code patches
+            # this to http://openshell.<namespace>:8080 at deploy time.
             - name: OPENSHELL_GATEWAY_URL
-              value: "http://openshell.openshell:8080"
+              value: "http://openshell.agent-workloads:8080"
             # Optional: OIDC client-credentials for production gateways.
             # Uncomment and create the openshell-oidc Secret when moving
             # beyond the eval-mode (TLS-off) gateway.

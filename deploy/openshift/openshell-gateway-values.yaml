@@ -1,0 +1,86 @@
+# OpenShell gateway Helm values for OpenShift clusters.
+#
+# Usage:
+#   helm install openshell oci://ghcr.io/nvidia/openshell/helm-chart \
+#     -n <namespace> -f deploy/openshift/openshell-gateway-values.yaml
+#
+# On shared clusters without cluster-admin, also pass:
+#   --set workspaceResources.enabled=false
+# and create the necessary RBAC bindings manually (see bootstrap.sh Phase 7).
+
+nameOverride: "openshell"
+
+replicaCount: 1
+
+workload:
+  kind: statefulset
+
+# --- Skip ClusterRole/ClusterRoleBinding creation ---
+# On admin clusters these are harmless; on shared clusters the user
+# cannot create cluster-scoped RBAC objects. Disabling by default is
+# safe because the gateway only needs namespace-scoped permissions
+# plus the node-reader ClusterRole which a cluster-admin can pre-create.
+rbac:
+  create: true
+  clusterScoped:
+    create: false
+
+# --- OpenShift restricted-v2 SCC compatibility ---
+# Let the SCC assign UIDs from the namespace range.
+podSecurityContext:
+  fsGroup: null
+
+securityContext:
+  runAsNonRoot: true
+  runAsUser: null
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+  seccompProfile:
+    type: RuntimeDefault
+
+supervisor:
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: null
+    runAsGroup: null
+    fsGroup: null
+    seccompProfile:
+      type: RuntimeDefault
+
+pkiInitJob:
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: null
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop:
+        - ALL
+    seccompProfile:
+      type: RuntimeDefault
+
+# --- Eval / demo mode ---
+# TLS off, no OIDC, unauthenticated users accepted.
+# For production, set disableTls: false and configure server.oidc.
+server:
+  disableTls: true
+  logLevel: info
+  sandboxNamespace: ""
+  auth:
+    allowUnauthenticatedUsers: true
+  tls:
+    enableMtls: false
+
+# Agent Sandbox CRD preflight — the CRD must exist on the cluster.
+agentSandbox:
+  preflight:
+    enabled: true
+
+# No external Route — Agent Sandbox Service connects in-cluster.
+openshiftRoute:
+  enabled: false
+
+service:
+  type: ClusterIP
+  port: 8080

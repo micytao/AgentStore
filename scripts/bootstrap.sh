@@ -1109,7 +1109,16 @@ phase 7 "Install OpenShell Collaborative Agent Stack"
 
 OPENSHELL_INSTALLED=0
 if prompt_yn "Install OpenShell collaborative agent stack?" "Y"; then
-  # Pre-check
+
+  # Pre-checks -----------------------------------------------------------
+  if ! command -v helm &>/dev/null; then
+    warn "helm CLI not found — gateway install requires Helm 3+"
+    info "  Install: https://helm.sh/docs/intro/install/"
+    if ! prompt_yn "Skip gateway and install Agent Sandbox Service only?" "Y"; then
+      info "Skipping OpenShell stack"
+    fi
+  fi
+
   SECRETS=$(api_call GET "/admin/secrets") || true
   HAS_GH=$(echo "$SECRETS" | jq -r '.[] | select(.key == "GITHUB_PACKAGES_TOKEN") | .hasValue' 2>/dev/null)
   if [[ "$HAS_GH" != "true" ]]; then
@@ -1119,27 +1128,144 @@ if prompt_yn "Install OpenShell collaborative agent stack?" "Y"; then
     fi
   fi
 
-  # 1. Agent Sandbox Controller
-  info "Installing Agent Sandbox Controller CRD..."
-  api_call POST "/admin/platform/agent-sandbox" > /dev/null 2>&1 && ok "Agent Sandbox Controller installed" || warn "Agent Sandbox Controller install failed (may already exist)"
-
-  # 2. OpenShell Gateway
-  info "Deploying OpenShell Gateway..."
-  api_call POST "/admin/platform/gateway" > /dev/null || warn "Failed to start gateway deploy"
-
-  poll_deploy "/admin/platform/gateway" ".openshellGatewayDeployment.status" \
-    "" "" \
-    "running" "failed" 300 10 "OpenShell Gateway" "2-3 min"
-
-  if [[ $POLL_RC -eq 0 ]]; then
-    ok "OpenShell Gateway running"
+  # Detect cluster permissions -------------------------------------------
+  OCP_NS=$(echo "$PREV_PLAT" | jq -r '.settings.openshiftNamespace // "agent-workloads"' 2>/dev/null)
+  CAN_CREATE_NS="0"
+  if oc auth can-i create namespaces --quiet 2>/dev/null; then
+    CAN_CREATE_NS="1"
+    debug "Cluster-admin detected (can create namespaces)"
   else
-    GW_ERR=$(echo "$POLL_RESULT" | jq -r '.openshellGatewayDeployment.error // "unknown"' 2>/dev/null)
-    warn "OpenShell Gateway failed: $GW_ERR"
-    info "  Try manual install: helm install openshell-gateway charts/openshell-gateway -n openshell"
+    debug "Non-admin user (cannot create namespaces — single-namespace mode)"
   fi
 
-  # 3. Agent Sandbox Service
+  # 1. Agent Sandbox Controller CRD -------------------------------------
+  #    Cluster-scoped — only attempt if we have admin, or just check if
+  #    the CRD already exists on the cluster.
+  CRD_EXISTS="0"
+  if oc get crd sandboxes.agents.x-k8s.io &>/dev/null; then
+    CRD_EXISTS="1"
+    ok "Agent Sandbox CRD already installed"
+  elif [[ "$CAN_CREATE_NS" == "1" ]]; then
+    info "Installing Agent Sandbox Controller CRD..."
+    api_call POST "/admin/platform/agent-sandbox" > /dev/null 2>&1 \
+      && ok "Agent Sandbox Controller installed" \
+      || warn "Agent Sandbox Controller install failed (may need cluster-admin)"
+  else
+    warn "Agent Sandbox CRD not found and cannot install without cluster-admin"
+    info "  Ask a cluster admin to install it, or skip the OpenShell stack"
+  fi
+
+  # 2. OpenShell Gateway (Helm) -----------------------------------------
+  GW_INSTALLED=0
+  if command -v helm &>/dev/null; then
+    HELM_CHART="oci://ghcr.io/nvidia/openshell/helm-chart"
+    HELM_VALUES="$REPO_DIR/deploy/openshift/openshell-gateway-values.yaml"
+    HELM_NS="$OCP_NS"
+
+    # Check if already installed
+    if helm status openshell -n "$HELM_NS" &>/dev/null; then
+      ok "OpenShell Gateway already installed (Helm release 'openshell' in $HELM_NS)"
+      GW_INSTALLED=1
+    else
+      info "Installing OpenShell Gateway via Helm into namespace $HELM_NS..."
+
+      HELM_EXTRA_ARGS=()
+      if [[ "$CAN_CREATE_NS" == "0" ]]; then
+        # Shared cluster: skip workspace RBAC (triggers RBAC escalation errors)
+        # and create the necessary bindings manually afterward.
+        HELM_EXTRA_ARGS+=(--set workspaceResources.enabled=false)
+        debug "Non-admin: disabling workspaceResources in Helm (will create RBAC manually)"
+      fi
+
+      if [[ -f "$HELM_VALUES" ]]; then
+        HELM_EXTRA_ARGS+=(-f "$HELM_VALUES")
+      fi
+
+      if helm install openshell "$HELM_CHART" -n "$HELM_NS" "${HELM_EXTRA_ARGS[@]}" 2>&1; then
+        ok "OpenShell Gateway Helm release installed"
+        GW_INSTALLED=1
+      else
+        warn "Helm install failed"
+        info "  Try manually: helm install openshell $HELM_CHART -n $HELM_NS -f $HELM_VALUES"
+      fi
+
+      # On shared clusters, create RBAC bindings the gateway SA needs.
+      # Uses pre-existing ClusterRoles from the Agent Sandbox operator
+      # rather than creating new Roles (avoids the RBAC escalation check).
+      if [[ "$GW_INSTALLED" == "1" && "$CAN_CREATE_NS" == "0" ]]; then
+        info "Creating RBAC bindings for shared cluster..."
+
+        # Gateway SA needs edit-level permissions (pods, services, networkpolicies, etc.)
+        oc apply -n "$HELM_NS" -f - <<RBAC_EOF 2>/dev/null && debug "edit RoleBinding created" || warn "Failed to create edit RoleBinding"
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: openshell-gateway-edit
+  namespace: $HELM_NS
+  labels:
+    app.kubernetes.io/name: openshell
+    app.kubernetes.io/managed-by: agentstore
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: edit
+subjects:
+  - kind: ServiceAccount
+    name: openshell
+    namespace: $HELM_NS
+RBAC_EOF
+
+        # Gateway SA needs sandbox CRUD (bind to operator's existing ClusterRole)
+        SANDBOX_CR="sandboxes.agents.x-k8s.io-v1beta1-admin"
+        if oc get clusterrole "$SANDBOX_CR" &>/dev/null; then
+          oc apply -n "$HELM_NS" -f - <<RBAC_EOF 2>/dev/null && debug "sandbox RoleBinding created" || warn "Failed to create sandbox RoleBinding"
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: openshell-sandbox-admin
+  namespace: $HELM_NS
+  labels:
+    app.kubernetes.io/name: openshell
+    app.kubernetes.io/managed-by: agentstore
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: $SANDBOX_CR
+subjects:
+  - kind: ServiceAccount
+    name: openshell
+    namespace: $HELM_NS
+RBAC_EOF
+        fi
+
+        # Sandbox ServiceAccount (skipped by workspaceResources.enabled=false)
+        oc apply -n "$HELM_NS" -f - <<SA_EOF 2>/dev/null && debug "sandbox SA created" || true
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: openshell-sandbox
+  namespace: $HELM_NS
+  labels:
+    app.kubernetes.io/name: openshell
+    app.kubernetes.io/managed-by: agentstore
+SA_EOF
+
+        ok "Shared-cluster RBAC bindings created"
+      fi
+    fi
+
+    # Wait for gateway pod to be ready
+    if [[ "$GW_INSTALLED" == "1" ]]; then
+      info "Waiting for gateway pod..."
+      if oc rollout status statefulset/openshell -n "$HELM_NS" --timeout=120s 2>/dev/null; then
+        ok "OpenShell Gateway running"
+      else
+        warn "Gateway pod not ready yet — it may still be starting"
+      fi
+    fi
+  fi
+
+  # 3. Agent Sandbox Service (build + deploy via API) --------------------
   info "Building + deploying Agent Sandbox Service..."
   api_call POST "/admin/platform/agent-sandbox-service" > /dev/null || warn "Failed to start Agent Sandbox Service install"
 
