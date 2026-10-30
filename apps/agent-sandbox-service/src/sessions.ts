@@ -51,6 +51,59 @@ export function getSession(id: string): SessionRecord | undefined {
   return sessionStore().get(id);
 }
 
+/** Returns all known sessions — merges the in-memory store with live
+ * sandbox state from the gateway so that sandboxes created outside
+ * AgentStore (e.g. via the `openshell` CLI) or surviving a service
+ * restart are included. */
+export async function listSessions(): Promise<SessionRecord[]> {
+  const store = sessionStore();
+
+  // Fetch live sandboxes from the gateway via the raw gRPC client.
+  try {
+    const client = await getClient();
+    const response = (await client.raw.listSandboxes({
+      workspaceScope: { selection: { case: "workspace", value: "default" } },
+    })) as { sandboxes?: Array<{ name: string; phase: string; labels?: Record<string, string> }> };
+
+    for (const sb of response.sandboxes ?? []) {
+      if (!store.has(sb.name)) {
+        const { phase, message } = mapPhase(sb.phase);
+        store.set(sb.name, {
+          id: sb.name,
+          agent: sb.labels?.["agentstore.agent"] ?? "(unknown)",
+          phase,
+          message,
+          createdAt: Date.now(),
+        });
+      }
+    }
+  } catch (err) {
+    console.error("[sessions] failed to list sandboxes from gateway:", err);
+  }
+
+  // Refresh phase for each session that's still in a live state.
+  const records = [...store.values()];
+  const refreshed: SessionRecord[] = [];
+  for (const rec of records) {
+    if (rec.phase === "Provisioning" || rec.phase === "Running") {
+      try {
+        const client = await getClient();
+        const ref = await client.sandbox.get(rec.id);
+        const { phase, message } = mapPhase(ref.phase);
+        rec.phase = phase;
+        rec.message = message;
+      } catch (err) {
+        if (err instanceof SdkError && err.code === "not_found") {
+          rec.phase = "Cancelled";
+          rec.message = "Sandbox no longer exists";
+        }
+      }
+    }
+    refreshed.push(rec);
+  }
+  return refreshed;
+}
+
 /** Queries the OpenShell gateway for a sandbox we don't have in memory
  * (e.g. after a service restart) and re-populates the in-memory map.
  * Returns the recovered record, or undefined if the gateway doesn't

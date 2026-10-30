@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Alert,
   Bullseye,
@@ -19,6 +19,10 @@ import {
   InputGroup,
   InputGroupItem,
   Label,
+  Modal,
+  ModalBody,
+  ModalFooter,
+  ModalHeader,
   Progress,
   Spinner,
   Tab,
@@ -38,18 +42,22 @@ import {
 } from "@agentstore/shared";
 import { SecretField } from "@/components/SecretField";
 import {
+  deleteOpenShellSession,
   deployGateway,
   fetchAgentSandboxServiceInstallStatus,
   fetchAgentSandboxStatus,
   fetchEngineSettings,
   fetchGatewayStatus,
   fetchListings,
+  fetchOpenShellSessions,
   fetchPlatformStatus,
   fetchSecrets,
+  fetchSessionTerminalEndpoint,
   installAgentSandboxController,
   startAgentSandboxServiceInstall,
   updatePlatformSettings,
   type EngineSettings,
+  type OpenShellSession,
   type PlatformStatus,
 } from "@/lib/api";
 
@@ -297,6 +305,7 @@ export function OpenShellPanel() {
     );
   }
 
+  const openshellServiceConnected = platform.openshellService.connected;
   const wired = listings.filter((listing) => listing.openshellAgent);
   const serviceToken = secrets.find((s) => s.key === "OPENSHELL_SERVICE_TOKEN");
   const gitPat = secrets.find((s) => s.key === "GIT_PAT");
@@ -491,6 +500,10 @@ export function OpenShellPanel() {
             </Flex>
           </Tab>
 
+          <Tab eventKey="sessions" title={<TabTitleText>Sessions</TabTitleText>}>
+            <SessionsConsole active={activeTabKey === "sessions"} serviceConnected={platform.openshellService.connected} />
+          </Tab>
+
           <Tab eventKey="sandbox-service" title={<TabTitleText>Agent Sandbox Service</TabTitleText>}>
             <Flex direction={{ default: "column" }} spaceItems={{ default: "spaceItemsLg" }} style={{ marginTop: "1rem" }}>
       <FlexItem>
@@ -649,6 +662,369 @@ export function OpenShellPanel() {
           </CardBody>
         </Card>
       </FlexItem>
+    </Flex>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Sessions console — self-contained sub-tab component
+// ---------------------------------------------------------------------------
+
+function phaseColor(phase: string): "green" | "blue" | "red" | "grey" {
+  switch (phase) {
+    case "Running": return "green";
+    case "Provisioning": return "blue";
+    case "Failed": return "red";
+    default: return "grey";
+  }
+}
+
+function formatAge(createdAt: number): string {
+  const seconds = Math.floor((Date.now() - createdAt) / 1000);
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ${minutes % 60}m`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ${hours % 24}h`;
+}
+
+function SessionsConsole({ active, serviceConnected }: { active: boolean; serviceConnected: boolean }) {
+  const [sessions, setSessions] = useState<OpenShellSession[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [terminalSession, setTerminalSession] = useState<string | null>(null);
+  const [terminalUrl, setTerminalUrl] = useState<string | null>(null);
+  const [terminalError, setTerminalError] = useState<string | null>(null);
+  const [terminalConnecting, setTerminalConnecting] = useState(false);
+  const termHostRef = useRef<HTMLDivElement>(null);
+  const termCleanupRef = useRef<(() => void) | null>(null);
+
+  const loadSessions = useCallback(() => {
+    if (!serviceConnected) {
+      setSessions([]);
+      setLoading(false);
+      return;
+    }
+    fetchOpenShellSessions()
+      .then((data) => {
+        setSessions(data);
+        setError(null);
+      })
+      .catch((err: Error) => setError(err.message))
+      .finally(() => setLoading(false));
+  }, [serviceConnected]);
+
+  // Poll every 5s while tab is active
+  useEffect(() => {
+    if (!active) return;
+    loadSessions();
+    const timer = setInterval(loadSessions, 5000);
+    return () => clearInterval(timer);
+  }, [active, loadSessions]);
+
+  async function handleDelete(id: string) {
+    setDeleting(id);
+    setConfirmDelete(null);
+    try {
+      await deleteOpenShellSession(id);
+      setSessions((prev) => prev.filter((s) => s.id !== id));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setDeleting(null);
+    }
+  }
+
+  // Terminal lifecycle
+  useEffect(() => {
+    return () => {
+      termCleanupRef.current?.();
+    };
+  }, []);
+
+  async function openTerminal(id: string) {
+    // Close any existing terminal
+    termCleanupRef.current?.();
+    termCleanupRef.current = null;
+    setTerminalSession(id);
+    setTerminalUrl(null);
+    setTerminalError(null);
+    setTerminalConnecting(true);
+
+    try {
+      const endpoint = await fetchSessionTerminalEndpoint(id);
+      if (!endpoint.url) {
+        setTerminalError("No terminal URL returned.");
+        setTerminalConnecting(false);
+        return;
+      }
+      setTerminalUrl(endpoint.url);
+    } catch (err) {
+      setTerminalError(err instanceof Error ? err.message : String(err));
+      setTerminalConnecting(false);
+    }
+  }
+
+  // Boot xterm when terminalUrl is set
+  useEffect(() => {
+    if (!terminalUrl || !termHostRef.current) return;
+    let disposed = false;
+    let term: import("@xterm/xterm").Terminal | undefined;
+    let socket: WebSocket | undefined;
+    let resizeObserver: ResizeObserver | undefined;
+
+    async function boot() {
+      const [{ Terminal }, { FitAddon }, { AttachAddon }] = await Promise.all([
+        import("@xterm/xterm"),
+        import("@xterm/addon-fit"),
+        import("@xterm/addon-attach"),
+      ]);
+      if (disposed || !termHostRef.current) return;
+
+      term = new Terminal({
+        cursorBlink: true,
+        convertEol: true,
+        fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+        fontSize: 14,
+        theme: {
+          background: "#0b0d16",
+          foreground: "#e8eaf4",
+          cursor: "#7cf0d4",
+          cursorAccent: "#0b0d16",
+        },
+      });
+      const fitAddon = new FitAddon();
+      term.loadAddon(fitAddon);
+      term.open(termHostRef.current);
+      fitAddon.fit();
+
+      socket = new WebSocket(terminalUrl!);
+      socket.addEventListener("open", () => {
+        if (!disposed) setTerminalConnecting(false);
+        fitAddon.fit();
+        const dims = fitAddon.proposeDimensions();
+        if (dims) {
+          socket!.send(JSON.stringify({ type: "resize", cols: dims.cols, rows: dims.rows }));
+        }
+        term?.focus();
+      });
+      socket.addEventListener("close", () => {
+        if (!disposed) term?.writeln("\r\n\x1b[2m(session ended)\x1b[0m");
+      });
+      socket.addEventListener("error", () => {
+        if (!disposed) setTerminalError("Terminal connection lost.");
+      });
+
+      term.loadAddon(new AttachAddon(socket));
+      term.onResize(({ cols, rows }) => {
+        if (socket?.readyState === WebSocket.OPEN) {
+          socket.send(JSON.stringify({ type: "resize", cols, rows }));
+        }
+      });
+
+      resizeObserver = new ResizeObserver(() => fitAddon.fit());
+      resizeObserver.observe(termHostRef.current);
+    }
+
+    void boot().catch((err: Error) => {
+      if (!disposed) {
+        setTerminalError(err.message);
+        setTerminalConnecting(false);
+      }
+    });
+
+    termCleanupRef.current = () => {
+      disposed = true;
+      resizeObserver?.disconnect();
+      socket?.close();
+      term?.dispose();
+    };
+
+    return () => {
+      termCleanupRef.current?.();
+      termCleanupRef.current = null;
+    };
+  }, [terminalUrl]);
+
+  function closeTerminal() {
+    termCleanupRef.current?.();
+    termCleanupRef.current = null;
+    setTerminalSession(null);
+    setTerminalUrl(null);
+    setTerminalError(null);
+    setTerminalConnecting(false);
+  }
+
+  if (!serviceConnected) {
+    return (
+      <div style={{ marginTop: "1rem" }}>
+        <Alert variant="info" isInline title="Agent Sandbox Service not connected">
+          Configure and connect the Agent Sandbox Service on the &ldquo;Agent Sandbox Service&rdquo; tab to manage sessions.
+        </Alert>
+      </div>
+    );
+  }
+
+  return (
+    <Flex direction={{ default: "column" }} spaceItems={{ default: "spaceItemsMd" }} style={{ marginTop: "1rem" }}>
+      <FlexItem>
+        <Flex justifyContent={{ default: "justifyContentSpaceBetween" }} alignItems={{ default: "alignItemsCenter" }}>
+          <FlexItem>
+            <strong>Sandbox Sessions</strong>
+            <Content component={ContentVariants.small}>
+              Live sessions on the OpenShell gateway — includes sessions from AgentStore listings and any created externally.
+            </Content>
+          </FlexItem>
+          <FlexItem>
+            <Button variant="plain" aria-label="Refresh sessions" onClick={loadSessions} isDisabled={loading}>
+              {loading ? <Spinner size="sm" /> : "⟳ Refresh"}
+            </Button>
+          </FlexItem>
+        </Flex>
+      </FlexItem>
+
+      {error && (
+        <FlexItem>
+          <Alert variant="danger" isInline title={error} />
+        </FlexItem>
+      )}
+
+      <FlexItem>
+        {sessions.length === 0 && !loading ? (
+          <Card>
+            <CardBody>
+              <Bullseye>
+                <Content component={ContentVariants.p}>
+                  No active sessions. Deploy an agent from the <strong>Catalog</strong> to create one.
+                </Content>
+              </Bullseye>
+            </CardBody>
+          </Card>
+        ) : (
+          <Table aria-label="Sandbox sessions" variant="compact">
+            <Thead>
+              <Tr>
+                <Th>Session ID</Th>
+                <Th>Agent</Th>
+                <Th>Phase</Th>
+                <Th>Age</Th>
+                <Th>Actions</Th>
+              </Tr>
+            </Thead>
+            <Tbody>
+              {sessions.map((s) => (
+                <Tr key={s.id}>
+                  <Td dataLabel="Session ID">
+                    <code style={{ fontSize: "0.85em" }}>{s.id}</code>
+                  </Td>
+                  <Td dataLabel="Agent">{s.agent}</Td>
+                  <Td dataLabel="Phase">
+                    <Label color={phaseColor(s.phase)} isCompact>
+                      {s.phase}
+                    </Label>
+                    {s.message && (
+                      <Content component={ContentVariants.small} style={{ marginTop: "0.25rem", maxWidth: "300px", wordBreak: "break-word" }}>
+                        {s.message}
+                      </Content>
+                    )}
+                  </Td>
+                  <Td dataLabel="Age">{formatAge(s.createdAt)}</Td>
+                  <Td dataLabel="Actions">
+                    <Flex spaceItems={{ default: "spaceItemsSm" }}>
+                      <FlexItem>
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          isDisabled={s.phase !== "Running"}
+                          onClick={() => void openTerminal(s.id)}
+                        >
+                          Open terminal
+                        </Button>
+                      </FlexItem>
+                      <FlexItem>
+                        <Button
+                          variant="danger"
+                          size="sm"
+                          isDisabled={deleting === s.id}
+                          onClick={() => setConfirmDelete(s.id)}
+                        >
+                          {deleting === s.id ? "Deleting…" : "Delete"}
+                        </Button>
+                      </FlexItem>
+                    </Flex>
+                  </Td>
+                </Tr>
+              ))}
+            </Tbody>
+          </Table>
+        )}
+      </FlexItem>
+
+      {/* Inline terminal drawer */}
+      {terminalSession && (
+        <FlexItem>
+          <Card>
+            <CardBody>
+              <Flex justifyContent={{ default: "justifyContentSpaceBetween" }} alignItems={{ default: "alignItemsCenter" }}>
+                <FlexItem>
+                  <strong>Terminal:</strong> <code>{terminalSession}</code>
+                </FlexItem>
+                <FlexItem>
+                  <Button variant="secondary" size="sm" onClick={closeTerminal}>
+                    Close terminal
+                  </Button>
+                </FlexItem>
+              </Flex>
+              {terminalError && <Alert variant="danger" isInline title={terminalError} style={{ marginTop: "0.5rem" }} />}
+              <div style={{ position: "relative", width: "100%", height: "400px", marginTop: "0.5rem" }}>
+                {terminalConnecting && (
+                  <Bullseye style={{ position: "absolute", inset: 0, zIndex: 1 }}>
+                    <Spinner aria-label="Connecting to terminal" />
+                  </Bullseye>
+                )}
+                <div
+                  ref={termHostRef}
+                  style={{
+                    width: "100%",
+                    height: "100%",
+                    background: "#0b0d16",
+                    borderRadius: "6px",
+                    padding: "6px 10px 10px",
+                  }}
+                />
+              </div>
+            </CardBody>
+          </Card>
+        </FlexItem>
+      )}
+
+      {/* Delete confirmation modal */}
+      {confirmDelete && (
+        <Modal
+          isOpen
+          variant="small"
+          onClose={() => setConfirmDelete(null)}
+          aria-label="Confirm session deletion"
+        >
+          <ModalHeader title="Delete session?" />
+          <ModalBody>
+            This will tear down the sandbox <code>{confirmDelete}</code> and terminate any running processes.
+            This action cannot be undone.
+          </ModalBody>
+          <ModalFooter>
+            <Button variant="danger" onClick={() => void handleDelete(confirmDelete)}>
+              Delete
+            </Button>
+            <Button variant="link" onClick={() => setConfirmDelete(null)}>
+              Cancel
+            </Button>
+          </ModalFooter>
+        </Modal>
+      )}
     </Flex>
   );
 }

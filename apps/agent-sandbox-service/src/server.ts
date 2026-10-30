@@ -3,7 +3,7 @@ import { URL } from "node:url";
 import type { OpenShellMcpServerConfig, OpenShellModelConfig } from "@agentstore/shared";
 import { checkBearerToken, mintTerminalToken } from "./auth.js";
 import { port, terminalPublicProtocol, terminalTokenTtlMs } from "./config.js";
-import { createSession, deleteSession, getOrRecoverSession, getSession, refreshSession } from "./sessions.js";
+import { createSession, deleteSession, getOrRecoverSession, getSession, listSessions, refreshSession } from "./sessions.js";
 import { handleTerminalUpgrade, killPty } from "./terminal.js";
 
 /**
@@ -71,6 +71,13 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
   }
 
   try {
+    // GET /sessions — list all sessions
+    if (req.method === "GET" && segments.length === 1) {
+      const sessions = await listSessions();
+      sendJson(res, 200, sessions);
+      return;
+    }
+
     // POST /sessions
     if (req.method === "POST" && segments.length === 1) {
       const body = await readJsonBody<CreateSessionBody>(req);

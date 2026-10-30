@@ -447,6 +447,35 @@ export function fetchRhdhInstanceStatus(): Promise<PlatformSettings> {
   return fetch("/api/admin/platform/rhdh/instance").then((r) => parse<PlatformSettings>(r));
 }
 
+// --- OpenShell Sessions console -------------------------------------------
+
+export interface OpenShellSession {
+  id: string;
+  agent: string;
+  phase: "Provisioning" | "Running" | "Failed" | "Cancelled";
+  message?: string;
+  createdAt: number;
+}
+
+/** Lists all sandbox sessions from the Agent Sandbox Service. */
+export function fetchOpenShellSessions(): Promise<OpenShellSession[]> {
+  return fetch("/api/admin/openshell/sessions").then((r) => parse<OpenShellSession[]>(r));
+}
+
+/** Deletes (tears down) a sandbox session by id. */
+export function deleteOpenShellSession(id: string): Promise<{ ok: boolean }> {
+  return fetch(`/api/admin/openshell/sessions/${encodeURIComponent(id)}`, { method: "DELETE" }).then((r) =>
+    parse<{ ok: boolean }>(r)
+  );
+}
+
+/** Mints a fresh terminal WebSocket URL for a session (not listing-scoped). */
+export function fetchSessionTerminalEndpoint(id: string): Promise<{ url: string }> {
+  return fetch(`/api/admin/openshell/sessions/${encodeURIComponent(id)}/terminal-endpoint`).then((r) =>
+    parse<{ url: string }>(r)
+  );
+}
+
 export type {
   DepartmentId,
   EngineSettings,

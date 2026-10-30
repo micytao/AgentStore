@@ -12,6 +12,7 @@ export {
   createSession,
   deleteSession,
   getSession,
+  listSessions,
   mintTerminalToken,
   pingOpenShellService,
   type CreateSessionRequest,

@@ -162,11 +162,22 @@ declare module "@nvidia/openshell-sdk" {
 
   export function errorCode(err: unknown): string | undefined;
 
+  /** Workspace scope selector for raw gRPC calls. */
+  interface WorkspaceScope {
+    selection: { case: "workspace"; value: string };
+  }
+
+  /** Response shape for listSandboxes raw gRPC call. */
+  interface ListSandboxesResponse {
+    sandboxes?: Array<SandboxRef & { labels?: Record<string, string> }>;
+  }
+
   /** The raw gRPC client — every gateway RPC, including uncurated surface. */
   interface RawClient {
     createProvider(request: unknown): Promise<unknown>;
     getProvider(request: unknown): Promise<unknown>;
     listProviders(request: unknown): Promise<unknown>;
+    listSandboxes(request: { workspaceScope: WorkspaceScope }): Promise<ListSandboxesResponse>;
     [method: string]: (request: unknown, options?: unknown) => Promise<unknown>;
   }
 

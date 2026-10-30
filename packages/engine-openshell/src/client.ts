@@ -57,6 +57,11 @@ async function parseOrThrow<T>(response: Response, action: string): Promise<T> {
   return (await response.json()) as T;
 }
 
+export async function listSessions(): Promise<RemoteSession[]> {
+  const response = await serviceFetch("/sessions");
+  return parseOrThrow<RemoteSession[]>(response, "list sessions");
+}
+
 export async function createSession(input: CreateSessionRequest): Promise<RemoteSession> {
   const response = await serviceFetch("/sessions", {
     method: "POST",
