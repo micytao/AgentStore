@@ -59,23 +59,42 @@ export async function listSessions(): Promise<SessionRecord[]> {
   const store = sessionStore();
 
   // Fetch live sandboxes from the gateway via the raw gRPC client.
+  // The protobuf response nests fields: sandbox.metadata.name,
+  // sandbox.metadata.labels, sandbox.status.phase (numeric enum),
+  // sandbox.metadata.createdTime.seconds (bigint string).
   try {
     const client = await getClient();
-    const response = (await client.raw.listSandboxes({
+    const response = await client.raw.listSandboxes({
       workspaceScope: { selection: { case: "workspace", value: "default" } },
-    })) as { sandboxes?: Array<{ name: string; phase: string; labels?: Record<string, string> }> };
+    });
 
-    for (const sb of response.sandboxes ?? []) {
-      if (!store.has(sb.name)) {
-        const { phase, message } = mapPhase(sb.phase);
-        store.set(sb.name, {
-          id: sb.name,
-          agent: sb.labels?.["agentstore.agent"] ?? "(unknown)",
-          phase,
-          message,
-          createdAt: Date.now(),
-        });
-      }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    for (const sb of (response as any).sandboxes ?? []) {
+      const meta = sb.metadata ?? sb;
+      const status = sb.status ?? {};
+      const name: string = meta.name ?? meta.id ?? "";
+      if (!name || store.has(name)) continue;
+
+      // status.phase is a numeric enum in protobuf: 0=unknown, 1=provisioning, 2=ready, 3=error, etc.
+      const rawPhase = typeof status.phase === "number" ? numericPhaseToString(status.phase) : String(status.phase ?? "unknown");
+      const { phase, message } = mapPhase(rawPhase);
+
+      // Extract creation time — protobuf Timestamp has seconds as bigint/string.
+      const createdSecs = meta.createdTime?.seconds;
+      const createdAt = createdSecs ? Number(createdSecs) * 1000 : Date.now();
+
+      // Derive agent name from the sandbox command if possible.
+      const command: string[] = sb.spec?.command ?? [];
+      const agentFromCommand = deriveAgentFromCommand(command);
+      const agentFromLabels = (meta.labels ?? {})["agentstore.agent"];
+
+      store.set(name, {
+        id: name,
+        agent: agentFromLabels ?? agentFromCommand ?? "(unknown)",
+        phase,
+        message,
+        createdAt,
+      });
     }
   } catch (err) {
     console.error("[sessions] failed to list sandboxes from gateway:", err);
@@ -241,6 +260,33 @@ export async function createSession(input: CreateSessionInput): Promise<SessionR
     record.message = err instanceof Error ? err.message : String(err);
     return record;
   }
+}
+
+/** Maps the protobuf numeric phase enum to a string name.
+ * Values from openshell.v1.SandboxPhase: 0=UNKNOWN, 1=PROVISIONING,
+ * 2=READY, 3=ERROR, 4=DELETING, 5=STOPPED, 6=COMPLETED, 7=STARTING. */
+function numericPhaseToString(n: number): string {
+  switch (n) {
+    case 1: return "provisioning";
+    case 2: return "ready";
+    case 3: return "error";
+    case 4: return "deleting";
+    case 5: return "stopped";
+    case 6: return "completed";
+    case 7: return "starting";
+    default: return "unknown";
+  }
+}
+
+/** Best-effort: derive a human-readable agent name from the sandbox command.
+ * e.g. ["openclaw-start"] → "openclaw", ["sh","-c","opencode"] → "opencode" */
+function deriveAgentFromCommand(command: string[]): string | undefined {
+  if (!command.length) return undefined;
+  const last = command[command.length - 1];
+  if (last.startsWith("openclaw")) return "openclaw";
+  if (last.includes("opencode")) return "opencode";
+  if (last.includes("swebench")) return "swebench";
+  return last.replace(/-start$/, "");
 }
 
 /** Maps the SDK's SandboxPhaseName to our SessionPhase. */
