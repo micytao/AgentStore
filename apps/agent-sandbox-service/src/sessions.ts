@@ -335,10 +335,8 @@ export async function refreshSession(id: string): Promise<SessionRecord | undefi
 }
 
 export async function deleteSession(id: string): Promise<void> {
-  const record = sessionStore().get(id);
-  if (record) {
-    record.phase = "Cancelled";
-  }
+  // Remove from in-memory store immediately so it doesn't reappear on the next listSessions() poll.
+  sessionStore().delete(id);
   try {
     const client = await getClient();
     await client.sandbox.delete(id, { allowMissing: true });
